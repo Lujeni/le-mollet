@@ -36,8 +36,8 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 
 - **Profiles** without an account: name, weight, FTP, optional nationality. Each profile has a unique id; the
   name is just a label.
-- **Garage**: frame shape (road, aero, gravel, vintage), colors, rims, handlebars, in Lego-like bricks or
-  Minecraft-like cubes.
+- **Garage**: a low-poly bike (road, aero, gravel or vintage frame, colors, rims, handlebars) and rider (jersey,
+  shorts, shoes, helmet, hair, skin) who pedals on a home trainer.
 - **Ride history**: pause anytime, then save or drop the ride. Duration, distance, climbing, average and max
   power and energy are kept and listed on the home screen.
 

@@ -374,10 +374,10 @@ const PALETTE = {
   Rouge:'#c91a09', Orange:'#fe8a18', Jaune:'#f2cd37', Citron:'#bbe90b', Vert:'#237841', Azur:'#36aebf',
   Bleu:'#0055bf', Violet:'#81007b', Rose:'#fc97ac', Blanc:'#f4f4f4', Gris:'#6c6e68', Noir:'#1b2a34',
 };
-const DEFAULT_BIKE = { style:'lego', frameType:'road', frame:'#c91a09', accent:'#f4f4f4', rim:'#1b2a34', saddle:'#1b2a34', rimDepth:2, bars:'drop' };
+const DEFAULT_BIKE = { frameType:'road', frame:'#c91a09', accent:'#f4f4f4', rim:'#1b2a34', saddle:'#1b2a34', rimDepth:2, bars:'drop' };
 // The rider's outfit and look live in the same profile object as the bike (no jersey: it follows the frame).
 const DEFAULT_RIDER = { shorts:'#1b2a34', shoes:'#f4f4f4', helmet:'on', helmetColor:'#f4f4f4', hair:'short', hairColor:'#3b2416', skin:'#e0ac69' };
-// Frame shapes, in garage voxels (side view): seat cluster, head tube top/bottom, and extras.
+// Frame shapes, in garage units (side view): seat cluster, head tube top/bottom, and extras.
 const FRAMES = {
   road:    { seat:[7, 12], ht:[23, 13], hb:[24, 10] },
   aero:    { seat:[8, 11], ht:[23, 13], hb:[24, 10], thick:true, lowStays:true },
@@ -386,7 +386,6 @@ const FRAMES = {
 };
 // Garage options; tab:'rider' ones show under "Cycliste" in the left menu, the rest under "Vélo".
 const OPTIONS = [
-  { key:'style', label:'Style', choices:[['lego','Brique'], ['voxel','Cube'], ['lowpoly','Low-poly']] },
   { key:'frameType', label:'Cadre', choices:[['road', 'Route'], ['aero', 'Aéro'], ['gravel', 'Gravel'], ['vintage', 'Vintage']] },
   { key:'frame', label:'Couleur du cadre', colors:true },
   { key:'accent', label:'Fourche', colors:true },
@@ -433,117 +432,8 @@ function newId() {
 }
 let current = null;
 
-// ---------- voxel bike (side view in x/y, z = width; 1 unit ≈ 37 mm) ----------
+// Bike part colors; bike and rider share one side-view space (x forward, y up, z across, 1 unit ≈ 37 mm).
 const TIRE = '#1b2a34', METAL = '#a0a5a9', CHAIN = '#6c6e68';
-function bikeVoxels(b) {
-  const v = new Map();
-  const put = (x, y, z, c) => v.set(`${x},${y},${z}`, c);
-  const line = (ax, ay, bx, by, z, c) => {
-    const n = Math.ceil(Math.hypot(bx - ax, by - ay) * 2);
-    for (let i = 0; i <= n; i++) put(Math.round(ax + (bx - ax) * i / n), Math.round(ay + (by - ay) * i / n), z, c);
-  };
-  const ring = (cx, cy, r0, r1, z, c) => {
-    for (let x = Math.floor(cx - r1 - 1); x <= cx + r1 + 1; x++)
-      for (let y = Math.floor(cy - r1 - 1); y <= cy + r1 + 1; y++) {
-        const d = Math.hypot(x - cx, y - cy);
-        if (d > r0 - 0.5 && d <= r1 + 0.5) put(x, y, z, c);
-      }
-  };
-
-  // Geometry keeps tubes clear of the tires (checked by distance to hub > R + 0.5).
-  const F = FRAMES[b.frameType] ?? FRAMES.road;
-  const R = 9, REAR = 0, FRONT = 28, BB = [11, -2], SEAT = F.seat, HB = F.hb, HT = F.ht;
-  const tireIn = F.fatTires ? R - 1 : R; // fat tires eat into the rim
-  for (const hx of [REAR, FRONT]) {
-    const inner = tireIn - 1 - b.rimDepth;
-    for (let k = 0; k < 8; k++) {
-      const a = k * Math.PI / 4 + Math.PI / 8;
-      line(hx, 0, hx + Math.cos(a) * inner, Math.sin(a) * inner, 0, METAL);
-    }
-    ring(hx, 0, tireIn - b.rimDepth, tireIn - 1, 0, b.rim);
-    ring(hx, 0, tireIn, R, 0, TIRE);
-    for (let z = -1; z <= 1; z++) put(hx, 0, z, METAL);
-    if (F.fenders) for (let a = 0.35; a <= 2.8; a += 0.08) put(Math.round(hx + Math.cos(a) * (R + 1.5)), Math.round(Math.sin(a) * (R + 1.5)), 0, METAL);
-  }
-
-  line(...SEAT, ...HT, 0, b.frame);   // top tube
-  line(...BB, ...HB, 0, b.frame);     // down tube
-  line(...BB, ...SEAT, 0, b.frame);   // seat tube
-  if (F.thick) { // aero: deep tube sections
-    line(SEAT[0], SEAT[1] - 1, HT[0], HT[1] - 1, 0, b.frame);
-    line(BB[0], BB[1] + 1, HB[0], HB[1] - 1, 0, b.frame);
-    line(BB[0] - 1, BB[1], SEAT[0] - 1, SEAT[1], 0, b.frame);
-  }
-  line(...HB, ...HT, 0, b.accent);    // head tube
-  const stays = F.lowStays ? [Math.round(BB[0] + (SEAT[0] - BB[0]) * 0.6), Math.round(BB[1] + (SEAT[1] - BB[1]) * 0.6)] : SEAT;
-  for (const z of [-1, 1]) {
-    line(...stays, REAR, 0, z, b.frame); // seat stays
-    line(...BB, REAR, 0, z, b.frame);   // chainstays
-    line(...HB, FRONT, 0, z, b.accent); // fork
-  }
-  if (F.lugs) for (const [x, y] of [SEAT, HT, HB, BB]) for (let z = -1; z <= 1; z++) put(x, y, z, b.accent); // vintage lugs
-
-  line(...SEAT, 6, 15, 0, METAL); // seatpost
-  for (let x = 3; x <= 9; x++) for (let z = -1; z <= 1; z++) if (x < 8 || z === 0) put(x, 16, z, b.saddle);
-
-  const [BX, BY] = [HT[0] + 2, HT[1] + 1]; // bars sit just above the head tube
-  line(...HT, BX, BY, 0, METAL); // stem
-  if (b.bars === 'flat') {
-    for (let z = -5; z <= 5; z++) put(BX, BY, z, Math.abs(z) >= 4 ? TIRE : METAL);
-  } else {
-    for (let z = -3; z <= 3; z++) put(BX, BY, z, METAL);
-    for (const z of [-3, 3]) {
-      const path = b.bars === 'drop' ? [[1, 0], [1, 1], [2, -1], [2, -2], [1, -3], [0, -3]] : [[1, 0], [2, 0], [3, 1]];
-      for (const [dx, dy] of path) put(BX + dx, BY + dy, z, TIRE);
-    }
-    if (b.bars === 'aero') for (const z of [-1, 1]) {
-      put(BX, BY + 1, z, TIRE);
-      for (let x = BX + 1; x <= BX + 5; x++) put(x, BY + 1, z, METAL);
-    }
-  }
-
-  const [bx, by] = BB;
-  ring(bx, by, 3, 4, 2, METAL); // chainring
-  ring(REAR, 0, 1, 2, 2, METAL); // cassette
-  line(bx, by + 4, REAR, 2, 2, CHAIN);
-  line(bx, by - 4, REAR, -2, 2, CHAIN);
-  for (let z = -2; z <= 2; z++) put(bx, by, z, METAL);
-  line(bx, by, bx + 2, by - 4, 3, TIRE); put(bx + 2, by - 4, 4, TIRE); // cranks + pedals
-  line(bx, by, bx - 2, by + 4, -3, TIRE); put(bx - 2, by + 4, -4, TIRE);
-
-  if (b.rider) { // seated rider on the hoods; older profiles fall back to a jersey in the frame color
-    const a = { ...DEFAULT_RIDER, jersey:b.frame, ...b };
-    const SKIN = a.skin, HAIR = a.hairColor, helmet = a.helmet === 'on';
-    for (let z = -2; z <= 2; z++) line(6, 17, 18, 23, z, a.jersey); // torso
-    const sleeve = [Math.round(18 + (BX - 18) * 0.35), Math.round(23 + (BY + 2 - 23) * 0.35)];
-    for (const [z, px, py] of [[3, bx + 2, by - 4], [-3, bx - 2, by + 4]]) {
-      const knee = z > 0 ? [14, 6] : [16, 13];
-      line(6, 17, ...knee, z, a.shorts); // thigh
-      line(...knee, px, py + 1, z, SKIN); // shin
-      put(px, py + 1, z, a.shoes); put(px + 1, py + 1, z, a.shoes); // shoe on the pedal
-      line(18, 23, BX, BY + 2, z, SKIN);  // arm to the hoods
-      line(18, 23, ...sleeve, z, a.jersey); // short sleeve
-    }
-    // Head faces +x: x 19..22, y 24..27. Helmet covers the top two rows, hair shows below it or on top without.
-    for (let x = 19; x <= 22; x++) for (let y = 24; y <= 27; y++) for (let z = -1; z <= 1; z++)
-      put(x, y, z, helmet && y >= 26 ? a.helmetColor : SKIN);
-    const hair = [];
-    if (!helmet && a.hair !== 'bald') {
-      for (let x = 19; x <= 22; x++) hair.push([x, 27]);
-      hair.push([19, 26], [19, 25]);
-    }
-    if (a.hair === 'long') for (let y = 21; y <= (helmet ? 25 : 27); y++) hair.push([18, y]);
-    if (a.hair === 'ponytail') for (const [x, y] of [[18, 25], [17, 24], [17, 23], [16, 22]]) put(x, y, 0, HAIR);
-    for (const [x, y] of hair) for (let z = -1; z <= 1; z++) put(x, y, z, HAIR);
-  }
-  return v;
-}
-
-function groundVoxels(style) {
-  const v = new Map(), c = style === 'lego' ? '#237841' : '#5d9b3a';
-  for (let x = -16; x <= 44; x++) for (let z = -10; z <= 10; z++) v.set(`${x},-10,${z}`, c);
-  return v;
-}
 
 // ---------- rendering ----------
 const canvas = document.getElementById('scene');
@@ -630,7 +520,7 @@ const farMat = range(340, 8, 12, 38, 4.1, new THREE.MeshLambertMaterial({ fog:fa
 const groundMat = new THREE.MeshLambertMaterial({ fog:false });
 const ground = new THREE.Mesh(new THREE.CircleGeometry(420, 48), groundMat);
 ground.rotation.x = -Math.PI / 2;
-ground.position.y = -12; // just under the garage plate (voxel y = -10)
+ground.position.y = -12; // just under the pain cave mat
 menuBg.add(ground);
 const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(16, 32), new THREE.MeshBasicMaterial({ color:'#fff6c9', fog:false }));
 const moonDisc = new THREE.Mesh(new THREE.CircleGeometry(11, 32), new THREE.MeshBasicMaterial({ color:'#f4f1de', fog:false }));
@@ -673,7 +563,7 @@ function menuSky() {
 }
 
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 500);
-camera.position.set(36, 22, 84); // frames bike + rider (head ~27 voxels up)
+camera.position.set(36, 22, 84); // frames bike + rider (head ~27 units up)
 const controls = new OrbitControls(camera, canvas);
 controls.target.set(0, 7, 0);
 controls.enableDamping = true;
@@ -688,34 +578,7 @@ const hash = (x, y, z) => {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
 
-function instanced(vox, style, cast) {
-  const lego = style === 'lego';
-  const size = lego ? 0.94 : 1; // brick seams vs seamless cubes
-  const mat = new THREE.MeshStandardMaterial({ roughness: lego ? 0.3 : 0.95 });
-  const cells = [...vox].map(([k, hex]) => [k.split(',').map(Number), hex]);
-  const box = new THREE.InstancedMesh(new THREE.BoxGeometry(size, size, size), mat, cells.length);
-  const m = new THREE.Matrix4(), c = new THREE.Color();
-  cells.forEach(([[x, y, z], hex], i) => {
-    box.setMatrixAt(i, m.makeTranslation(x, y, z));
-    c.set(hex);
-    if (!lego) c.offsetHSL(0, 0, (hash(x, y, z) - 0.5) * 0.08); // Minecraft-ish texture noise
-    box.setColorAt(i, c);
-  });
-  const meshes = [box];
-  if (lego) {
-    const tops = cells.filter(([[x, y, z]]) => !vox.has(`${x},${y + 1},${z}`));
-    const studs = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12), mat, tops.length);
-    tops.forEach(([[x, y, z], hex], i) => {
-      studs.setMatrixAt(i, m.makeTranslation(x, y + size / 2 + 0.1, z));
-      studs.setColorAt(i, c.set(hex));
-    });
-    meshes.push(studs);
-  }
-  for (const o of meshes) { o.castShadow = cast; o.receiveShadow = true }
-  return meshes;
-}
-
-// ---------- low-poly bike + rider: same side-view coordinates as the voxels (x forward, y up, z across) ----------
+// ---------- low-poly bike + rider ----------
 // Returns a group whose userData.tick(dt, rpm) turns the cranks and moves the legs with them.
 function lowpolyBike(b) {
   const g = new THREE.Group(), mats = new Map(), UP = new THREE.Vector3(0, 1, 0);
@@ -887,13 +750,8 @@ function draw(bike) {
   }
   world = new THREE.Group();
   const b = new THREE.Group();
-  if (bike.style === 'lowpoly') {
-    b.add(lowpolyBike({ ...bike, rider:true }), painCave());
-    world.userData.tick = dt => b.children[0].userData.tick(dt, 80); // steady spin in the garage
-  } else {
-    b.add(...instanced(bikeVoxels({ ...bike, rider:true }), bike.style, true));
-    world.add(...instanced(groundVoxels(bike.style), bike.style, false).map(g => (g.position.x = -14, g)));
-  }
+  b.add(lowpolyBike({ ...bike, rider:true }), painCave());
+  world.userData.tick = dt => b.children[0].userData.tick(dt, 80); // steady spin in the garage
   b.position.x = -14; // center wheelbase on origin
   world.add(b);
   scene.add(world);
@@ -1513,7 +1371,7 @@ const STEP_Y = 2;          // voxel height, m. Calibration knob: smaller = finer
 const CHUNK = 64;          // cells per chunk side (5 m cells = 320 m)
 // ponytail: fixed view distance by screen width; measure fps on real devices before tuning
 const CHUNK_RADIUS = innerWidth <= 700 ? 2 : 3;
-const BIKE_SCALE = 0.037;  // one garage voxel = 37 mm
+const BIKE_SCALE = 0.037;  // one garage unit = 37 mm
 const w3 = { T:null, group:null, chunks:new Map(), others:new Map(), bike:null, eagle:null, dist:0, look:new THREE.Vector3(), snap:false, saved:null };
 const terrainMat = new THREE.MeshLambertMaterial({ vertexColors:true, side:THREE.DoubleSide });
 
@@ -1691,8 +1549,7 @@ function follow(shown, reported, speedKmh, dt) {
 
 function riderModel(bike) {
   const inner = new THREE.Group();
-  if (bike.style === 'lowpoly') inner.add(lowpolyBike({ ...bike, rider:true }));
-  else inner.add(...instanced(bikeVoxels({ ...bike, rider:true }), bike.style, false));
+  inner.add(lowpolyBike({ ...bike, rider:true }));
   inner.position.set(-14, 9.5, 0); // wheelbase centered, tires on the road
   const g = new THREE.Group();
   g.add(inner);
@@ -1725,7 +1582,7 @@ function updateOthers(dt) {
     seen.add(o.id);
     let r = w3.others.get(o.id);
     if (!r) {
-      const holder = new THREE.Group(), bike = riderModel({ ...DEFAULT_BIKE, style:current.bike.style, frame:o.color, frameType:o.frame });
+      const holder = new THREE.Group(), bike = riderModel({ ...DEFAULT_BIKE, frame:o.color, frameType:o.frame });
       holder.add(bike, nameTag(`${o.name}${o.country ? ' ' + flag(o.country) : ''}`));
       w3.group.add(holder);
       r = { holder, bike, dist:o.distance, lane:(hash(o.id % 100000, 1, 9) - 0.5) * 3 };
@@ -1791,7 +1648,7 @@ function exit3d() {
   world.visible = true;
   menuSky();
   camera.near = w3.saved.near; camera.far = w3.saved.far; camera.fov = w3.saved.fov;
-  camera.position.set(36, 22, 84); // frames bike + rider (head ~27 voxels up)
+  camera.position.set(36, 22, 84); // frames bike + rider (head ~27 units up)
   controls.target.set(0, 7, 0);
   camera.lookAt(controls.target);
   sun.castShadow = true;

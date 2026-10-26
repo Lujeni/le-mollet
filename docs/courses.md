@@ -157,7 +157,7 @@ Virtual speed always uses the real grade.
 When a course has a terrain file, the ride screen switches to a chase camera in a voxel world:
 64x64-cell chunks (320 m) built around the rider nearest first, one per frame, view radius 3 chunks
 (2 on narrow screens); the whole area at 40 m as a low-res mesh for far mountains; the road as a smooth
-ribbon on the course elevation with skirts hiding the voxel steps; the garage bike plus a voxel rider.
+ribbon on the course elevation with skirts hiding the voxel steps; the garage low-poly bike and rider, pedaling.
 Demo mode: click the profile to jump anywhere on the course.
 
 ## Next steps
