@@ -83,6 +83,63 @@ Via = Chalet Reynard. Result: 21.42 km, 309 m to 1889 m, +1580 m, avg 7.4 %, max
 Reference: ~21.5 km, ~7.5 %, summit 1909 m (road ends a bit lower). Per-km: 2.2 / 3.2 / 4.4 / 5.7 / 5.6 / 4.5,
 then the forest 9.5 / 9.3 / 10.8 / 8.9 / 9.7 / 9.8 / 8.8 / 10.0, Chalet Reynard 7.7 / 7.0 / 6.0, top 7.1 / 7.7 / 8.0 / 10.0 %.
 
+### Col du Galibier (from Valloire, D902)
+
+```sh
+cargo run -- course "Col du Galibier (Valloire)" -o courses/galibier-valloire.json \
+  --road "D 902" --road "D 902 B" \
+  45.165600,6.429400 45.064138,6.407857
+```
+
+The summit loop is `D 902 B`; without it, the route takes the untagged tunnel (2556 m) and the DEM above it
+gives a fake 40 % ramp. Finish = col, junction of the two `D 902 B` ways.
+Result: 18.03 km, 1403 m to 2638 m, +1236 m, avg 6.9 %, max 10.9 % over 100 m.
+Reference: ~18.1 km, 6.9 %, col 2642 m, flat Plan Lachat around km 3-5. Per-km: 5.1 / 8.3 / 2.9 / 2.3 / 4.4 /
+7.3 / 7.5 / 7.3 / 8.3 / 4.1 / 7.9 / 8.6 / 8.8 / 8.2 / 7.6 / 7.5 / 8.2 / 9.2 %.
+
+### Col du Tourmalet (from Sainte-Marie-de-Campan, D918)
+
+```sh
+cargo run -- course "Col du Tourmalet (Sainte-Marie-de-Campan)" -o courses/tourmalet-sainte-marie.json \
+  --road "D 918" \
+  42.985000,0.223000 42.908000,0.145300
+```
+
+Result: 16.97 km, 854 m to 2114 m, +1263 m, avg 7.4 %, max 15.4 % over 100 m (near Gripp and below La Mongie).
+Reference: ~17.2 km, 7.4 %, 857 m to 2115 m. Per-km: 4.2 / 3.8 / 2.1 / 3.9 / 7.7 / 7.6 / 8.1 / 8.1 / 8.9 / 8.6 /
+9.2 / 9.8 / 9.1 / 8.7 / 8.7 / 8.7 %.
+
+The Luz-Saint-Sauveur side (`--road "D 918" 42.872700,-0.001900 42.908000,0.145300`) builds at 18.71 km,
+720 m to 2110 m, avg 7.4 %, but has a 19 % spike over 100 m around 42.8833,0.0314 on the D918 itself
+(reference max ~12 %). Not shipped until the cause is found (OSM line vs gorge wall?).
+
+### Col d'Izoard (from Briançon, D902)
+
+```sh
+cargo run -- course "Col d'Izoard (Briançon)" -o courses/izoard-briancon.json \
+  --road "D 902" \
+  44.894950,6.636930 44.880308,6.673103 44.820300,6.735100
+```
+
+Start = west end of the D902 (Avenue du Col d'Izoard). The via keeps the route on the D902 at km 4-5, where
+it otherwise cut through an unclassified lane. The short descent there is real.
+Result: 19.13 km, 1212 m to 2354 m, +1176 m, avg 6.0 %, max 13.6 % over 100 m.
+Reference: ~19.1-19.2 km, 1208 m to 2360 m, 5.9 %. Per-km: 6.6 / 6.2 / 6.1 / 3.4 / -1.6 / 3.9 / 7.0 / 3.8 / 3.3 /
+5.5 / 7.2 / 5.7 / 7.6 / 9.2 / 8.0 / 8.5 / 7.7 / 7.8 / 7.6 %.
+
+### La Planche des Belles Filles (from Plancher-les-Mines, D16E)
+
+```sh
+cargo run -- course "La Planche des Belles Filles" -o courses/planche-belles-filles.json \
+  --road "D 16E" \
+  47.772620,6.751532 47.772230,6.778320
+```
+
+Start = D16 / D16E junction above the village, where the classic climb is measured. Finish = ski station
+(classic 1035 m finish, not the gravel "super Planche" at 1140 m).
+Result: 5.81 km, 537 m to 1038 m, +503 m, avg 8.6 %, max 16.5 % over 100 m.
+Reference: 5.9 km, 8.5 %, 1035 m, ramps up to 20 %. Per-km: 10.5 / 6.7 / 10.7 / 9.8 / 6.6 %.
+
 ## Riding
 
 `le-mollet serve` loads every `courses/*.json`; the web UI lets the rider pick a profile, then a course.

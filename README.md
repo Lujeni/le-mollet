@@ -13,8 +13,9 @@ A multiplayer, online cycling and running physical training program. Open source
 ## Ride
 
 - **Real climbs, in real relief.** Legendary climbs rebuilt from OpenStreetMap roads and IGN elevation data,
-  validated against their official profiles: Alpe d'Huez, Mont Ventoux from Bédoin. Pick them as souvenir
-  fridge magnets.
+  validated against their official profiles: Alpe d'Huez, Mont Ventoux, Galibier, Tourmalet, Izoard,
+  La Planche des Belles Filles. Pick them as souvenir fridge
+  magnets.
 - **Free roam.** Random loops generated on demand (5, 10 or 20 km; flat, rolling or mountainous), and a
   "Boucle du jour" that is the same for everyone today. Ride lap after lap, no finish line.
 - **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
