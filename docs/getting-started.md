@@ -70,6 +70,21 @@ cargo run -- serve --addr 0.0.0.0:8080
 Others open `http://<your-ip>:8080`. Everyone on the same course or open-world loop sees each other.
 Profiles and ride history stay in each browser.
 
+## Native client (experimental)
+
+A native 3D client (Bevy) renders a course more realistically: IGN aerial photo on the real relief, physically
+based sky and sun. It is a rendering prototype: no menu, profiles, garage or history yet; the web UI stays the
+full game. The server must be running first:
+
+```sh
+cargo run -- serve
+cargo run --release -p le-mollet-client -- --course alpe-dhuez
+```
+
+Options: `--server` (default `http://127.0.0.1:8080`), `--course`, `--name`, `--weight` (kg), `--power`
+(demo mode starting watts), `--seek` (demo mode start distance, m). Keys: Up/Down ±10 W in demo mode, Esc quits.
+Always build it with `--release`: Bevy is too slow unoptimized.
+
 ## Commands
 
 | Command | What it does |
@@ -105,6 +120,7 @@ Layout:
 | `src/zombie.rs` | Zombie Halloween game: horde waves, mini sprints, bonuses |
 | `src/web.rs`, `src/main.rs` | HTTP server, ride sessions, CLI |
 | `web/index.html` | the whole UI (three.js) |
+| `client/` | experimental native 3D client (Bevy) |
 | `courses/` | course files, see its AGENTS.md |
 | `docs/courses.md` | how real roads become courses |
 | `src/city.rs`, `docs/city.md` | open city: street graph, turns, growing route |

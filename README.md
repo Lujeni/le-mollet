@@ -8,7 +8,8 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 - **No account required.** Want to just ride? Open it and train, no sign-up.
 - **Self-hostable.** Run the whole thing at home, on your own machine or LAN.
 - **Highly modular.** Trainers, courses, terrain and UI are independent pieces you can swap or extend.
-- **Just a browser.** No heavy client to install: the UI runs in any modern web browser.
+- **Just a browser.** No heavy client to install: the UI runs in any modern web browser. An optional, experimental
+  native 3D client is in the works for more realistic rendering.
 
 ## Ride
 
