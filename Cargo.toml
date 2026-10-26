@@ -1,0 +1,15 @@
+[package]
+name = "le-mollet"
+version = "0.1.0"
+edition = "2024"
+description = "Open-source indoor cycling engine: smart trainer control over BLE"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+btleplug = "0.11"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "time"] }
+futures = "0.3"
+uuid = "1"
+anyhow = "1"
+# ponytail: vendored libdbus so build works without libdbus-1-dev installed
+dbus = { version = "0.9", features = ["vendored"] }
