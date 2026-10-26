@@ -17,3 +17,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ureq = { version = "2", features = ["json"] }
 clap = { version = "4", features = ["derive"] }
+
+[workspace]
+members = ["client"]
+
+# Bevy is unusable unoptimized: optimize dependencies even in dev builds.
+[profile.dev.package."*"]
+opt-level = 3

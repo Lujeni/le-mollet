@@ -1,0 +1,19 @@
+[package]
+name = "le-mollet-client"
+version = "0.1.0"
+edition = "2024"
+description = "le-mollet native game client (Bevy): renders the ride the le-mollet server simulates"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+le-mollet = { path = ".." }
+# No audio or gamepad backends: they need ALSA / udev headers.
+bevy = { version = "0.18.1", default-features = false, features = [
+    "default_app", "std", "multi_threaded", "bevy_winit", "x11", "default_font", "keyboard", "mouse",
+    "3d_bevy_render", "scene", "ui_api", "ui_bevy_render", "jpeg", "png", "hdr",
+] }
+ureq = { version = "2", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
