@@ -1,0 +1,1043 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le Mollet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#14171c; --panel:#1f242c; --panel-hi:#2b323d; --ink:#eef1f5; --muted:#9aa4b2; --accent:#f2cd37; --line:#0b0d10; }
+* { box-sizing:border-box }
+[hidden] { display:none !important }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:15px/1.4 Inter, system-ui, sans-serif; overflow:hidden }
+#scene { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none }
+.ui { position:fixed; inset:0; pointer-events:none; display:flex; flex-direction:column }
+header { padding:16px; font-family:Silkscreen, monospace; font-size:22px; letter-spacing:1px; text-shadow:3px 3px 0 var(--line) }
+header b { color:var(--accent) }
+.block { background:var(--panel); border:3px solid var(--line); box-shadow:inset -4px -4px 0 rgba(0,0,0,.35), inset 4px 4px 0 rgba(255,255,255,.08) }
+.panel { padding:20px; pointer-events:auto }
+h1, h2, legend { font-family:Silkscreen, monospace; font-weight:700; margin:0 0 12px }
+h1 { font-size:24px } h2 { font-size:18px }
+.muted { color:var(--muted); margin:0 0 16px }
+
+#profiles { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
+#profiles .panel { width:min(520px, 100%); max-height:100%; overflow:auto }
+.list { display:grid; gap:10px; margin-bottom:16px }
+.card { display:flex; align-items:center; gap:12px; padding:10px 12px; cursor:pointer; background:var(--panel-hi) }
+.card:hover, .card:focus-visible { outline:3px solid var(--accent); outline-offset:-3px }
+.avatar { width:44px; height:44px; flex:none; display:grid; place-items:center; font-family:Silkscreen, monospace; font-size:22px; color:#fff; text-shadow:2px 2px 0 rgba(0,0,0,.45); border:3px solid var(--line) }
+.meta { flex:1; min-width:0; display:flex; flex-direction:column }
+.meta strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.meta small { color:var(--muted) }
+.del { background:none; border:0; color:var(--muted); font-size:22px; cursor:pointer; padding:4px 8px }
+.del:hover, .del:focus-visible { color:#ff6b5b }
+.new { display:grid; grid-template-columns:1fr 1fr; gap:10px }
+.new .full { grid-column:1 / -1 }
+label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted) }
+input { font:inherit; color:var(--ink); background:var(--bg); border:3px solid var(--line); padding:8px 10px; width:100% }
+input:focus { outline:3px solid var(--accent); outline-offset:-3px }
+
+.btn, .seg button { font-family:Silkscreen, monospace; font-size:14px; color:var(--ink); background:var(--panel-hi); border:3px solid var(--line); box-shadow:inset -3px -3px 0 rgba(0,0,0,.35), inset 3px 3px 0 rgba(255,255,255,.12); padding:8px 12px; cursor:pointer }
+.btn:active, .seg button:active { box-shadow:inset 3px 3px 0 rgba(0,0,0,.35) }
+.btn:focus-visible, .seg button:focus-visible, .sw:focus-visible { outline:3px solid var(--ink); outline-offset:1px }
+.primary, .seg button.on { background:var(--accent); color:#1b2a34 }
+
+#garage { flex:1; display:flex; justify-content:flex-end; padding:0 16px 16px; min-height:0 }
+.side { width:330px; overflow:auto; display:flex; flex-direction:column; gap:16px }
+.side .btn { align-self:flex-start }
+#options { display:flex; flex-direction:column; gap:16px }
+.opt { border:0; padding:0; margin:0 }
+.opt legend { font-size:13px; margin-bottom:8px }
+.seg { display:flex; gap:6px; flex-wrap:wrap }
+.seg button { flex:1 }
+.swatches { display:grid; grid-template-columns:repeat(6, 1fr); gap:6px }
+.sw { aspect-ratio:1; border:3px solid var(--line); cursor:pointer; box-shadow:inset -3px -3px 0 rgba(0,0,0,.3), inset 3px 3px 0 rgba(255,255,255,.25) }
+.sw.on { outline:3px solid var(--ink); outline-offset:1px }
+
+#ride { flex:1; display:flex; flex-direction:column; justify-content:space-between; gap:12px; padding:0 16px 16px; min-height:0 }
+.stats { display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; padding:14px 20px }
+.stat small { display:block; font-family:Silkscreen, monospace; font-size:11px; color:var(--muted) }
+.stat b { font-family:Silkscreen, monospace; font-size:26px; font-weight:700 }
+.stat i { font-style:normal; font-size:12px; color:var(--muted); margin-left:4px }
+.finish { grid-column:1 / -1; font-family:Silkscreen, monospace; font-size:20px; color:var(--accent); text-align:center }
+.profile { display:flex; flex-direction:column; gap:8px; padding:14px 20px }
+.ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px }
+.ride-head h2 { margin:0 }
+#profileCanvas { width:100%; height:160px; display:block }
+#profileCanvas.seekable { cursor:pointer }
+#ride.world3d #profileCanvas { height:90px }
+.attrib { color:var(--muted); font-size:11px }
+#rideBtn { align-self:stretch }
+#courses { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
+#courses .panel { width:min(560px, 100%); max-height:100%; overflow:auto }
+.course-card { display:flex; flex-direction:column; gap:6px; padding:12px; cursor:pointer; background:var(--panel-hi) }
+.course-card:hover, .course-card:focus-visible { outline:3px solid var(--accent); outline-offset:-3px }
+.course-card canvas { width:100%; height:48px; display:block }
+.course-card small { color:var(--muted) }
+.demo { display:flex; align-items:center; gap:10px }
+.demo label { flex-direction:row; align-items:center; gap:8px; font-family:Silkscreen, monospace; font-size:13px; color:var(--ink) }
+.demo output { font-family:Silkscreen, monospace; font-size:20px; min-width:84px; text-align:right }
+.demo .btn { padding:6px 10px }
+input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; background:none; height:28px }
+
+@media (max-width:700px) {
+  .stats { grid-template-columns:repeat(3, 1fr); padding:12px 16px }
+  .stat b { font-size:20px }
+  #ride { padding:0 0 0 }
+  #profileCanvas { height:120px }
+  header { font-size:18px; padding:12px 16px }
+  #garage { align-items:flex-end; padding:0 }
+  .side { width:100%; max-height:48vh; padding:16px }
+}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div class="ui">
+  <header>LE <b>MOLLET</b></header>
+
+  <main id="profiles">
+    <div class="block panel">
+      <h1>Qui roule ?</h1>
+      <div id="list" class="list"></div>
+      <p id="empty" class="muted">Aucun profil. Crée le tien pour monter en selle.</p>
+      <form id="new" class="new">
+        <label class="full">Nom<input name="name" maxlength="24" required autocomplete="off"></label>
+        <label>Poids (kg)<input name="weight" type="number" min="30" max="200" step="0.1" value="75" required></label>
+        <label>FTP (W)<input name="ftp" type="number" min="50" max="600" value="200" required></label>
+        <button class="btn primary full">Créer le profil</button>
+      </form>
+    </div>
+  </main>
+
+  <main id="garage" hidden>
+    <aside class="block panel side">
+      <button class="btn" id="back">‹ Profils</button>
+      <h2>Garage de <span id="who"></span></h2>
+      <button class="btn primary" id="rideBtn" hidden>Choisir un circuit</button>
+      <div id="options"></div>
+      <p class="muted">Glisse pour tourner autour du vélo, molette ou pincement pour zoomer.</p>
+    </aside>
+  </main>
+  <main id="courses" hidden>
+    <div class="block panel">
+      <div class="ride-head">
+        <h1>Choisis ton circuit</h1>
+        <button class="btn" id="coursesBack">‹ Garage</button>
+      </div>
+      <p class="muted" id="modeHint"></p>
+      <div id="courseList" class="list"></div>
+    </div>
+  </main>
+
+  <main id="ride" hidden>
+    <div class="block panel stats" id="stats"></div>
+    <div class="block panel profile">
+      <div class="ride-head">
+        <h2 id="courseName"></h2>
+        <span>
+          <button class="btn" id="mute" aria-label="Couper ou remettre le son"></button>
+          <button class="btn" id="leave">‹ Circuits</button>
+        </span>
+      </div>
+      <div class="demo" id="demo" hidden>
+        <button class="btn" data-dw="-25" aria-label="Moins 25 watts">−</button>
+        <input type="range" id="watts" min="0" max="2000" step="5" aria-label="Puissance en watts">
+        <button class="btn" data-dw="25" aria-label="Plus 25 watts">+</button>
+        <output id="wattsOut" for="watts"></output>
+      </div>
+      <canvas id="profileCanvas"></canvas>
+      <small class="attrib" id="attrib"></small>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---------- data ----------
+const PALETTE = {
+  Rouge:'#c91a09', Orange:'#fe8a18', Jaune:'#f2cd37', Citron:'#bbe90b', Vert:'#237841', Azur:'#36aebf',
+  Bleu:'#0055bf', Violet:'#81007b', Rose:'#fc97ac', Blanc:'#f4f4f4', Gris:'#6c6e68', Noir:'#1b2a34',
+};
+const DEFAULT_BIKE = { style:'lego', frame:'#c91a09', accent:'#f4f4f4', rim:'#1b2a34', saddle:'#1b2a34', rimDepth:2, bars:'drop' };
+const OPTIONS = [
+  { key:'style', label:'Style', choices:[['lego','Brique'], ['voxel','Cube']] },
+  { key:'frame', label:'Cadre', colors:true },
+  { key:'accent', label:'Fourche', colors:true },
+  { key:'rim', label:'Couleur des jantes', colors:true },
+  { key:'rimDepth', label:'Profil des jantes', choices:[[1,'Basses'], [2,'Aéro'], [3,'Profondes']] },
+  { key:'bars', label:'Cintre', choices:[['drop','Route'], ['flat','Plat'], ['aero','Chrono']] },
+  { key:'saddle', label:'Selle', colors:true },
+];
+
+// ponytail: profiles live in this browser only, move to the Rust backend when login lands
+const KEY = 'lemollet.profiles.v1';
+let profiles = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || [] } catch { return [] } })();
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(profiles)) } catch {} };
+let current = null;
+
+// ---------- voxel bike (side view in x/y, z = width; 1 unit ≈ 37 mm) ----------
+const TIRE = '#1b2a34', METAL = '#a0a5a9', CHAIN = '#6c6e68';
+function bikeVoxels(b) {
+  const v = new Map();
+  const put = (x, y, z, c) => v.set(`${x},${y},${z}`, c);
+  const line = (ax, ay, bx, by, z, c) => {
+    const n = Math.ceil(Math.hypot(bx - ax, by - ay) * 2);
+    for (let i = 0; i <= n; i++) put(Math.round(ax + (bx - ax) * i / n), Math.round(ay + (by - ay) * i / n), z, c);
+  };
+  const ring = (cx, cy, r0, r1, z, c) => {
+    for (let x = Math.floor(cx - r1 - 1); x <= cx + r1 + 1; x++)
+      for (let y = Math.floor(cy - r1 - 1); y <= cy + r1 + 1; y++) {
+        const d = Math.hypot(x - cx, y - cy);
+        if (d > r0 - 0.5 && d <= r1 + 0.5) put(x, y, z, c);
+      }
+  };
+
+  // Geometry keeps tubes clear of the tires (checked by distance to hub > R + 0.5).
+  const R = 9, REAR = 0, FRONT = 28, BB = [11, -2], SEAT = [7, 12], HB = [24, 10], HT = [23, 13];
+  for (const hx of [REAR, FRONT]) {
+    const inner = R - 1 - b.rimDepth;
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4 + Math.PI / 8;
+      line(hx, 0, hx + Math.cos(a) * inner, Math.sin(a) * inner, 0, METAL);
+    }
+    ring(hx, 0, R - b.rimDepth, R - 1, 0, b.rim);
+    ring(hx, 0, R, R, 0, TIRE);
+    for (let z = -1; z <= 1; z++) put(hx, 0, z, METAL);
+  }
+
+  line(...SEAT, ...HT, 0, b.frame);   // top tube
+  line(...BB, ...HB, 0, b.frame);     // down tube
+  line(...BB, ...SEAT, 0, b.frame);   // seat tube
+  line(...HB, ...HT, 0, b.accent);    // head tube
+  for (const z of [-1, 1]) {
+    line(...SEAT, REAR, 0, z, b.frame); // seat stays
+    line(...BB, REAR, 0, z, b.frame);   // chainstays
+    line(...HB, FRONT, 0, z, b.accent); // fork
+  }
+
+  line(...SEAT, 6, 15, 0, METAL); // seatpost
+  for (let x = 3; x <= 9; x++) for (let z = -1; z <= 1; z++) if (x < 8 || z === 0) put(x, 16, z, b.saddle);
+
+  const [BX, BY] = [25, 14];
+  line(...HT, BX, BY, 0, METAL); // stem
+  if (b.bars === 'flat') {
+    for (let z = -5; z <= 5; z++) put(BX, BY, z, Math.abs(z) >= 4 ? TIRE : METAL);
+  } else {
+    for (let z = -3; z <= 3; z++) put(BX, BY, z, METAL);
+    for (const z of [-3, 3]) {
+      const path = b.bars === 'drop' ? [[1, 0], [1, 1], [2, -1], [2, -2], [1, -3], [0, -3]] : [[1, 0], [2, 0], [3, 1]];
+      for (const [dx, dy] of path) put(BX + dx, BY + dy, z, TIRE);
+    }
+    if (b.bars === 'aero') for (const z of [-1, 1]) {
+      put(BX, BY + 1, z, TIRE);
+      for (let x = BX + 1; x <= BX + 5; x++) put(x, BY + 1, z, METAL);
+    }
+  }
+
+  const [bx, by] = BB;
+  ring(bx, by, 3, 4, 2, METAL); // chainring
+  ring(REAR, 0, 1, 2, 2, METAL); // cassette
+  line(bx, by + 4, REAR, 2, 2, CHAIN);
+  line(bx, by - 4, REAR, -2, 2, CHAIN);
+  for (let z = -2; z <= 2; z++) put(bx, by, z, METAL);
+  line(bx, by, bx + 2, by - 4, 3, TIRE); put(bx + 2, by - 4, 4, TIRE); // cranks + pedals
+  line(bx, by, bx - 2, by + 4, -3, TIRE); put(bx - 2, by + 4, -4, TIRE);
+
+  if (b.rider) { // seated rider on the hoods, jersey in the frame color
+    const [SKIN, SHORTS, HELMET] = ['#e0ac69', '#1b2a34', '#f4f4f4'];
+    for (let z = -2; z <= 2; z++) line(6, 17, 18, 23, z, b.frame); // torso
+    for (const [z, px, py] of [[3, bx + 2, by - 4], [-3, bx - 2, by + 4]]) {
+      const knee = z > 0 ? [14, 6] : [16, 13];
+      line(6, 17, ...knee, z, SHORTS);   // thigh
+      line(...knee, px, py + 1, z, SKIN); // shin
+      line(18, 23, 25, 16, z, SKIN);      // arm to the hoods
+    }
+    for (let x = 19; x <= 22; x++) for (let y = 24; y <= 27; y++) for (let z = -1; z <= 1; z++) put(x, y, z, y >= 26 ? HELMET : SKIN);
+  }
+  return v;
+}
+
+function groundVoxels(style) {
+  const v = new Map(), c = style === 'lego' ? '#237841' : '#5d9b3a';
+  for (let x = -16; x <= 44; x++) for (let z = -10; z <= 10; z++) v.set(`${x},-10,${z}`, c);
+  return v;
+}
+
+// ---------- rendering ----------
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#8ec5ee');
+scene.fog = new THREE.Fog('#8ec5ee', 80, 160);
+scene.add(new THREE.HemisphereLight('#ffffff', '#3d5a2a', 1.6));
+const sun = new THREE.DirectionalLight('#fff4dd', 2.4);
+sun.position.set(25, 45, 30);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left:-40, right:40, top:40, bottom:-40, near:1, far:150 });
+scene.add(sun);
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 500);
+camera.position.set(30, 16, 66);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 2, 0);
+controls.enableDamping = true;
+controls.autoRotateSpeed = 1.2;
+controls.minDistance = 20;
+controls.maxDistance = 110;
+controls.maxPolarAngle = Math.PI * 0.49;
+
+const hash = (x, y, z) => {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+
+function instanced(vox, style, cast) {
+  const lego = style === 'lego';
+  const size = lego ? 0.94 : 1; // brick seams vs seamless cubes
+  const mat = new THREE.MeshStandardMaterial({ roughness: lego ? 0.3 : 0.95 });
+  const cells = [...vox].map(([k, hex]) => [k.split(',').map(Number), hex]);
+  const box = new THREE.InstancedMesh(new THREE.BoxGeometry(size, size, size), mat, cells.length);
+  const m = new THREE.Matrix4(), c = new THREE.Color();
+  cells.forEach(([[x, y, z], hex], i) => {
+    box.setMatrixAt(i, m.makeTranslation(x, y, z));
+    c.set(hex);
+    if (!lego) c.offsetHSL(0, 0, (hash(x, y, z) - 0.5) * 0.08); // Minecraft-ish texture noise
+    box.setColorAt(i, c);
+  });
+  const meshes = [box];
+  if (lego) {
+    const tops = cells.filter(([[x, y, z]]) => !vox.has(`${x},${y + 1},${z}`));
+    const studs = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12), mat, tops.length);
+    tops.forEach(([[x, y, z], hex], i) => {
+      studs.setMatrixAt(i, m.makeTranslation(x, y + size / 2 + 0.1, z));
+      studs.setColorAt(i, c.set(hex));
+    });
+    meshes.push(studs);
+  }
+  for (const o of meshes) { o.castShadow = cast; o.receiveShadow = true }
+  return meshes;
+}
+
+let world;
+function draw(bike) {
+  if (world) {
+    scene.remove(world);
+    world.traverse(o => { o.geometry?.dispose(); o.material?.dispose() });
+  }
+  world = new THREE.Group();
+  const b = new THREE.Group();
+  b.add(...instanced(bikeVoxels(bike), bike.style, true));
+  b.position.x = -14; // center wheelbase on origin
+  world.add(b, ...instanced(groundVoxels(bike.style), bike.style, false).map(g => (g.position.x = -14, g)));
+  scene.add(world);
+}
+
+// Keep the bike centered in the area not covered by the garage panel.
+function resize() {
+  const [W, H] = [innerWidth, innerHeight];
+  renderer.setSize(W, H, false);
+  camera.aspect = W / H;
+  camera.zoom = Math.min(1, camera.aspect * 1.3) * ($('#ride').hidden || w3.group ? 1 : 0.6); // portrait / ride panels: zoom out so the bike fits
+  const side = $('#garage').hidden ? null : $('.side').getBoundingClientRect();
+  const narrow = W <= 700;
+  if (side) camera.setViewOffset(W, H, narrow ? 0 : side.width / 2, narrow ? side.height / 2 : 0, W, H);
+  else if (!$('#ride').hidden) {
+    const [top, bottom] = [$('#stats'), $('.profile')].map(e => e.getBoundingClientRect().height);
+    camera.setViewOffset(W, H, 0, (bottom - top) / 2, W, H);
+  } else camera.clearViewOffset();
+  if (!$('#ride').hidden && ride.course) drawProfile();
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+// Bike and ground tilt with the road; slope doubled so 8 % reads on screen.
+let tilt = 0;
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.1);
+  if (w3.group) update3d(dt);
+  else {
+    const target = $('#ride').hidden ? 0 : Math.atan((ride.state?.grade ?? 0) / 100) * 2;
+    tilt += (target - tilt) * 0.05;
+    if (world) world.rotation.z = tilt;
+    controls.update();
+  }
+  renderer.render(scene, camera);
+});
+
+// ---------- UI ----------
+const $ = s => document.querySelector(s);
+function h(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (k === 'style') e.style.cssText = v;
+    else e.setAttribute(k, v);
+  }
+  e.append(...kids);
+  return e;
+}
+
+function showProfiles() {
+  exit3d();
+  current = null;
+  $('#garage').hidden = true;
+  $('#ride').hidden = true;
+  $('#courses').hidden = true;
+  ride.events?.close();
+  stopAmbience();
+  $('#profiles').hidden = false;
+  controls.autoRotate = true;
+  draw(profiles.at(-1)?.bike ?? DEFAULT_BIKE);
+  renderList();
+  resize();
+}
+
+function renderList() {
+  $('#empty').hidden = profiles.length > 0;
+  $('#list').replaceChildren(...profiles.map(p => h('div', {
+      class:'card block', role:'button', tabindex:0,
+      onclick: () => openGarage(p),
+      onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openGarage(p) } },
+    },
+    h('span', { class:'avatar', style:`background:${p.bike.frame}` }, p.name[0].toUpperCase()),
+    h('div', { class:'meta' },
+      h('strong', {}, p.name),
+      h('small', {}, `${p.weightKg} kg · ${p.ftp} W · ${(p.ftp / p.weightKg).toFixed(1)} W/kg`)),
+    h('button', {
+      class:'del', title:'Supprimer', 'aria-label':`Supprimer ${p.name}`,
+      onclick: e => {
+        e.stopPropagation();
+        if (!confirm(`Supprimer le profil ${p.name} ?`)) return;
+        profiles = profiles.filter(q => q !== p);
+        persist();
+        showProfiles();
+      },
+    }, '×'),
+  )));
+}
+
+$('#new').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const name = f.get('name').trim();
+  if (!name) return;
+  const colors = Object.values(PALETTE);
+  const p = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+    name, weightKg: +f.get('weight'), ftp: +f.get('ftp'),
+    bike: { ...DEFAULT_BIKE, frame: colors[profiles.length % colors.length] },
+  };
+  profiles.push(p);
+  persist();
+  e.target.reset();
+  openGarage(p);
+});
+
+function openGarage(p) {
+  exit3d();
+  current = p;
+  $('#profiles').hidden = true;
+  $('#garage').hidden = false;
+  controls.autoRotate = false;
+  $('#who').textContent = p.name;
+  $('#ride').hidden = true;
+  ride.events?.close();
+  stopAmbience();
+  $('#courses').hidden = true;
+  $('#rideBtn').hidden = !ride.list?.courses.length;
+  renderOptions();
+  draw(p.bike);
+  resize();
+}
+
+function renderOptions() {
+  const b = current.bike;
+  $('#options').replaceChildren(...OPTIONS.map(o => h('fieldset', { class:'opt' },
+    h('legend', {}, o.label),
+    o.colors
+      ? h('div', { class:'swatches' }, ...Object.entries(PALETTE).map(([name, hex]) => h('button', {
+          class: 'sw' + (b[o.key] === hex ? ' on' : ''), style:`background:${hex}`,
+          title:name, 'aria-label':`${o.label} : ${name}`, 'aria-pressed': b[o.key] === hex,
+          onclick: () => set(o.key, hex),
+        })))
+      : h('div', { class:'seg' }, ...o.choices.map(([val, label]) => h('button', {
+          class: b[o.key] === val ? 'on' : '', 'aria-pressed': b[o.key] === val,
+          onclick: () => set(o.key, val),
+        }, label))),
+  )));
+}
+
+function set(key, val) {
+  current.bike[key] = val;
+  persist();
+  renderOptions();
+  draw(current.bike);
+}
+
+// ---------- ride (live from the Rust engine: `le-mollet ride`) ----------
+const ride = { list:null, course:null, state:null, events:null, session:0 };
+const GRADE_COLORS = [[0, '#36aebf'], [3, '#5d9b3a'], [6, '#f2cd37'], [9, '#fe8a18'], [12, '#c91a09'], [Infinity, '#7a0c0c']];
+const gradeColor = g => GRADE_COLORS.find(([max]) => g < max)[1];
+
+function showCourses() {
+  exit3d();
+  ride.events?.close();
+  stopAmbience();
+  for (const id of ['#garage', '#ride', '#profiles']) $(id).hidden = true;
+  $('#courses').hidden = false;
+  $('#modeHint').textContent = ride.list.trainer
+    ? `Home trainer connecté : ${ride.list.trainer}. La pente suit la route.`
+    : 'Mode démo : pas de home trainer, tu règles les watts avec un curseur.';
+  $('#courseList').replaceChildren(...ride.list.courses.map(c => {
+    const cv = h('canvas', { 'aria-hidden':'true' });
+    const card = h('div', {
+        class:'course-card block', role:'button', tabindex:0,
+        onclick: () => openRide(c.id),
+        onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRide(c.id) } },
+      },
+      h('strong', {}, c.name),
+      h('small', {}, `${(c.length / 1000).toFixed(1)} km · +${c.gain} m · ${((c.profile.at(-1) - c.profile[0]) / c.length * 100).toFixed(1)} % moyen`),
+      cv);
+    requestAnimationFrame(() => sparkline(cv, c.profile));
+    return card;
+  }));
+  resize();
+}
+
+function sparkline(cv, prof) {
+  const [W, H] = [cv.clientWidth, cv.clientHeight], dpr = Math.min(devicePixelRatio, 2);
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const lo = Math.min(...prof), hi = Math.max(...prof);
+  ctx.fillStyle = '#f2cd37';
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  prof.forEach((e, i) => ctx.lineTo(i / (prof.length - 1) * W, H - 2 - (e - lo) / (hi - lo || 1) * (H - 4)));
+  ctx.lineTo(W, H);
+  ctx.fill();
+}
+
+async function openRide(id) {
+  amb.ctx ??= new AudioContext(); // created inside the click so autoplay policies allow sound
+  amb.ctx.resume();
+  ride.course = await (await fetch(`/course?id=${encodeURIComponent(id)}`)).json();
+  $('#courses').hidden = true;
+  $('#ride').hidden = false;
+  $('#courseName').textContent = ride.course.name;
+  $('#attrib').textContent = attribution();
+  ride.state = null;
+  renderStats();
+  ride.session = Math.floor(Math.random() * 2 ** 52);
+  const demo = !ride.list.trainer;
+  $('#demo').hidden = !demo;
+  $('#profileCanvas').classList.toggle('seekable', demo);
+  $('#profileCanvas').title = demo ? 'Clique pour te placer sur le parcours' : '';
+  if (demo) {
+    setPower(Math.round(current.ftp * 0.75 / 5) * 5); // start at endurance pace
+  }
+  // ponytail: 8 kg bike until the garage has weights
+  ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}`);
+  if (ride.list.courses.find(c => c.id === id)?.terrain) {
+    $('#attrib').textContent = 'Chargement du terrain…';
+    const buf = await (await fetch(`/terrain?id=${encodeURIComponent(id)}`)).arrayBuffer();
+    $('#attrib').textContent = attribution();
+    if (!$('#ride').hidden) enter3d(buf);
+  }
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); renderStats(); drawProfile(); mixAmbience() };
+  startAmbience().catch(() => {}); // no sound is not worth an error
+  resize();
+}
+
+function setPower(w) {
+  w = Math.max(0, Math.min(+$('#watts').max, Math.round(w)));
+  $('#watts').value = w;
+  $('#wattsOut').textContent = `${w} W`;
+  fetch(`/power?session=${ride.session}&w=${w}`).catch(() => {});
+}
+$('#watts').addEventListener('input', e => setPower(+e.target.value));
+// Demo: click the profile to jump there.
+$('#profileCanvas').addEventListener('click', e => {
+  if ($('#demo').hidden || !profileLayout) return;
+  const { left, width, total } = profileLayout;
+  const d = Math.max(0, Math.min(1, (e.offsetX - left) / width)) * total;
+  fetch(`/seek?session=${ride.session}&d=${Math.round(d)}`).catch(() => {});
+  w3.dist = d;
+  w3.snap = true;
+});
+for (const b of document.querySelectorAll('[data-dw]')) b.addEventListener('click', () => setPower(+$('#watts').value + +b.dataset.dw));
+addEventListener('keydown', e => {
+  if ($('#ride').hidden || $('#demo').hidden || e.target === $('#watts')) return;
+  const dw = { ArrowUp:10, ArrowDown:-10 }[e.key];
+  if (dw) { e.preventDefault(); setPower(+$('#watts').value + dw) }
+});
+
+function renderStats() {
+  const s = ride.state ?? { power:0, speed_kmh:0, grade:0, distance:0, ele:ride.course.points[0].ele, elapsed:0 };
+  const t = Math.floor(s.elapsed), hms = `${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+  const total = ride.course.points.at(-1).d;
+  const stat = (label, value, unit) => h('div', { class:'stat' }, h('small', {}, label), h('b', {}, value), h('i', {}, unit));
+  $('#stats').replaceChildren(
+    stat('Puissance', Math.round(s.power), 'W'),
+    stat('Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
+    stat('Pente', s.grade.toFixed(1), '%'),
+    stat('Distance', (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`),
+    stat('Altitude', Math.round(s.ele), 'm'),
+    stat('Temps', hms, ''),
+    ...(s.finished ? [h('div', { class:'finish' }, `Arrivée en ${hms} !`)] : []),
+  );
+}
+
+let profileLayout = null;
+function drawProfile() {
+  const cv = $('#profileCanvas'), dpr = Math.min(devicePixelRatio, 2);
+  const [W, H] = [cv.clientWidth, cv.clientHeight];
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const pts = ride.course.points, total = pts.at(-1).d;
+  const lo = Math.min(...pts.map(p => p.ele)), hi = Math.max(...pts.map(p => p.ele));
+  const pad = { l:60, r:8, t:8, b:18 };
+  const x = d => pad.l + d / total * (W - pad.l - pad.r);
+  profileLayout = { left:pad.l, width:W - pad.l - pad.r, total };
+  const y = e => H - pad.b - (e - lo) / (hi - lo || 1) * (H - pad.t - pad.b);
+  const pos = ride.state?.distance ?? 0;
+  // One column per 250 m, colored by its grade; ridden part fully opaque.
+  for (let i = 0; i < pts.length - 1; i += 25) {
+    const [a, b] = [pts[i], pts[Math.min(i + 25, pts.length - 1)]];
+    ctx.globalAlpha = a.d < pos ? 1 : 0.55;
+    ctx.fillStyle = gradeColor((b.ele - a.ele) / (b.d - a.d) * 100);
+    ctx.beginPath();
+    ctx.moveTo(x(a.d), H - pad.b); ctx.lineTo(x(a.d), y(a.ele)); ctx.lineTo(x(b.d), y(b.ele)); ctx.lineTo(x(b.d), H - pad.b);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted');
+  ctx.font = '11px Silkscreen, monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(`${Math.round(hi)} m`, pad.l - 6, pad.t + 8);
+  ctx.fillText(`${Math.round(lo)} m`, pad.l - 6, H - pad.b);
+  ctx.textAlign = 'center';
+  for (let km = 0; km <= total / 1000; km += 2) ctx.fillText(`${km}`, x(km * 1000), H - 4);
+  // Rider marker: a little yellow brick.
+  const ele = pts[Math.min(pts.length - 1, Math.round(pos / 10))].ele;
+  ctx.fillStyle = '#f2cd37';
+  ctx.strokeStyle = '#0b0d10';
+  ctx.lineWidth = 2;
+  ctx.fillRect(x(pos) - 6, y(ele) - 14, 12, 12);
+  ctx.strokeRect(x(pos) - 6, y(ele) - 14, 12, 12);
+}
+
+// ---------- 3D course world (terrain from `le-mollet course` / `le-mollet terrain`) ----------
+const COVER = { GRASS:0, FOREST:1, WATER:2, BUILDING:3, ROCK:4, ROAD:5 };
+const STEP_Y = 2;          // voxel height, m. Calibration knob: smaller = finer terraces
+const CHUNK = 64;          // cells per chunk side (5 m cells = 320 m)
+// ponytail: fixed view distance by screen width; measure fps on real devices before tuning
+const CHUNK_RADIUS = innerWidth <= 700 ? 2 : 3;
+const BIKE_SCALE = 0.037;  // one garage voxel = 37 mm
+const w3 = { T:null, group:null, chunks:new Map(), bike:null, eagle:null, dist:0, look:new THREE.Vector3(), snap:false, saved:null };
+const terrainMat = new THREE.MeshLambertMaterial({ vertexColors:true, side:THREE.DoubleSide });
+
+function parseTerrain(buf, course) {
+  const dv = new DataView(buf);
+  const w = dv.getUint32(0, true), h = dv.getUint32(4, true);
+  const [west, south, east, north] = [8, 16, 24, 32].map(o => dv.getFloat64(o, true));
+  const heights = new Uint16Array(buf, 40, w * h);
+  const cover = new Uint8Array(buf, 40 + w * h * 2, w * h);
+  const p0 = course.points[0];
+  const kx = Math.cos(p0.lat * Math.PI / 180) * 111320, kz = 110540;
+  const toXZ = (lat, lon) => [(lon - p0.lon) * kx, (p0.lat - lat) * kz]; // x east, z south, meters
+  const [ox, oz] = toXZ(north, west);
+  const ele = i => heights[i] / 10;
+  const top = (c, r) => {
+    const i = r * w + c;
+    return Math.floor(ele(i) / STEP_Y) * STEP_Y + (cover[i] === COVER.BUILDING ? 6 : 0);
+  };
+  return { w, h, cover, ele, top, toXZ, ox, oz, cx:(east - west) / w * kx, cz:(north - south) / h * kz };
+}
+
+function topColor(cov, e) {
+  if (cov === COVER.ROAD) return '#5a5f66';
+  if (cov === COVER.WATER) return '#3b7dd8';
+  if (cov === COVER.BUILDING) return '#b5523b';
+  if (cov === COVER.ROCK || e > 2400) return e > 2800 ? '#f4f4f4' : '#a3a39b';
+  return cov === COVER.FOREST ? '#3f7a2c' : '#6aa84f';
+}
+const sideColor = (cov, e) => cov === COVER.BUILDING ? '#e6d9b8' : cov === COVER.ROCK || e > 2400 ? '#7d7d76' : '#7a4f2e';
+const shade = (hex, c, r) => new THREE.Color(hex).offsetHSL(0, 0, (hash(c, r, 7) - 0.5) * 0.07);
+const TRUNK = new THREE.Color('#5b3a1e'), LEAVES = '#2f6b24';
+
+// Wildlife from land cover and altitude. Deterministic per cell, so what you see is what you hear.
+// ponytail: toy scale (1.5x cows, ~2x others) so they read at chase-cam distance; real size is invisible
+const ANIMALS = {
+  cow:     { len:3.0, h:1.5, w:1.2, leg:1.0, body:'#f4f4f4', patch:'#1b2a34', head:'#f4f4f4' },
+  deer:    { len:2.2, h:1.1, w:0.8, leg:1.4, body:'#8b5a2b', head:'#7a4a22' },
+  chamois: { len:2.0, h:1.0, w:0.7, leg:1.1, body:'#5b4330', head:'#e8dcc0', horns:true },
+  marmot:  { upright:true, len:0.6, h:0.9, w:0.5, body:'#9a7346', head:'#7a5a36' },
+};
+function animalAt(T, c, r) {
+  if (c < 1 || r < 1 || c >= T.w - 1 || r >= T.h - 1) return null;
+  const i = r * T.w + c, cov = T.cover[i], e = T.ele(i), h = hash(c, r, 3);
+  const flat = Math.abs(T.ele(i + 1) - T.ele(i - 1)) < 4 && Math.abs(T.ele(i + T.w) - T.ele(i - T.w)) < 4; // under ~22°
+  // Cows graze in herds: 12 % of 40 m blocks hold one.
+  if (cov === COVER.GRASS && e > 900 && e < 2300 && flat && hash(c >> 3, r >> 3, 11) < 0.12 && h < 0.04) return 'cow';
+  if ((cov === COVER.GRASS || cov === COVER.ROCK) && e > 1600 && e < 2800 && h < 0.006) return 'marmot';
+  if (cov === COVER.ROCK && e > 1500 && h < 0.002) return 'chamois';
+  if (cov === COVER.FOREST && e < 1800 && h < 0.004 && [1, -1, T.w, -T.w].some(o => T.cover[i + o] === COVER.GRASS)) return 'deer';
+  return null;
+}
+
+function chunkMesh(T, ci, cj) {
+  const pos = [], col = [];
+  const quad = (pts, c) => { for (const i of [0, 1, 2, 0, 2, 3]) pos.push(...pts[i]); for (let k = 0; k < 6; k++) col.push(c.r, c.g, c.b) };
+  const box = (x, y, z, sx, sy, sz, c) => {
+    const [a, b, d, e, lo, hi] = [x - sx / 2, x + sx / 2, z - sz / 2, z + sz / 2, y, y + sy];
+    quad([[a, hi, d], [a, hi, e], [b, hi, e], [b, hi, d]], c);
+    quad([[a, lo, d], [b, lo, d], [b, hi, d], [a, hi, d]], c);
+    quad([[a, lo, e], [a, hi, e], [b, hi, e], [b, lo, e]], c);
+    quad([[a, lo, d], [a, hi, d], [a, hi, e], [a, lo, e]], c);
+    quad([[b, lo, d], [b, lo, e], [b, hi, e], [b, hi, d]], c);
+  };
+  const beast = (a, x, y, z, alongX) => {
+    const C = k => new THREE.Color(a[k]);
+    if (a.upright) { // marmot on sentry duty
+      box(x, y, z, a.len, a.h, a.w, C('body'));
+      box(x, y + a.h, z, a.len * 0.75, a.h * 0.45, a.w * 0.8, C('head'));
+      return;
+    }
+    const [L, W, fx, fz] = alongX ? [a.len, a.w, 1, 0] : [a.w, a.len, 0, 1]; // x size, z size, facing
+    const [leg, head] = [a.w * 0.25, a.h * 0.6];
+    for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) box(x + sx * (L - leg) / 2, y, z + sz * (W - leg) / 2, leg, a.leg, leg, C('body'));
+    box(x, y + a.leg, z, L, a.h, W, C('body'));
+    if (a.patch) box(x - fx * a.len * 0.1, y + a.leg + a.h * 0.25, z - fz * a.len * 0.1, alongX ? a.len * 0.3 : L + 0.05, a.h * 0.5, alongX ? W + 0.05 : a.len * 0.3, C('patch'));
+    const [hx, hz, hy] = [x + fx * (a.len + head) / 2, z + fz * (a.len + head) / 2, y + a.leg + a.h * 0.6];
+    box(hx, hy, hz, head, head, head * 0.9, C('head'));
+    if (a.horns) box(hx, hy + head, hz, head * 0.2, head * 0.6, head * 0.6, new THREE.Color('#1b2a34'));
+  };
+  const top = (c, r) => c < 0 || r < 0 || c >= T.w || r >= T.h ? -Infinity : T.top(c, r);
+  for (let r = cj * CHUNK; r < Math.min((cj + 1) * CHUNK, T.h); r++) {
+    for (let c = ci * CHUNK; c < Math.min((ci + 1) * CHUNK, T.w); c++) {
+      const i = r * T.w + c, cov = T.cover[i], e = T.ele(i), y = top(c, r);
+      const x0 = T.ox + c * T.cx, x1 = x0 + T.cx, z0 = T.oz + r * T.cz, z1 = z0 + T.cz;
+      quad([[x0, y, z0], [x0, y, z1], [x1, y, z1], [x1, y, z0]], shade(topColor(cov, e), c, r));
+      const sc = shade(sideColor(cov, e), c, r);
+      for (const [dc, dr, [ax, az], [bx, bz]] of [[1, 0, [x1, z0], [x1, z1]], [-1, 0, [x0, z0], [x0, z1]], [0, 1, [x0, z1], [x1, z1]], [0, -1, [x0, z0], [x1, z0]]]) {
+        const n = Math.max(top(c + dc, r + dr), y - 40);
+        if (n < y) quad([[ax, y, az], [ax, n, az], [bx, n, bz], [bx, y, bz]], sc);
+      }
+      const kind = animalAt(T, c, r);
+      if (kind) beast(ANIMALS[kind], (x0 + x1) / 2, y, (z0 + z1) / 2, hash(c, r, 5) < 0.5);
+      if (cov === COVER.FOREST && e < 2000 && hash(c, r, 1) < 0.3) {
+        const [tx, tz] = [(x0 + x1) / 2, (z0 + z1) / 2];
+        box(tx, y, tz, 0.8, 3, 0.8, TRUNK);
+        box(tx, y + 3, tz, 4, 4, 4, shade(LEAVES, c, r));
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, terrainMat);
+}
+
+// Whole area at 40 m for distant mountains, sunk below the voxels it underlies.
+function farMesh(T) {
+  const F = 8, W = Math.floor((T.w - 1) / F) + 1, H = Math.floor((T.h - 1) / F) + 1;
+  const pos = new Float32Array(W * H * 3), col = new Float32Array(W * H * 3), idx = [], c3 = new THREE.Color();
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const [c, r, k] = [i * F, j * F, (j * W + i) * 3], e = T.ele(r * T.w + c);
+    pos.set([T.ox + (c + 0.5) * T.cx, e - 15, T.oz + (r + 0.5) * T.cz], k);
+    c3.set(topColor(T.cover[r * T.w + c], e));
+    col.set([c3.r, c3.g, c3.b], k);
+  }
+  for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) {
+    const a = j * W + i;
+    idx.push(a, a + W, a + 1, a + 1, a + W, a + W + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors:true, flatShading:true }));
+}
+
+// Smooth asphalt ribbon on the course's smoothed elevation, with skirts down to the voxels.
+function roadMesh(course, T) {
+  const P = course.points.map(p => { const [x, z] = T.toXZ(p.lat, p.lon); return [x, p.ele + 0.2, z] });
+  const pos = [], col = [], asphalt = new THREE.Color('#4a4f55'), skirt = new THREE.Color('#3a3f44'), paint = new THREE.Color('#f4f4f4');
+  const quad = (pts, c) => { for (const i of [0, 1, 2, 0, 2, 3]) pos.push(...pts[i]); for (let k = 0; k < 6; k++) col.push(c.r, c.g, c.b) };
+  const side = i => {
+    const [a, b] = [P[Math.max(0, i - 1)], P[Math.min(P.length - 1, i + 1)]];
+    const [dx, dz] = [b[0] - a[0], b[2] - a[2]], n = Math.hypot(dx, dz) || 1;
+    return [-dz / n, dx / n];
+  };
+  const off = (i, d, dy = 0) => { const [sx, sz] = side(i); return [P[i][0] + sx * d, P[i][1] + dy, P[i][2] + sz * d] };
+  for (let i = 0; i < P.length - 1; i++) {
+    quad([off(i, -3), off(i, 3), off(i + 1, 3), off(i + 1, -3)], asphalt);
+    quad([off(i, 3), off(i, 3, -4), off(i + 1, 3, -4), off(i + 1, 3)], skirt);
+    quad([off(i, -3), off(i, -3, -4), off(i + 1, -3, -4), off(i + 1, -3)], skirt);
+    if (i % 2 === 0) quad([off(i, -0.08, 0.02), off(i, 0.08, 0.02), off(i + 1, 0.08, 0.02), off(i + 1, -0.08, 0.02)], paint);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, terrainMat);
+}
+
+function pointAt(d) {
+  const p = ride.course.points;
+  d = Math.max(0, Math.min(p.at(-1).d, d));
+  let i = Math.min(p.length - 2, Math.floor(d / 10));
+  while (i > 0 && p[i].d > d) i--;
+  while (i < p.length - 2 && p[i + 1].d < d) i++;
+  const t = (d - p[i].d) / (p[i + 1].d - p[i].d);
+  const [x, z] = w3.T.toXZ(p[i].lat + (p[i + 1].lat - p[i].lat) * t, p[i].lon + (p[i + 1].lon - p[i].lon) * t);
+  return new THREE.Vector3(x, p[i].ele + (p[i + 1].ele - p[i].ele) * t + 0.2, z);
+}
+
+function enter3d(buf) {
+  w3.T = parseTerrain(buf, ride.course);
+  w3.group = new THREE.Group();
+  w3.group.add(farMesh(w3.T), roadMesh(ride.course, w3.T));
+  const inner = new THREE.Group();
+  inner.add(...instanced(bikeVoxels({ ...current.bike, rider:true }), current.bike.style, false));
+  inner.position.set(-14, 9.5, 0); // wheelbase centered, tires on the road
+  w3.bike = new THREE.Group();
+  w3.bike.add(inner);
+  w3.bike.scale.setScalar(BIKE_SCALE);
+  w3.bike.rotation.order = 'YZX';
+  w3.group.add(w3.bike);
+  // A raptor circling above the high mountain.
+  const brown = new THREE.MeshLambertMaterial({ color:'#5b3a1e' });
+  w3.eagle = new THREE.Group();
+  for (const [sx, sy, sz, x] of [[0.9, 0.25, 0.3, 0], [0.3, 0.06, 2.2, 0], [0.25, 0.05, 0.5, -0.5]]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), brown);
+    b.position.x = x;
+    w3.eagle.add(b);
+  }
+  w3.eagle.scale.setScalar(2);
+  w3.eagle.rotation.order = 'YXZ';
+  w3.group.add(w3.eagle);
+  scene.add(w3.group);
+  world.visible = false;
+  w3.saved = { fog:scene.fog, near:camera.near, far:camera.far, fov:camera.fov };
+  scene.fog = new THREE.Fog('#8ec5ee', 900, 5000);
+  camera.near = 0.3; camera.far = 12000; camera.fov = 60;
+  sun.castShadow = false;
+  controls.enabled = false;
+  w3.dist = ride.state?.distance ?? 0;
+  w3.snap = true;
+  $('#ride').classList.add('world3d');
+  resize();
+}
+
+function exit3d() {
+  if (!w3.group) return;
+  scene.remove(w3.group);
+  w3.group.traverse(o => { o.geometry?.dispose(); if (o.material !== terrainMat) o.material?.dispose() });
+  Object.assign(w3, { group:null, T:null, bike:null, eagle:null });
+  w3.chunks.clear();
+  $('#ride').classList.remove('world3d');
+  world.visible = true;
+  scene.fog = w3.saved.fog;
+  camera.near = w3.saved.near; camera.far = w3.saved.far; camera.fov = w3.saved.fov;
+  camera.position.set(30, 16, 66);
+  controls.target.set(0, 2, 0);
+  camera.lookAt(controls.target);
+  sun.castShadow = true;
+  controls.enabled = true;
+  resize();
+}
+
+function update3d(dt) {
+  const s = ride.state, T = w3.T;
+  // Extrapolate between server updates (~3 per second), then ease toward the server distance.
+  w3.dist += (s?.speed_kmh ?? 0) / 3.6 * dt;
+  w3.dist += ((s?.distance ?? 0) - w3.dist) * Math.min(1, dt * 2);
+  const p = pointAt(w3.dist), dir = pointAt(w3.dist + 8).sub(pointAt(w3.dist - 8));
+  dir.y = 0;
+  dir.normalize();
+  w3.bike.position.copy(p);
+  w3.bike.rotation.set(0, Math.atan2(-dir.z, dir.x), Math.atan((s?.grade ?? 0) / 100));
+  // Chase cam: rider in the lower third, horizon visible (60° FOV, see enter3d).
+  const want = p.clone().addScaledVector(dir, -8).add(new THREE.Vector3(0, 2.5, 0));
+  const look = p.clone().addScaledVector(dir, 10).add(new THREE.Vector3(0, 0.5, 0));
+  const k = w3.snap ? 1 : 1 - Math.exp(-dt * 3);
+  camera.position.lerp(want, k);
+  w3.look.lerp(look, k);
+  camera.lookAt(w3.look);
+  w3.snap = false;
+  const a = (w3.eagleAngle = (w3.eagleAngle ?? 0) + dt * 0.25);
+  w3.eagle.visible = (s?.ele ?? 0) > 1400;
+  // Circles 60 m ahead of the rider, 15 m up, so the chase cam catches it under the stats bar.
+  w3.eagle.position.set(p.x + dir.x * 60 + Math.cos(a) * 35, p.y + 15, p.z + dir.z * 60 + Math.sin(a) * 35);
+  w3.eagle.rotation.set(0.3, Math.atan2(-Math.cos(a), -Math.sin(a)), 0); // nose along the circle, banked
+
+  // Voxel chunks around the rider: build nearest first (one per frame), drop far ones.
+  const [ci, cj] = [Math.floor((p.x - T.ox) / T.cx / CHUNK), Math.floor((p.z - T.oz) / T.cz / CHUNK)];
+  const wanted = [];
+  for (let dj = -CHUNK_RADIUS; dj <= CHUNK_RADIUS; dj++) for (let di = -CHUNK_RADIUS; di <= CHUNK_RADIUS; di++) {
+    const [i, j] = [ci + di, cj + dj];
+    if (i >= 0 && j >= 0 && i * CHUNK < T.w && j * CHUNK < T.h && !w3.chunks.has(`${i},${j}`)) wanted.push([di * di + dj * dj, i, j]);
+  }
+  wanted.sort((a, b) => a[0] - b[0]);
+  for (const [, i, j] of wanted.slice(0, w3.chunks.size ? 1 : 9)) {
+    const m = chunkMesh(T, i, j);
+    w3.group.add(m);
+    w3.chunks.set(`${i},${j}`, m);
+  }
+  for (const [key, m] of w3.chunks) {
+    const [i, j] = key.split(',').map(Number);
+    if (Math.max(Math.abs(i - ci), Math.abs(j - cj)) > CHUNK_RADIUS + 1) {
+      w3.group.remove(m);
+      m.geometry.dispose();
+      w3.chunks.delete(key);
+    }
+  }
+}
+
+// ---------- nature ambience (sources and licences: web/audio/CREDITS.md) ----------
+const amb = { ctx:null, buffers:null, master:null, gains:null, windFilter:null, nodes:[], next:{}, muted:false };
+const LOOPS = ['forest', 'meadow', 'stream', 'cowbells'], SHOTS = ['moo', 'marmot', 'woodpecker', 'buzzard', 'deer'];
+try { amb.muted = localStorage.getItem('lemollet.muted') === '1' } catch {}
+const attribution = () => `${ride.course.attribution} Sons : Wikimedia Commons et Freesound (domaine public, CC0).`;
+
+async function startAmbience() {
+  const ctx = amb.ctx;
+  amb.buffers ??= Object.fromEntries(await Promise.all([...LOOPS, ...SHOTS].map(async n =>
+    [n, await ctx.decodeAudioData(await (await fetch(`/audio/${n}.mp3`)).arrayBuffer())])));
+  if ($('#ride').hidden) return; // left while loading
+  stopAmbience();
+  amb.master = ctx.createGain();
+  amb.master.gain.value = amb.muted ? 0 : 0.8;
+  amb.master.connect(ctx.destination);
+  amb.gains = {};
+  const loop = (buffer, node, offset = 0) => {
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    src.connect(node);
+    src.start(0, offset);
+    amb.nodes.push(src);
+  };
+  amb.next = {};
+  for (const name of LOOPS) {
+    const buf = amb.buffers[name], g = ctx.createGain();
+    g.gain.value = 0;
+    g.connect(amb.master);
+    loop(buf, g, Math.random() * buf.duration);
+    amb.gains[name] = g;
+  }
+  // Wind: looping white noise through a band-pass whose center follows speed.
+  const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), data = noise.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  amb.windFilter = ctx.createBiquadFilter();
+  amb.windFilter.type = 'bandpass';
+  amb.windFilter.Q.value = 0.7;
+  amb.gains.wind = ctx.createGain();
+  amb.gains.wind.gain.value = 0;
+  amb.windFilter.connect(amb.gains.wind).connect(amb.master);
+  loop(noise, amb.windFilter);
+  mixAmbience();
+}
+
+function stopAmbience() {
+  for (const n of amb.nodes) n.stop();
+  amb.nodes = [];
+  amb.master?.disconnect();
+  amb.gains = null;
+}
+
+// Fade each layer toward what surrounds the rider; animals call when close.
+function mixAmbience() {
+  if (!amb.gains) return;
+  const s = ride.state, t = amb.ctx.currentTime, speed = s?.speed_kmh ?? 0;
+  const high = Math.max(0, Math.min(1, ((s?.ele ?? 0) - 1500) / 800)); // fewer birds, more wind up high
+  const near = { cow:Infinity, marmot:Infinity, deer:Infinity, chamois:Infinity };
+  let [forest, grass, water] = [0, 0.6, 0]; // no terrain file: open meadow, no animals
+  if (w3.T && w3.bike) {
+    const T = w3.T, p = w3.bike.position;
+    const [c0, r0] = [Math.floor((p.x - T.ox) / T.cx), Math.floor((p.z - T.oz) / T.cz)];
+    let [n, f, g, wd] = [0, 0, 0, Infinity];
+    for (let dr = -30; dr <= 30; dr += 3) for (let dc = -30; dc <= 30; dc += 3) { // ±150 m, every 15 m
+      const [c, r] = [c0 + dc, r0 + dr];
+      if (c < 0 || r < 0 || c >= T.w || r >= T.h) continue;
+      const cov = T.cover[r * T.w + c], d = Math.hypot(dc * T.cx, dr * T.cz);
+      if (cov === COVER.WATER) wd = Math.min(wd, d);
+      if (d <= 60) { n++; f += cov === COVER.FOREST; g += cov === COVER.GRASS }
+    }
+    [forest, grass, water] = [f / (n || 1), g / (n || 1), wd < 150 ? 1 - wd / 150 : 0];
+    for (let dr = -40; dr <= 40; dr++) for (let dc = -40; dc <= 40; dc++) { // every cell within ±200 m
+      const kind = animalAt(T, c0 + dc, r0 + dr);
+      if (kind) near[kind] = Math.min(near[kind], Math.hypot(dc * T.cx, dr * T.cz));
+    }
+  }
+  const set = (k, v) => amb.gains[k].gain.setTargetAtTime(v, t, 1.5);
+  set('forest', forest * (1 - high) * 0.9);
+  set('meadow', grass * (1 - high) * 0.6);
+  set('stream', water * 0.8);
+  set('cowbells', near.cow < 200 ? (1 - near.cow / 200) ** 1.5 * 0.9 : 0);
+  set('wind', 0.06 + high * 0.25 + Math.min(1, speed / 60) ** 2 * 0.5);
+  amb.windFilter.frequency.setTargetAtTime(300 + speed * 12, t, 1);
+
+  const maybe = (name, when, gain, min, max) => {
+    if (!when) return;
+    amb.next[name] ??= t + Math.random() * min;
+    if (t < amb.next[name]) return;
+    const src = amb.ctx.createBufferSource(), g = amb.ctx.createGain();
+    src.buffer = amb.buffers[name];
+    g.gain.value = gain;
+    src.connect(g).connect(amb.master);
+    src.start();
+    amb.next[name] = t + min + Math.random() * (max - min);
+  };
+  maybe('moo', near.cow < 120, 0.7 * (1 - near.cow / 120), 12, 35);
+  maybe('marmot', near.marmot < 180, 0.8 * (1 - near.marmot / 180), 10, 30);
+  maybe('deer', near.deer < 150, 0.6 * (1 - near.deer / 150), 20, 50);
+  maybe('woodpecker', forest > 0.4 && high < 0.5, 0.5, 15, 45);
+  maybe('buzzard', w3.eagle?.visible, 0.35, 25, 60);
+}
+
+function renderMute() {
+  $('#mute').textContent = amb.muted ? '♪ off' : '♪ on';
+  $('#mute').setAttribute('aria-pressed', amb.muted);
+}
+$('#mute').addEventListener('click', () => {
+  amb.muted = !amb.muted;
+  try { localStorage.setItem('lemollet.muted', amb.muted ? '1' : '0') } catch {}
+  amb.master?.gain.setTargetAtTime(amb.muted ? 0 : 0.8, amb.ctx.currentTime, 0.1);
+  renderMute();
+});
+renderMute();
+
+$('#rideBtn').addEventListener('click', showCourses);
+$('#leave').addEventListener('click', showCourses);
+$('#coursesBack').addEventListener('click', () => openGarage(current));
+$('#back').addEventListener('click', showProfiles);
+fetch('/courses').then(r => r.ok ? r.json() : null).catch(() => null).then(list => {
+  ride.list = list;
+  if (current && !$('#garage').hidden) openGarage(current);
+});
+showProfiles();
+</script>
+</body>
+</html>

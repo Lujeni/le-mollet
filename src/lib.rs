@@ -1,6 +1,10 @@
 //! le-mollet core: smart trainer engine over Bluetooth LE.
 
+pub mod course;
+pub mod physics;
 pub mod protocol;
+pub mod ride;
+pub mod terrain;
 
 use anyhow::{Context, Result, bail};
 use btleplug::api::{Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType};

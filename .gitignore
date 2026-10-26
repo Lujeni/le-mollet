@@ -1,0 +1,3 @@
+/target
+# rebuilt by `le-mollet terrain courses/<id>.json`
+courses/*.terrain.bin
