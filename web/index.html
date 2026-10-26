@@ -71,6 +71,8 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:-3px
 #ride.world3d #profileCanvas { height:90px }
 .attrib { color:var(--muted); font-size:11px }
 #rideBtn { align-self:stretch }
+#mirror { align-self:flex-end; margin-bottom:auto; width:min(260px, 45vw); aspect-ratio:1.8; border:3px solid var(--line); outline:2px solid #fe8a18; position:relative }
+#mirror small { position:absolute; left:4px; top:2px; font-family:Silkscreen, monospace; font-size:10px; color:#fe8a18 }
 #courses { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
 #courses .panel { width:min(560px, 100%); max-height:100%; overflow:auto }
 .course-card { display:flex; flex-direction:column; gap:6px; padding:12px; cursor:pointer; background:var(--panel-hi) }
@@ -101,6 +103,12 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 .tile small { opacity:.85 }
 .tile svg { width:48px; height:48px; image-rendering:pixelated }
 .tile.ride { background:#c91a09 } .tile.train { background:#0055bf } .tile.garage { background:#237841 } .tile.me { background:#81007b }
+/* Game mode: a full-width Halloween banner under the four tiles */
+.tile.zombie { grid-column:1 / -1; min-height:0; flex-direction:row; align-items:center; background:linear-gradient(90deg, #3a1a4a, #fe8a18) }
+.zombie-hud { color:#bbe90b }
+.zombie-hud.sprint { color:var(--accent); animation:blink .6s steps(2) infinite }
+@keyframes blink { 50% { opacity:.55 } }
+@media (prefers-reduced-motion:reduce) { .zombie-hud.sprint { animation:none } }
 .home-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; flex-wrap:wrap }
 
 /* Fridge door with course magnets */
@@ -213,6 +221,10 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M4 1h4v1h1v3H8v1H4V5H3V2h1zM2 7h8v1h1v3H1V8h1z"/></svg>
           <b>Profil</b><small>Poids, FTP, nationalité</small>
         </button>
+        <button class="tile zombie" id="goZombie">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#bbe90b" d="M3 1h6v1h1v4H9v1H3V6H2V2h1zM4 3v2h1V3zM7 3v2h1V3zM4 8h4v1h4v1H8v2H7v-2H5v2H4v-2H0V9h4z"/></svg>
+          <span><b>Zombie Halloween</b><br><small id="goZombieSub">Pédale de plus en plus vite : la horde arrive. Mini sprints et bonus sur la route.</small></span>
+        </button>
       </div>
       <div class="history" id="history"></div>
       <div class="home-foot">
@@ -309,6 +321,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 
   <main id="ride" hidden>
     <div class="block panel stats" id="stats"></div>
+    <div id="mirror" hidden aria-hidden="true"><small>Rétro</small></div>
     <div class="block panel profile">
       <div class="ride-head">
         <h2 id="courseName"></h2>
@@ -507,7 +520,8 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#8ec5ee');
 scene.fog = new THREE.Fog('#8ec5ee', 80, 160);
-scene.add(new THREE.HemisphereLight('#ffffff', '#3d5a2a', 1.6));
+const hemi = new THREE.HemisphereLight('#ffffff', '#3d5a2a', 1.6);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff4dd', 2.4);
 sun.position.set(25, 45, 30);
 sun.castShadow = true;
@@ -602,6 +616,7 @@ renderer.setAnimationLoop(() => {
     controls.update();
   }
   renderer.render(scene, camera);
+  if (w3.mirror) renderMirror();
 });
 
 // ---------- UI ----------
@@ -977,15 +992,29 @@ function openWorkout(w) {
   resize();
 }
 
-async function openRide(id, hasTerrain) {
+// Zombie Halloween: a fresh flat 5 km loop, ridden with a horde on your wheel (game logic in src/zombie.rs).
+async function openZombie() {
+  const sub = $('#goZombieSub'), text = sub.textContent;
+  sub.textContent = 'Les zombies se réveillent…';
+  amb.ctx ??= new AudioContext(); // still inside the click
+  try {
+    const r = await fetch('/worlds/new?length=5&relief=flat');
+    if (r.ok) await openRide((await r.json()).id, true, true);
+  } finally {
+    sub.textContent = text;
+  }
+}
+
+async function openRide(id, hasTerrain, zombie = false) {
   ride.ended = false;
   amb.ctx ??= new AudioContext(); // created inside the click so autoplay policies allow sound
   amb.ctx.resume();
-  ride.mode = 'course';
+  ride.mode = zombie ? 'zombie' : 'course';
+  ride.zombie = { prev:null, toast:'', toastUntil:0 };
   $('#leave').textContent = '‖ Pause';
   ride.course = await (await fetch(`/course?id=${encodeURIComponent(id)}`)).json();
   show('#ride');
-  $('#courseName').textContent = ride.course.name;
+  $('#courseName').textContent = zombie ? 'Zombie Halloween' : ride.course.name;
   $('#attrib').textContent = attribution();
   ride.state = null;
   renderStats();
@@ -993,21 +1022,23 @@ async function openRide(id, hasTerrain) {
   const demo = !ride.list.trainer;
   $('#demo').hidden = !demo;
   $('#autoBtn').hidden = true;
-  $('#profileCanvas').classList.toggle('seekable', demo);
-  $('#profileCanvas').title = demo ? 'Clique pour te placer sur le parcours' : '';
+  const seek = demo && !zombie; // no teleporting away from the horde
+  $('#profileCanvas').classList.toggle('seekable', seek);
+  $('#profileCanvas').title = seek ? 'Clique pour te placer sur le parcours' : '';
   if (demo) {
     setPower(Math.round(current.ftp * 0.75 / 5) * 5); // start at endurance pace
   }
   // ponytail: 8 kg bike until the garage has weights
   const me = `&name=${encodeURIComponent(current.name)}&color=${encodeURIComponent(current.bike.frame)}&frame=${current.bike.frameType ?? 'road'}&country=${current.country ?? ''}`;
-  ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}${me}`);
+  const game = zombie ? `&mode=zombie&ftp=${current.ftp}` : '';
+  ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}${me}${game}`);
   if (hasTerrain) {
     $('#attrib').textContent = 'Chargement du terrain…';
     const buf = await (await fetch(`/terrain?id=${encodeURIComponent(id)}`)).arrayBuffer();
     $('#attrib').textContent = attribution();
     if (!$('#ride').hidden) enter3d(buf);
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); renderStats(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); zombieNews(); renderStats(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -1035,6 +1066,24 @@ addEventListener('keydown', e => {
   if (dw) { e.preventDefault(); setPower(+$('#watts').value + dw) }
 });
 
+// Zombie game news: turn changes between two frames into a short message under the stats.
+const BONUS_NEWS = {
+  pumpkin:'Citrouille à l\'ail ! La horde recule de 60 m',
+  boost:'Turbo ! Tu files 50 % plus vite qu\'elle pendant 10 s',
+  shield:'Bouclier : tu survivras à la prochaine morsure',
+};
+function zombieNews() {
+  const z = ride.state?.zombie, prev = ride.zombie?.prev;
+  if (!z) return;
+  ride.zombie.prev = z;
+  if (!prev) return;
+  const say = text => Object.assign(ride.zombie, { toast:text, toastUntil:performance.now() + 4000 });
+  if (z.picked > prev.picked) say(BONUS_NEWS[prev.bonus]);
+  if (prev.shield && !z.shield && !z.over) say('Le bouclier t\'a sauvé, la horde recule !');
+  if (prev.sprint && !z.sprint) say(z.sprints_won > prev.sprints_won ? 'Sprint gagné ! La horde recule de 100 m' : 'Sprint raté… elle se rapproche');
+  if (z.wave > prev.wave) say(`Vague ${z.wave} : la horde accélère !`);
+}
+
 function renderStats() {
   const s = ride.state ?? { power:0, speed_kmh:0, grade:0, distance:0, ele:ride.course?.points[0].ele ?? 0, elapsed:0 };
   const t = Math.floor(s.elapsed), hms = `${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
@@ -1050,6 +1099,24 @@ function renderStats() {
       stat('Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
       stat('Distance', (s.distance / 1000).toFixed(2), 'km'),
       ...(w.done ? [h('div', { class:'finish' }, 'Séance terminée, bravo !')] : s.elapsed === 0 ? [h('div', { class:'finish' }, 'Pédale pour lancer la séance')] : []),
+    );
+    return;
+  }
+  if (ride.mode === 'zombie') {
+    const z = s.zombie ?? { gap:150, wave:1, horde_kmh:0, sprint:null, next_sprint:45, sprints:0, sprints_won:0, boost_left:0, shield:false, over:false };
+    const line = z.over ? `Les zombies t'ont rattrapé après ${hms} !`
+      : z.sprint ? `SPRINT ! ${Math.round(z.sprint.target)} W · tenu ${Math.floor(z.sprint.held)}/${z.sprint.need} s · reste ${Math.ceil(z.sprint.left)} s`
+      : performance.now() < ride.zombie.toastUntil ? ride.zombie.toast
+      : s.elapsed === 0 ? 'Pédale, la horde arrive !'
+      : `Prochain sprint dans ${Math.max(0, Math.ceil(z.next_sprint - s.elapsed))} s`;
+    $('#stats').replaceChildren(
+      stat('Puissance', Math.round(s.power), 'W'),
+      stat('Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
+      stat('Horde', Math.round(z.gap), `m${z.shield ? ' 🛡' : ''}${z.boost_left > 0 ? ' ⚡' : ''}`),
+      stat(`Vague ${z.wave}`, Math.round(z.horde_kmh), 'km/h'),
+      stat('Survie', hms, ''),
+      stat('Sprints', z.sprints_won, `/ ${z.sprints}`),
+      h('div', { class:`finish zombie-hud${z.sprint ? ' sprint' : ''}`, 'aria-live':'polite' }, line),
     );
     return;
   }
@@ -1115,6 +1182,19 @@ function drawProfile() {
   ctx.lineWidth = 2;
   ctx.fillRect(x(pos) - 6, y(ele) - 14, 12, 12);
   ctx.strokeRect(x(pos) - 6, y(ele) - 14, 12, 12);
+  // Zombie game (always on a loop): the horde behind, the next bonus ahead.
+  const z = ride.state?.zombie;
+  if (z) {
+    const mark = (d, color) => {
+      d = ((d % total) + total) % total;
+      const e = pts[Math.min(pts.length - 1, Math.round(d / 10))].ele;
+      ctx.fillStyle = color;
+      ctx.fillRect(x(d) - 5, y(e) - 12, 10, 10);
+      ctx.strokeRect(x(d) - 5, y(e) - 12, 10, 10);
+    };
+    mark(pos + z.bonus_at - ride.state.ridden, BONUS_COLORS[z.bonus]);
+    mark(pos - z.gap, '#5d9b3a');
+  }
 }
 
 // ---------- 3D course world (terrain from `le-mollet course` / `le-mollet terrain`) ----------
@@ -1374,8 +1454,10 @@ function enter3d(buf) {
   w3.group.add(w3.eagle);
   scene.add(w3.group);
   world.visible = false;
-  w3.saved = { fog:scene.fog, near:camera.near, far:camera.far, fov:camera.fov };
+  w3.saved = { fog:scene.fog, near:camera.near, far:camera.far, fov:camera.fov, bg:scene.background,
+    light:[hemi.color.clone(), hemi.groundColor.clone(), hemi.intensity, sun.color.clone(), sun.intensity] };
   scene.fog = new THREE.Fog('#8ec5ee', 900, 5000);
+  if (ride.mode === 'zombie') halloween();
   camera.near = 0.3; camera.far = 12000; camera.fov = 60;
   sun.castShadow = false;
   controls.enabled = false;
@@ -1389,12 +1471,15 @@ function exit3d() {
   if (!w3.group) return;
   scene.remove(w3.group);
   w3.group.traverse(o => { o.geometry?.dispose(); if (o.material !== terrainMat) o.material?.dispose() });
-  Object.assign(w3, { group:null, T:null, bike:null, eagle:null });
+  Object.assign(w3, { group:null, T:null, bike:null, eagle:null, horde:null, bonus:null, mirror:null });
+  $('#mirror').hidden = true;
   w3.chunks.clear();
   w3.others.clear();
   $('#ride').classList.remove('world3d');
   world.visible = true;
   scene.fog = w3.saved.fog;
+  scene.background = w3.saved.bg;
+  [hemi.color, hemi.groundColor, hemi.intensity, sun.color, sun.intensity] = w3.saved.light;
   camera.near = w3.saved.near; camera.far = w3.saved.far; camera.fov = w3.saved.fov;
   camera.position.set(30, 16, 66);
   controls.target.set(0, 2, 0);
@@ -1402,6 +1487,117 @@ function exit3d() {
   sun.castShadow = true;
   controls.enabled = true;
   resize();
+}
+
+// ---------- Zombie Halloween in 3D: dusk, pumpkins along the road, the horde, the next bonus ----------
+const ZOMBIE_MAX = 30;
+const BONUS_COLORS = { pumpkin:'#fe8a18', boost:'#f2cd37', shield:'#36aebf' };
+
+function halloween() {
+  scene.background = new THREE.Color('#2b1430');
+  scene.fog = new THREE.Fog('#b4501c', 40, 650);
+  hemi.color.set('#ffb36b'); hemi.groundColor.set('#24123a'); hemi.intensity = 0.9;
+  sun.color.set('#ff7a2a'); sun.intensity = 1.2;
+  const unit = new THREE.BoxGeometry(1, 1, 1);
+  const mat = (color, emissive = '#000000') => new THREE.MeshLambertMaterial({ color, emissive });
+  const box = (parent, m, [sx, sy, sz], [x, y, z]) => {
+    const b = new THREE.Mesh(unit, m);
+    b.scale.set(sx, sy, sz);
+    b.position.set(x, y, z);
+    parent.add(b);
+    return b;
+  };
+
+  // Glowing pumpkins on alternate sides of the road, every 40 m.
+  const len = ride.course.points.at(-1).d, n = Math.floor(len / 40);
+  const pumpkins = new THREE.InstancedMesh(unit, mat('#fe8a18', '#8a3200'), n), stems = new THREE.InstancedMesh(unit, mat('#237841'), n);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), stem = new THREE.Vector3(0.15, 0.25, 0.15);
+  for (let i = 0; i < n; i++) {
+    const d = i * 40, p = pointAt(d), dir = pointAt(d + 5).sub(pointAt(d - 5));
+    dir.y = 0;
+    dir.normalize();
+    const side = (i % 2 ? 1 : -1) * (4.5 + hash(i, 4, 2) * 3), s = 0.7 + hash(i, 5, 2) * 0.5;
+    const at = new THREE.Vector3(p.x - dir.z * side, p.y - 0.2 + s / 2, p.z + dir.x * side);
+    pumpkins.setMatrixAt(i, m.compose(at, q, new THREE.Vector3(s * 1.2, s, s * 1.2)));
+    stems.setMatrixAt(i, m.compose(at.setY(at.y + s / 2 + 0.12), q, stem));
+  }
+  w3.group.add(pumpkins, stems);
+
+  // The horde: voxel walkers facing +x like the bike, arms straight out. How many show depends on the wave.
+  const [skin, shirt, pants, eye] = [mat('#7fbf3f'), mat('#5b3a6b'), mat('#2f2f55'), mat('#ff2a1a', '#ff2a1a')];
+  w3.horde = Array.from({ length:ZOMBIE_MAX }, (_, i) => {
+    const g = new THREE.Group();
+    const legs = [-0.15, 0.15].map(z => {
+      const hip = new THREE.Group(); // swing from the hip
+      hip.position.set(0, 0.8, z);
+      box(hip, pants, [0.25, 0.8, 0.25], [0, -0.4, 0]);
+      g.add(hip);
+      return hip;
+    });
+    box(g, shirt, [0.35, 0.7, 0.6], [0, 1.15, 0]);
+    for (const z of [-0.4, 0.4]) box(g, skin, [0.75, 0.2, 0.2], [0.35, 1.38, z]);
+    box(g, skin, [0.42, 0.42, 0.42], [0.03, 1.72, 0]);
+    for (const z of [-0.1, 0.1]) box(g, eye, [0.04, 0.08, 0.08], [0.25, 1.78, z]);
+    g.rotation.order = 'YZX';
+    w3.group.add(g);
+    // Front row first, then a ragged column behind, spread across the road.
+    return { g, legs, back:i * 1.4 + hash(i, 8, 1) * 1.5, lane:(hash(i, 9, 1) - 0.5) * 5.5, phase:hash(i, 3, 1) * 6 };
+  });
+  w3.gap = ride.state?.zombie?.gap ?? 150;
+
+  // The next bonus: one floating block per kind, the current one shown.
+  // Narrow lens so a horde 100 m back is still a few pixels tall.
+  w3.mirror = new THREE.PerspectiveCamera(22, 1.8, 0.3, 3000);
+  $('#mirror').hidden = false;
+
+  w3.bonus = new THREE.Group();
+  for (const [kind, color] of Object.entries(BONUS_COLORS)) box(w3.bonus, mat(color, color), [1, 1, 1], [0, 0, 0]).name = kind;
+  w3.group.add(w3.bonus);
+}
+
+function updateHorde(dt) {
+  const z = ride.state?.zombie, t = clock.elapsedTime;
+  if (!z) return;
+  w3.gap += (z.gap - w3.gap) * Math.min(1, dt * 2);
+  const shown = Math.min(ZOMBIE_MAX, 2 + z.wave * 2);
+  w3.horde.forEach((m, i) => {
+    m.g.visible = i < shown;
+    if (!m.g.visible) return;
+    const d = w3.dist - w3.gap - m.back, p = pointAt(d), dir = pointAt(d + 8).sub(pointAt(d - 8));
+    dir.y = 0;
+    dir.normalize();
+    const step = Math.sin(t * 6 + m.phase);
+    m.g.position.set(p.x - dir.z * m.lane, p.y - 0.2 + Math.abs(step) * 0.08, p.z + dir.x * m.lane);
+    m.g.rotation.set(0, Math.atan2(-dir.z, dir.x), Math.sin(t * 3 + m.phase) * 0.08); // shamble
+    m.legs[0].rotation.z = step * 0.5;
+    m.legs[1].rotation.z = -step * 0.5;
+  });
+  // Bonus floats over the road ahead; it jumps further on once picked up.
+  const ahead = z.bonus_at - (ride.state.ridden ?? 0);
+  w3.bonus.visible = ahead > 0 && ahead < 500;
+  for (const c of w3.bonus.children) c.visible = c.name === z.bonus;
+  const b = pointAt(ride.state.distance + ahead); // same frame as `ridden`: no jitter
+  w3.bonus.position.set(b.x, b.y + 1.2 + Math.sin(t * 3) * 0.25, b.z);
+  w3.bonus.rotation.y += dt * 2;
+  // The chase cam looks ahead: a rear-view mirror shows the horde coming.
+  const p = w3.bike.position, dir = pointAt(w3.dist + 8).sub(pointAt(w3.dist - 8));
+  dir.y = 0;
+  dir.normalize();
+  w3.mirror.position.copy(p).addScaledVector(dir, -1).setY(p.y + 2.2);
+  w3.mirror.lookAt(p.x - dir.x * 60, p.y + 1, p.z - dir.z * 60);
+}
+
+// Mirror viewport over the #mirror frame, drawn after the main view.
+function renderMirror() {
+  const r = $('#mirror').getBoundingClientRect(), [x, y, w, h] = [r.left + 3, innerHeight - r.bottom + 3, r.width - 6, r.height - 6];
+  w3.mirror.aspect = w / h;
+  w3.mirror.updateProjectionMatrix();
+  renderer.setScissorTest(true);
+  renderer.setScissor(x, y, w, h);
+  renderer.setViewport(x, y, w, h);
+  renderer.render(scene, w3.mirror);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, innerWidth, innerHeight);
 }
 
 function update3d(dt) {
@@ -1427,6 +1623,7 @@ function update3d(dt) {
   w3.eagle.position.set(p.x + dir.x * 60 + Math.cos(a) * 35, p.y + 15, p.z + dir.z * 60 + Math.sin(a) * 35);
   w3.eagle.rotation.set(0.3, Math.atan2(-Math.cos(a), -Math.sin(a)), 0); // nose along the circle, banked
   updateOthers(dt);
+  if (w3.horde) updateHorde(dt);
 
   // Voxel chunks around the rider: build nearest first (one per frame), drop far ones.
   const [ci, cj] = [Math.floor((p.x - T.ox) / T.cx / CHUNK), Math.floor((p.z - T.oz) / T.cz / CHUNK)];
@@ -1570,11 +1767,14 @@ const hms = s => { s = Math.floor(s); return `${Math.floor(s / 3600)}:${String(M
 
 // Totals come from the Rust ride (energy, max power, climbing); averages derive from them.
 function summary(s = ride.state ?? {}) {
-  const t = s.elapsed ?? 0;
+  const t = s.elapsed ?? 0, z = s.zombie;
   return {
     date: new Date().toISOString(),
     kind: ride.mode,
-    name: ride.mode === 'workout' ? ride.workout.name : ride.course.name,
+    name: ride.mode === 'workout' ? ride.workout.name
+      : ride.mode === 'zombie' ? `Zombie Halloween · vague ${z?.wave ?? 1} · ${z?.sprints_won ?? 0} sprint${z?.sprints_won > 1 ? 's' : ''}`
+      : ride.course.name,
+    ...(ride.mode === 'zombie' && { wave: z?.wave ?? 1, sprintsWon: z?.sprints_won ?? 0, sprints: z?.sprints ?? 0 }),
     elapsed: t,
     distance: s.ridden ?? 0, // ridden, not position: demo jumps don't count
     climbed: s.climbed ?? 0,
@@ -1588,6 +1788,17 @@ function summary(s = ride.state ?? {}) {
 
 function renderSummary(r) {
   const stat = (label, value, unit) => h('div', { class:'stat' }, h('small', {}, label), h('b', {}, value), h('i', {}, unit));
+  if (r.kind === 'zombie') { // the score: how long, how far, how many sprints
+    $('#menuStats').replaceChildren(
+      stat('Survie', hms(r.elapsed), ''),
+      stat('Distance', (r.distance / 1000).toFixed(2), 'km'),
+      stat('Vague', r.wave, ''),
+      stat('Sprints gagnés', r.sprintsWon, `/ ${r.sprints}`),
+      stat('Puissance moy.', Math.round(r.avgPower), 'W'),
+      stat('Puissance max', Math.round(r.maxPower), 'W'),
+    );
+    return;
+  }
   $('#menuStats').replaceChildren(
     stat('Durée', hms(r.elapsed), ''),
     stat('Distance', (r.distance / 1000).toFixed(2), 'km'),
@@ -1601,7 +1812,8 @@ function renderSummary(r) {
 // mode: 'pause' (rider asked), 'end' (finish line / workout done), 'saved'.
 function openMenu(mode) {
   const r = summary();
-  const titles = { pause:'Pause', end:ride.mode === 'workout' ? 'Séance terminée, bravo !' : 'Arrivée !', saved:'Sortie enregistrée' };
+  const end = { workout:'Séance terminée, bravo !', zombie:'Les zombies t\'ont rattrapé !', course:'Arrivée !' }[ride.mode];
+  const titles = { pause:'Pause', end, saved:'Sortie enregistrée' };
   $('#menuTitle').textContent = titles[mode];
   renderSummary(r);
   $('#resume').hidden = mode !== 'pause';
@@ -1620,7 +1832,8 @@ function resumeRide() {
 
 function checkEnd() {
   const s = ride.state;
-  if (ride.ended || !s || !(ride.mode === 'workout' ? s.workout?.done : s.finished)) return;
+  const done = { workout:s?.workout?.done, zombie:s?.zombie?.over, course:s?.finished }[ride.mode];
+  if (ride.ended || !done) return;
   ride.ended = true;
   openMenu('end');
 }
@@ -1663,6 +1876,7 @@ $('#goFree').addEventListener('click', showFree);
 $('#rideMenuBack').addEventListener('click', () => showHome());
 $('#freeBack').addEventListener('click', showRideMenu);
 $('#goTrain').addEventListener('click', showTraining);
+$('#goZombie').addEventListener('click', openZombie);
 $('#goGarage').addEventListener('click', openGarage);
 $('#switchProfile').addEventListener('click', showProfiles);
 $('#leave').addEventListener('click', () => openMenu('pause'));

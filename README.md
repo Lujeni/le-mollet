@@ -29,6 +29,9 @@ A multiplayer, online cycling and running physical training program. Open source
 - **Structured sessions** calibrated on your FTP: recovery, endurance, sweet spot, threshold, VO2max.
 - **ERG mode**: the trainer holds each target power for you. In demo mode, follow the target or turn on autopilot.
 - **Interval chart** colored by training zone, with time left in the interval and in the session.
+- **Zombie Halloween**: a horde of voxel zombies chases you on a night-time loop, faster each minute. Win mini
+  sprints (scaled on your FTP) and grab pumpkins, turbo and shield on the road to keep them behind; your
+  survival time, distance and sprints are saved like any ride.
 
 ## Your rider
 

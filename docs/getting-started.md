@@ -101,6 +101,7 @@ Layout:
 | `src/course.rs`, `src/terrain.rs` | real courses and their voxel terrain |
 | `src/world.rs` | procedural open-world loops |
 | `src/workout.rs` | structured training sessions |
+| `src/zombie.rs` | Zombie Halloween game: horde waves, mini sprints, bonuses |
 | `src/web.rs`, `src/main.rs` | HTTP server, ride sessions, CLI |
 | `web/index.html` | the whole UI (three.js) |
 | `courses/` | course files, see its AGENTS.md |

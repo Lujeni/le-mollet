@@ -7,6 +7,7 @@ pub mod ride;
 pub mod terrain;
 pub mod workout;
 pub mod world;
+pub mod zombie;
 
 use anyhow::{Context, Result, bail};
 use btleplug::api::{Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType};

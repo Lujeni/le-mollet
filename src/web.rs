@@ -10,6 +10,7 @@
 //!                                              Server-Sent Events, one ride per connection; riders on the
 //!                                              same course see each other ("others" in each frame)
 //!   GET /events?workout=<id>&ftp=<W>&mass=<kg>&session=<n>   same, workout on a flat road
+//!   GET /events?course=<id>&mode=zombie&ftp=<W>&...           same, chased by a zombie horde
 //!   GET /power?session=<n>&w=<W>               demo mode: set the rider's power
 //!   GET /seek?session=<n>&d=<m>                demo mode: teleport the rider along the course
 //!   GET /pause?session=<n>&on=<0|1>            freeze or resume a ride (menu open)
@@ -23,6 +24,7 @@ use le_mollet::course::Course;
 use le_mollet::ride::Ride;
 use le_mollet::workout::{self, Progress, Workout};
 use le_mollet::world::{self, Relief};
+use le_mollet::zombie::Game;
 use serde::Serialize;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -301,10 +303,11 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             sock.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n").await?;
             app.driver.store(sid, Ordering::Relaxed);
             let plan = workout.zip(ftp).filter(|_| track.is_none());
+            let game = ftp.filter(|_| track.is_some() && param(query, "mode") == Some("zombie")).map(Game::new);
             if let Some(t) = &track {
                 t.riders.lock().unwrap().insert(sid, presence(query, sid));
             }
-            let res = ride_session(&mut sock, &app, track.as_deref(), plan, sid, mass.unwrap_or(83.0)).await;
+            let res = ride_session(&mut sock, &app, track.as_deref(), plan, game, sid, mass.unwrap_or(83.0)).await;
             if let Some(t) = &track {
                 t.riders.lock().unwrap().remove(&sid);
             }
@@ -316,13 +319,15 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     }
 }
 
-/// One SSE frame: the ride, plus the workout progress when training, plus the other riders.
+/// One SSE frame: the ride, plus the workout progress when training or the zombie game, plus the other riders.
 #[derive(Serialize)]
 struct Frame<'a> {
     #[serde(flatten)]
     ride: &'a Ride,
     #[serde(skip_serializing_if = "Option::is_none")]
     workout: Option<Progress>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    zombie: Option<&'a Game>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     others: Vec<Presence>,
 }
@@ -332,6 +337,7 @@ async fn ride_session(
     app: &App,
     track: Option<&Track>,
     plan: Option<(&Workout, f32)>,
+    mut game: Option<Game>,
     sid: u64,
     mass: f32,
 ) -> std::io::Result<()> {
@@ -350,9 +356,15 @@ async fn ride_session(
             ride.finished = false;
         }
         // Paused: time, distance and totals freeze; frames keep flowing so the page stays live.
+        // Caught by the zombies: the ride freezes like a finish line.
+        let caught = game.as_ref().is_some_and(|g| g.over);
         let paused = app.paused.lock().unwrap().contains(&sid);
-        if !paused {
+        if !paused && !caught {
             ride.tick(course, DT);
+            // The horde waits for the first pedal stroke, like the ride clock.
+            if let Some(g) = game.as_mut().filter(|_| ride.elapsed > 0.0) {
+                g.tick(&ride, DT);
+            }
         }
         // Workout clock = riding time, so it starts with the first pedal stroke.
         let progress = plan.map(|(w, ftp)| w.progress(ride.elapsed, ftp));
@@ -367,7 +379,8 @@ async fn ride_session(
                 }
                 riders.values().filter(|p| p.id != sid).take(50).cloned().collect()
             });
-            let json = serde_json::to_string(&Frame { ride: &ride, workout: progress, others }).expect("frame serializes");
+            let frame = Frame { ride: &ride, workout: progress, zombie: game.as_ref(), others };
+            let json = serde_json::to_string(&frame).expect("frame serializes");
             sock.write_all(format!("data: {json}\n\n").as_bytes()).await?;
         }
         // Workout: ERG holds the target watts. Course: grade scaled by difficulty.
@@ -379,7 +392,7 @@ async fn ride_session(
         {
             let (value, erg) = match progress {
                 Some(p) => (p.target, true),
-                None if ride.finished => (0.0, false),
+                None if ride.finished || caught => (0.0, false),
                 None => ((ride.grade * app.difficulty * 10.0).round() / 10.0, false),
             };
             if sent.is_none_or(|v| (v - value).abs() >= if erg { 1.0 } else { 0.2 }) {
