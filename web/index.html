@@ -57,7 +57,16 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:-3px
 .side { width:330px; overflow:auto; display:flex; flex-direction:column; gap:16px }
 .side .btn { align-self:flex-start }
 .garage-nav { align-self:flex-start; margin-right:auto; display:flex; flex-direction:column; gap:8px; padding:12px }
-.garage-nav .btn.on { background:var(--accent); color:#1b2a34 }
+.garage-nav p { margin:4px 0 0; font-size:12px }
+.gtab { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:170px; padding:12px 14px; text-align:left; cursor:pointer; font:inherit; color:var(--ink); background:var(--panel-hi); border:3px solid var(--line); box-shadow:inset -3px -3px 0 rgba(0,0,0,.35), inset 3px 3px 0 rgba(255,255,255,.12) }
+.gtab b { font-family:Silkscreen, monospace; font-size:18px }
+.gtab small { font-size:12px; color:var(--muted) }
+.gtab.on { background:var(--accent); color:#1b2a34 } .gtab.on small { color:#1b2a34 }
+.gtab:focus-visible { outline:3px solid var(--ink); outline-offset:1px }
+.side-head { display:flex; align-items:center; justify-content:space-between; gap:8px }
+.side-head h2 { margin:0 }
+.ogroup { display:flex; flex-direction:column; gap:12px; padding-top:12px; border-top:3px solid var(--line) }
+.ogroup h3 { margin:0; font-family:Silkscreen, monospace; font-size:13px; color:var(--muted); text-transform:uppercase }
 #options { display:flex; flex-direction:column; gap:16px }
 .opt { border:0; padding:0; margin:0 }
 .opt legend { font-size:13px; margin-bottom:8px }
@@ -185,7 +194,8 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   header { font-size:18px; padding:12px 16px }
   #garage { flex-direction:column; justify-content:flex-end; padding:0 }
   .garage-nav { flex-direction:row; align-self:stretch; margin:0; padding:8px 16px }
-  .garage-nav .btn { flex:1 }
+  .garage-nav .btn, .gtab { flex:1; width:auto } .garage-nav p { display:none }
+  .gtab small { display:none }
   .side { width:100%; max-height:48vh; padding:16px }
 }
 </style>
@@ -230,7 +240,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         </button>
         <button class="tile garage" id="goGarage">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M1 7h3v3H1zM8 7h3v3H8zM4 6h4v1H4zM5 4h2v2H5zM8 3h2v1H8zM2 5h1v2H2z"/></svg>
-          <b>Garage</b><small>Personnalise ton vélo</small>
+          <b>Garage</b><small>Ton vélo et ton cycliste</small>
         </button>
         <button class="tile me" id="goProfile">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M4 1h4v1h1v3H8v1H4V5H3V2h1zM2 7h8v1h1v3H1V8h1z"/></svg>
@@ -271,14 +281,15 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 
   <main id="garage" hidden>
     <nav class="block panel garage-nav" aria-label="Garage">
-      <button class="btn" data-tab="bike">Vélo</button>
-      <button class="btn" data-tab="rider">Cycliste</button>
+      <button class="btn" id="back">‹ Accueil</button>
+      <p class="muted">Garage de <span id="who"></span></p>
+      <button class="gtab" data-tab="bike"><b>Vélo</b><small>Cadre, roues, poste</small></button>
+      <button class="gtab" data-tab="rider"><b>Cycliste</b><small>Maillot, tenue, tête</small></button>
     </nav>
     <aside class="block panel side">
-      <button class="btn" id="back">‹ Accueil</button>
-      <h2>Garage de <span id="who"></span></h2>
+      <div class="side-head"><h2 id="garageTitle"></h2><button class="btn" id="surprise" title="Tirer au sort ce qui est affiché">Surprends-moi</button></div>
       <div id="options"></div>
-      <p class="muted">Glisse pour tourner autour du vélo, molette ou pincement pour zoomer.</p>
+      <p class="muted" id="garageHint"></p>
     </aside>
   </main>
   <main id="rideMenu" hidden>
@@ -385,8 +396,8 @@ const PALETTE = {
   Bleu:'#0055bf', Violet:'#81007b', Rose:'#fc97ac', Blanc:'#f4f4f4', Gris:'#6c6e68', Noir:'#1b2a34',
 };
 const DEFAULT_BIKE = { frameType:'road', frame:'#c91a09', accent:'#f4f4f4', rim:'#1b2a34', saddle:'#1b2a34', rimDepth:2, bars:'drop' };
-// The rider's outfit and look live in the same profile object as the bike (no jersey: it follows the frame).
-const DEFAULT_RIDER = { shorts:'#1b2a34', shoes:'#f4f4f4', helmet:'on', helmetColor:'#f4f4f4', hair:'short', hairColor:'#3b2416', skin:'#e0ac69' };
+// The rider has their own look, apart from the bike (profile.rider). Classic Lego yellow skin by default.
+const DEFAULT_RIDER = { jersey:'#c91a09', pattern:'plain', pattern2:'#f4f4f4', shorts:'#1b2a34', shoes:'#f4f4f4', helmet:'on', helmetColor:'#f4f4f4', glasses:'off', face:'smile', hair:'short', hairColor:'#3b2416', skin:'#f2cd37' };
 // Frame shapes, in garage units (side view): seat cluster, head tube top/bottom, and extras.
 const FRAMES = {
   road:    { seat:[7, 12], ht:[23, 13], hb:[24, 10] },
@@ -394,23 +405,27 @@ const FRAMES = {
   gravel:  { seat:[7, 12], ht:[23, 15], hb:[24, 10], fatTires:true },
   vintage: { seat:[7, 13], ht:[23, 13], hb:[24, 10], lugs:true, fenders:true },
 };
-// Garage options; tab:'rider' ones show under "Cycliste" in the left menu, the rest under "Vélo".
+// Garage options by tab (bike, rider) and section.
 const OPTIONS = [
-  { key:'frameType', label:'Cadre', choices:[['road', 'Route'], ['aero', 'Aéro'], ['gravel', 'Gravel'], ['vintage', 'Vintage']] },
-  { key:'frame', label:'Couleur du cadre', colors:true },
-  { key:'accent', label:'Fourche', colors:true },
-  { key:'rim', label:'Couleur des jantes', colors:true },
-  { key:'rimDepth', label:'Profil des jantes', choices:[[1,'Basses'], [2,'Aéro'], [3,'Profondes']] },
-  { key:'bars', label:'Cintre', choices:[['drop','Route'], ['flat','Plat'], ['aero','Chrono']] },
-  { key:'saddle', label:'Selle', colors:true },
-  { key:'jersey', tab:'rider', label:'Maillot', colors:true },
-  { key:'shorts', tab:'rider', label:'Cuissard', colors:true },
-  { key:'shoes', tab:'rider', label:'Chaussures', colors:true },
-  { key:'helmet', tab:'rider', label:'Casque', choices:[['on', 'Oui'], ['off', 'Non']] },
-  { key:'helmetColor', tab:'rider', label:'Couleur du casque', colors:true },
-  { key:'hair', tab:'rider', label:'Coiffure', choices:[['short', 'Courte'], ['long', 'Longue'], ['ponytail', 'Queue'], ['bald', 'Rasé']] },
-  { key:'hairColor', tab:'rider', label:'Cheveux', colors:{ Blond:'#e8c872', Châtain:'#8b5a2b', Brun:'#3b2416', Noir:'#1b1b1b', Roux:'#b5481d', Gris:'#b9b9b9' } },
-  { key:'skin', tab:'rider', label:'Peau', colors:{ Porcelaine:'#f6d7b3', Clair:'#e8b98f', Doré:'#e0ac69', Mat:'#c68642', Brun:'#8d5524', Ébène:'#5c3a21', Brique:'#f2cd37' } },
+  { tab:'bike', group:'Cadre', key:'frameType', label:'Type', choices:[['road', 'Route'], ['aero', 'Aéro'], ['gravel', 'Gravel'], ['vintage', 'Vintage']] },
+  { tab:'bike', group:'Cadre', key:'frame', label:'Couleur', colors:true },
+  { tab:'bike', group:'Cadre', key:'accent', label:'Fourche', colors:true },
+  { tab:'bike', group:'Roues', key:'rimDepth', label:'Profil des jantes', choices:[[1, 'Basses'], [2, 'Aéro'], [3, 'Profondes']] },
+  { tab:'bike', group:'Roues', key:'rim', label:'Couleur des jantes', colors:true },
+  { tab:'bike', group:'Poste de pilotage', key:'bars', label:'Cintre', choices:[['drop', 'Route'], ['flat', 'Plat'], ['aero', 'Chrono']] },
+  { tab:'bike', group:'Poste de pilotage', key:'saddle', label:'Selle', colors:true },
+  { tab:'rider', group:'Maillot', key:'jersey', label:'Couleur', colors:true },
+  { tab:'rider', group:'Maillot', key:'pattern', label:'Motif', choices:[['plain', 'Uni'], ['band', 'Bande'], ['dots', 'Pois'], ['stripes', 'Rayures']] },
+  { tab:'rider', group:'Maillot', key:'pattern2', label:'Couleur du motif', colors:true, when:r => r.pattern !== 'plain' },
+  { tab:'rider', group:'Tenue', key:'shorts', label:'Cuissard', colors:true },
+  { tab:'rider', group:'Tenue', key:'shoes', label:'Chaussures', colors:true },
+  { tab:'rider', group:'Tête', key:'helmet', label:'Casque', choices:[['on', 'Oui'], ['off', 'Non']] },
+  { tab:'rider', group:'Tête', key:'helmetColor', label:'Couleur du casque', colors:true, when:r => r.helmet === 'on' },
+  { tab:'rider', group:'Tête', key:'glasses', label:'Lunettes', choices:[['off', 'Non'], ['on', 'Oui']] },
+  { tab:'rider', group:'Visage', key:'face', label:'Expression', choices:[['smile', 'Sourire'], ['focus', 'Concentré'], ['effort', 'Grimace']] },
+  { tab:'rider', group:'Visage', key:'skin', label:'Peau', colors:{ Lego:'#f2cd37', Porcelaine:'#f6d7b3', Clair:'#e8b98f', Doré:'#e0ac69', Mat:'#c68642', Brun:'#8d5524', Ébène:'#5c3a21' } },
+  { tab:'rider', group:'Visage', key:'hair', label:'Coiffure', choices:[['short', 'Courte'], ['long', 'Longue'], ['ponytail', 'Queue'], ['bald', 'Rasé']] },
+  { tab:'rider', group:'Visage', key:'hairColor', label:'Cheveux', colors:{ Blond:'#e8c872', Châtain:'#8b5a2b', Brun:'#3b2416', Noir:'#1b1b1b', Roux:'#b5481d', Gris:'#b9b9b9' }, when:r => r.hair !== 'bald' },
 ];
 
 // ponytail: profiles live in this browser only, move to the Rust backend when login lands
@@ -436,6 +451,11 @@ function newId() {
   for (const p of profiles) {
     if (!UUID_RE.test(p.id ?? '') || seen.has(p.id)) { p.id = newId(); changed = true }
     if (!p.createdAt) { p.createdAt = new Date().toISOString(); changed = true }
+    if (!p.rider) { // the rider used to live inside the bike object, the jersey following the frame
+      p.rider = { ...DEFAULT_RIDER, jersey:p.bike.frame };
+      for (const o of OPTIONS) if (o.tab === 'rider' && o.key in p.bike) { p.rider[o.key] = p.bike[o.key]; delete p.bike[o.key] }
+      changed = true;
+    }
     seen.add(p.id);
   }
   if (changed) persist();
@@ -588,11 +608,129 @@ const hash = (x, y, z) => {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
 
-// ---------- low-poly bike + rider ----------
-// Returns a group whose userData.tick(dt, rpm) turns the cranks and moves the legs with them.
-function lowpolyBike(b) {
+// ---------- Lego rider: minifig look (cylinder head with a printed face, C-hands, trapezoid torso, molded hair) ----------
+// Garage units, facing +x, z across. Legs are longer than a real minifig's so the feet reach the pedals.
+// pose({ hip, sh, hands:[l, r], ankles:[l, r], shoes:[l, r] }) places every part; hip and sh set the torso lean.
+const FIG_DIM = { thigh:12.4, shin:11.8, torso:12, upper:6.8, fore:6.4 };
+function printed(w, h, paint) {
+  const cv = Object.assign(document.createElement('canvas'), { width:w, height:h }), ctx = cv.getContext('2d');
+  paint(ctx, w, h);
+  const t = new THREE.CanvasTexture(cv);
+  [t.colorSpace, t.anisotropy] = [THREE.SRGBColorSpace, 4];
+  return t;
+}
+function legoRider(r) {
+  const a = { ...DEFAULT_RIDER, ...r }, g = new THREE.Group(), mats = new Map(), UP = new THREE.Vector3(0, 1, 0), V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
+  const plastic = o => new THREE.MeshStandardMaterial({ roughness:0.3, ...o });
+  const mat = hex => mats.get(hex) ?? mats.set(hex, plastic({ color:hex })).get(hex);
+  const add = (geo, m, parent = g) => { const o = new THREE.Mesh(geo, typeof m === 'string' ? mat(m) : m); o.castShadow = o.receiveShadow = true; parent.add(o); return o };
+  const seg = (geo, m) => { // a part of length 1 along y, stretched between two points
+    const o = add(geo, m);
+    o.place = (p, q) => { const d = q.clone().sub(p), l = d.length(); o.position.copy(p).addScaledVector(d, 0.5); o.scale.set(1, l, 1); o.quaternion.setFromUnitVectors(UP, d.divideScalar(l || 1)) };
+    return o;
+  };
+
+  // Printed jersey around the four torso faces; the front face is u 0.125..0.375 (x 64..192 of 512), zip at its center.
+  const jersey = printed(512, 128, (c, w, h) => {
+    c.fillStyle = a.jersey; c.fillRect(0, 0, w, h);
+    c.fillStyle = a.pattern2;
+    if (a.pattern === 'band') c.fillRect(0, 34, w, 26);
+    if (a.pattern === 'stripes') for (let x = 0; x < w; x += 32) c.fillRect(x, 0, 12, h);
+    if (a.pattern === 'dots') for (let y = 12; y < h; y += 28) for (let x = (y / 28 % 2) * 16 + 8; x < w; x += 32) { c.beginPath(); c.arc(x, y, 7, 0, 7); c.fill() }
+    c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(127, 0, 2, 60); // zip
+  });
+  // Printed face around the head; the front (+x) is u = 0.25, so the face is centered at x = 128.
+  const face = printed(512, 128, (c, w, h) => {
+    c.fillStyle = a.skin; c.fillRect(0, 0, w, h);
+    c.fillStyle = c.strokeStyle = '#1b1b1b'; c.lineWidth = 5; c.lineCap = 'round';
+    if (a.glasses === 'on') { // wraparound shades with a glint
+      c.fillRect(84, 34, 88, 26);
+      c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(96, 38, 18, 5); c.fillStyle = '#1b1b1b';
+    } else if (a.face === 'effort') for (const x of [102, 154]) { c.beginPath(); c.moveTo(x - 10, 46); c.lineTo(x + 10, 50); c.stroke() } // squeezed eyes
+    else for (const x of [104, 152]) { c.beginPath(); c.ellipse(x, 46, 7, 10, 0, 0, 7); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.arc(x + 2, 42, 2.5, 0, 7); c.fill(); c.fillStyle = '#1b1b1b' }
+    if (a.glasses !== 'on') for (const [x, s] of [[104, -1], [152, 1]]) { // eyebrows: raised, or frowning when focused
+      const tilt = a.face === 'smile' ? 0 : s * 6;
+      c.beginPath(); c.moveTo(x - 10, 28 - tilt); c.lineTo(x + 10, 28 + tilt); c.stroke();
+    }
+    c.beginPath();
+    if (a.face === 'smile') { c.arc(128, 66, 22, 0.2 * Math.PI, 0.8 * Math.PI); c.stroke() }
+    else if (a.face === 'focus') { c.moveTo(114, 82); c.lineTo(142, 80); c.stroke() }
+    else { c.fillStyle = '#5a1a12'; c.ellipse(128, 82, 18, 10, 0, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillRect(112, 74, 32, 5) } // gasping, teeth showing
+  });
+
+  // Legs and hips: shorts on the thigh, bare shin, cycling shoe.
+  const legs = [-1, 1].map(() => ({ thigh:seg(new THREE.BoxGeometry(3.3, 1, 3.3), a.shorts), shin:seg(new THREE.BoxGeometry(2.7, 1, 2.7), a.skin), shoe:add(new THREE.BoxGeometry(4.4, 1.6, 2.6), a.shoes) }));
+  const hips = add(new THREE.BoxGeometry(3.8, 2.6, 7.4), a.shorts);
+
+  // Torso (pivot at the waist), head on top of it.
+  const torso = new THREE.Group();
+  g.add(torso);
+  const body = new THREE.CylinderGeometry(3.82, 5.37, FIG_DIM.torso, 4, 1, false, Math.PI / 4).translate(0, FIG_DIM.torso / 2, 0);
+  add(body, plastic({ map:jersey }), torso).scale.x = 0.5;
+  const head = new THREE.Group();
+  head.position.y = FIG_DIM.torso;
+  torso.add(head);
+  add(new THREE.CylinderGeometry(1.3, 1.3, 0.8, 12).translate(0, 0.4, 0), a.skin, head); // neck
+  add(new THREE.CylinderGeometry(3, 3, 5, 24).translate(0, 3.3, 0), plastic({ map:face }), head);
+  add(new THREE.CylinderGeometry(1.7, 1.7, 0.9, 16).translate(0, 6.25, 0), a.skin, head); // the stud on top
+  const backHalf = (r, y0, y1) => new THREE.CylinderGeometry(r, r, y1 - y0, 16, 1, false, Math.PI, Math.PI).translate(0, (y0 + y1) / 2, 0);
+  if (a.hair !== 'bald') {
+    if (a.helmet !== 'on') add(new THREE.CylinderGeometry(3.25, 3.35, 2.2, 24).translate(0, 5.9, 0), a.hairColor, head); // molded hair cap
+    add(backHalf(3.35, a.hair === 'long' ? -2.5 : 1.6, 5.8), a.hairColor, head);
+    if (a.hair === 'ponytail') { const t = add(new THREE.CylinderGeometry(0.9, 0.5, 4.5, 8), a.hairColor, head); t.position.set(-3.8, 2.8, 0); t.rotation.z = -0.5 }
+  }
+  if (a.helmet === 'on') { // shell with vent slots and a little peak
+    const shell = add(new THREE.SphereGeometry(3.9, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), a.helmetColor, head);
+    shell.position.y = 5.2; shell.scale.set(1.2, 0.85, 1.02);
+    for (const z of [-1.6, 0, 1.6]) add(new THREE.BoxGeometry(5, 0.4, 0.5), '#1b2a34', head).position.set(-0.3, 8.1 - Math.abs(z) * 0.35, z);
+    add(new THREE.BoxGeometry(1.2, 0.3, 4.2), a.helmetColor, head).position.set(4.4, 5.6, 0);
+  }
+
+  // Arms: short sleeve, bare forearm, C-hand.
+  const arms = [-1, 1].map(() => ({
+    joint:add(new THREE.SphereGeometry(1.35, 10, 8), a.jersey), upper:seg(new THREE.CylinderGeometry(1.15, 1.15, 1, 10), a.jersey),
+    fore:seg(new THREE.CylinderGeometry(0.95, 0.95, 1, 10), a.skin), hand:add(new THREE.TorusGeometry(0.85, 0.42, 6, 12, Math.PI * 1.6), a.skin),
+  }));
+
+  // Two-bone solve from a to target b: the joint bends by rotating the a->b direction around z (sign: + forward, - back).
+  const bend = (p, q, l1, l2, sign) => {
+    const d = Math.min(p.distanceTo(q), l1 + l2 - 0.01), dir = q.clone().sub(p).normalize();
+    const t = Math.acos(Math.min(1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)));
+    return p.clone().add(dir.applyAxisAngle(new THREE.Vector3(0, 0, 1), sign * t).multiplyScalar(l1));
+  };
+  const pose = ({ hip, sh, hands, ankles, shoes }) => {
+    const lean = sh.clone().sub(hip).normalize(), tilt = Math.atan2(lean.x, lean.y);
+    torso.position.copy(hip);
+    torso.quaternion.setFromUnitVectors(UP, lean);
+    head.rotation.z = tilt * 0.6; // keep looking ahead
+    hips.position.copy(hip).add(V(0, -0.4));
+    hips.rotation.z = -tilt * 0.5;
+    torso.updateMatrix();
+    legs.forEach((l, i) => {
+      const h = hip.clone().setZ((i ? 1 : -1) * 1.8), knee = bend(h, ankles[i], FIG_DIM.thigh, FIG_DIM.shin, 1);
+      l.thigh.place(h, knee); l.shin.place(knee, ankles[i]); l.shoe.position.copy(shoes[i]);
+    });
+    arms.forEach((m, i) => {
+      const s = V(0, FIG_DIM.torso - 1.6, (i ? 1 : -1) * 3.4).applyMatrix4(torso.matrix), elbow = bend(s, hands[i], FIG_DIM.upper, FIG_DIM.fore, -1);
+      m.joint.position.copy(s); m.upper.place(s, elbow); m.fore.place(elbow, hands[i]);
+      m.hand.position.copy(hands[i]); m.hand.rotation.set(Math.PI / 2, 0, i ? 0.6 : -0.6);
+    });
+  };
+  return { group:g, pose };
+}
+
+// Standing on the garage plate: feet apart, arms relaxed.
+const V3 = (x, y, z = 0) => new THREE.Vector3(x, y, z);
+const STANDING = {
+  hip:V3(0, 25.95), sh:V3(0.2, 38), hands:[V3(1.4, 24, -4.6), V3(1.4, 24, 4.6)],
+  ankles:[V3(0, 1.8, -1.8), V3(0, 1.8, 1.8)], shoes:[V3(0.7, 0.8, -1.8), V3(0.7, 0.8, 1.8)],
+};
+
+// ---------- low-poly bike, optionally ridden ----------
+// Returns a group whose userData.tick(dt, rpm) turns the cranks and moves the rider's legs with them.
+function lowpolyBike(b, rider = null) {
   const g = new THREE.Group(), mats = new Map(), UP = new THREE.Vector3(0, 1, 0);
-  const mat = hex => mats.get(hex) ?? mats.set(hex, new THREE.MeshStandardMaterial({ color:hex, flatShading:true, roughness:0.65 })).get(hex);
+  const mat = hex => mats.get(hex) ?? mats.set(hex, new THREE.MeshStandardMaterial({ color:hex, flatShading:true, roughness:0.3 })).get(hex);
   const add = (geo, hex, parent = g) => {
     const m = new THREE.Mesh(geo, mat(hex));
     m.castShadow = m.receiveShadow = true;
@@ -680,56 +818,17 @@ function lowpolyBike(b) {
     box(V(s * ARM, 0, z * 1.45), [1.6, 0.4, 1.4], TIRE, 0, crank);
   }
 
-  // Rider.
-  let legs = [];
-  if (b.rider) {
-    const a = { ...DEFAULT_RIDER, jersey:b.frame, ...b }, helmet = a.helmet === 'on';
-    const HIP = V(6.2, 17.2), SH = V(17.5, 23.2), HEAD = V(20.6, 26.2), hand = z => V(BX + 1.6, BY + 1.1, z);
-    ball(HIP, 2.4, a.shorts, 1).scale.set(1.2, 1, 1.15);
-    limb(2.5, 2.2, a.jersey, 7).place(V(6.8, 18.5), SH.clone().add(V(-0.5, -0.4)));
-    for (const z of [-2.1, 2.1]) {
-      const s = SH.clone().setZ(z), h = hand(z * 1.25), elbow = s.clone().lerp(h, 0.5).add(V(-0.6, -1.6, z * 0.15));
-      ball(s, 1.25, a.jersey);
-      tube(s, s.clone().lerp(elbow, 0.55), 0.95, a.jersey, 6); // short sleeve
-      limb(0.8, 0.7, a.skin, 6).place(s.clone().lerp(elbow, 0.5), elbow);
-      limb(0.7, 0.55, a.skin, 6).place(elbow, h);
-      ball(h, 0.65, a.skin);
-    }
-    tube(V(18.6, 24), V(19.6, 25.2), 0.8, a.skin, 6); // neck
-    ball(HEAD, 1.9, a.skin, 1).scale.set(1.1, 1, 0.95);
-    if (helmet) {
-      const hm = add(new THREE.SphereGeometry(2.2, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), a.helmetColor);
-      hm.position.copy(HEAD).add(V(-0.2, 0.15)); hm.scale.set(1.3, 1, 1.05); hm.rotation.z = 0.2;
-    } else if (a.hair !== 'bald') {
-      const hr = add(new THREE.SphereGeometry(2.05, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), a.hairColor);
-      hr.position.copy(HEAD).add(V(-0.25, 0.1)); hr.scale.set(1.15, 1, 1.02); hr.rotation.z = 0.45;
-    }
-    if (a.hair === 'long') limb(1.7, 1.3, a.hairColor, 6).place(HEAD.clone().add(V(-1.2, 0.6)), V(17.4, 22.2));
-    if (a.hair === 'ponytail') { limb(0.7, 0.35, a.hairColor, 5).place(HEAD.clone().add(V(-1.8, 0.5)), V(16.2, 23.4)); ball(HEAD.clone().add(V(-1.9, 0.5)), 0.6, a.hairColor) }
-
-    // Legs: thigh + shin solved from hip to pedal (two-bone, knee forward), shoe flat on the pedal.
-    const L1 = 12.6, L2 = 11.8; // hip to ankle at the bottom of the stroke is ~23.5, keep a slight knee bend
-    legs = [[1, 1.7], [-1, -1.7]].map(([s, z]) => ({
-      s, z,
-      thigh: limb(1.55, 1.15, a.shorts, 7), shin: limb(1.05, 0.7, a.skin, 6),
-      knee: ball(V(0, 0), 1.1, a.skin), shoe: box(V(0, 0), [3.2, 1.1, 1.3], a.shoes),
-    }));
-    g.userData.legs = { HIP, L1, L2 };
-  }
+  // Rider: hips over the saddle, torso leaning to the bars, feet on the pedals.
+  const fig = rider && legoRider(rider);
+  if (fig) g.add(fig.group);
+  const HIP = V(6.2, 17.6), SH = V(17.5, 23.2), hands = [-3, 3].map(z => V(BX + 1, BY + 1.1, z));
 
   let angle = -0.6;
   const pose = () => {
     crank.rotation.z = angle;
-    for (const l of legs) {
-      const { HIP, L1, L2 } = g.userData.legs;
-      const pedal = BB.clone().add(V(Math.cos(angle) * ARM * l.s, Math.sin(angle) * ARM * l.s, l.z * 1.6));
-      const ankle = pedal.clone().add(V(-0.4, 1.2)), hip = HIP.clone().setZ(l.z);
-      const d = Math.min(ankle.distanceTo(hip), L1 + L2 - 0.01), dir = ankle.clone().sub(hip).normalize();
-      const t = Math.acos(Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d)));
-      const knee = hip.clone().add(dir.clone().applyAxisAngle(new THREE.Vector3(0, 0, 1), t).multiplyScalar(L1));
-      l.thigh.place(hip, knee); l.shin.place(knee, ankle); l.knee.position.copy(knee);
-      l.shoe.position.copy(pedal).add(V(0.3, 0.75));
-    }
+    if (!fig) return;
+    const pedals = [-1, 1].map(s => BB.clone().add(V(Math.cos(angle) * ARM * s, Math.sin(angle) * ARM * s, s * 2.7)));
+    fig.pose({ hip:HIP, sh:SH, hands, ankles:pedals.map(p => p.clone().add(V(-0.4, 1.2))), shoes:pedals.map(p => p.clone().add(V(0.3, 0.75))) });
   };
   pose();
   g.userData.tick = (dt, rpm) => { angle -= dt * rpm / 60 * Math.PI * 2; pose() };
@@ -753,18 +852,38 @@ function painCave() {
 }
 
 let world;
-function draw(bike) {
+// Menu backdrop of a profile: 'both' rides on the home trainer, 'bike' alone on it, 'rider' standing on a Lego plate.
+function draw(p, view = 'both') {
   if (world) {
     scene.remove(world);
-    world.traverse(o => { o.geometry?.dispose(); o.material?.dispose() });
+    world.traverse(o => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose() });
   }
   world = new THREE.Group();
-  const b = new THREE.Group();
-  b.add(lowpolyBike({ ...bike, rider:true }), painCave());
-  world.userData.tick = dt => b.children[0].userData.tick(dt, 80); // steady spin in the garage
-  b.position.x = -14; // center wheelbase on origin
-  world.add(b);
+  const bike = p?.bike ?? DEFAULT_BIKE, rider = p?.rider ?? DEFAULT_RIDER;
+  if (view === 'rider') {
+    const f = legoRider(rider);
+    f.pose(STANDING);
+    f.group.position.y = -9.2;
+  f.group.rotation.y = -0.35; // turned a little toward the camera
+    world.add(f.group, displayPlate());
+  } else {
+    const b = new THREE.Group();
+    b.add(lowpolyBike(bike, view === 'both' ? rider : null), painCave());
+    world.userData.tick = dt => b.children[0].userData.tick(dt, 80); // steady spin in the garage
+    b.position.x = -14; // center wheelbase on origin
+    world.add(b);
+  }
   scene.add(world);
+}
+
+// Green Lego baseplate the rider stands on: 8x8 studs.
+function displayPlate() {
+  const geo = new THREE.BoxGeometry(32, 1.2, 32), uv = geo.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 4, uv.getY(i) * 4); // 4 cells of 2x2 studs a side
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color:'#237841', map:LEGO.topMap, normalMap:LEGO.topNormal, roughness:0.3 }));
+  m.position.y = -9.8;
+  m.receiveShadow = true;
+  return m;
 }
 
 // Keep the bike centered in the area not covered by the garage panel.
@@ -828,6 +947,7 @@ function show(id) {
   for (const sc of SCREENS) $(sc).hidden = sc !== id;
   $('#menu').hidden = true;
   controls.autoRotate = id !== '#garage';
+  if (id !== '#garage' && !w3.group) { camera.position.set(36, 22, 84); controls.target.set(0, 7, 0) } // the garage frames bike or rider its own way
   resize();
 }
 
@@ -877,14 +997,14 @@ $('#goProfile').addEventListener('click', showProfileEdit);
 function showProfiles() {
   current = null;
   show('#profiles');
-  draw(profiles.at(-1)?.bike ?? DEFAULT_BIKE);
+  draw(profiles.at(-1));
   renderList();
 }
 
 function showHome(p = current) {
   current = p;
   show('#home');
-  draw(p.bike);
+  draw(p);
   $('#homeAvatar').textContent = p.name[0].toUpperCase();
   $('#homeAvatar').style.background = p.bike.frame;
   $('#homeHello').textContent = `Salut ${p.name} !${p.country ? ` ${flag(p.country)}` : ''}`;
@@ -934,6 +1054,7 @@ $('#new').addEventListener('submit', e => {
     name, weightKg: +f.get('weight'), ftp: +f.get('ftp'),
     ...(COUNTRY_CODES.includes(f.get('country')) && { country: f.get('country') }),
     bike: { ...DEFAULT_BIKE, frame: colors[profiles.length % colors.length] },
+    rider: { ...DEFAULT_RIDER, jersey: colors[profiles.length % colors.length] },
   };
   profiles.push(p);
   persist();
@@ -941,43 +1062,69 @@ $('#new').addEventListener('submit', e => {
   showHome(p);
 });
 
+// Garage: the bike and the rider each get their own tab, preview and camera.
+const GARAGE = {
+  bike: { title:'Ton vélo', obj:'bike', target:[0, 7, 0], camera:[36, 22, 84], hint:'Glisse pour tourner autour du vélo, molette ou pincement pour zoomer.' },
+  rider: { title:'Ton cycliste', obj:'rider', target:[0, 12, 0], camera:[72, 26, 26], hint:'Glisse pour faire tourner ton cycliste. En selle, il garde ce look.' },
+};
+let garageTab = 'bike';
 function openGarage() {
   show('#garage');
   $('#who').textContent = current.name;
-  renderOptions();
-  draw(current.bike);
+  garageView(garageTab);
 }
-
-let garageTab = 'bike';
-for (const btn of document.querySelectorAll('.garage-nav .btn')) btn.addEventListener('click', () => { garageTab = btn.dataset.tab; renderOptions() });
+function garageView(tab) {
+  garageTab = tab;
+  const G = GARAGE[tab];
+  camera.position.set(...G.camera);
+  controls.target.set(...G.target);
+  $('#garageTitle').textContent = G.title;
+  $('#garageHint').textContent = G.hint;
+  renderOptions();
+  draw(current, tab);
+}
+for (const btn of document.querySelectorAll('.gtab')) btn.addEventListener('click', () => garageView(btn.dataset.tab));
 
 function renderOptions() {
-  const b = { ...DEFAULT_RIDER, jersey:current.bike.frame, ...current.bike };
-  for (const btn of document.querySelectorAll('.garage-nav .btn')) {
+  const obj = current[GARAGE[garageTab].obj], v = { ...(garageTab === 'rider' ? DEFAULT_RIDER : DEFAULT_BIKE), ...obj };
+  for (const btn of document.querySelectorAll('.gtab')) {
     btn.classList.toggle('on', btn.dataset.tab === garageTab);
     btn.setAttribute('aria-pressed', btn.dataset.tab === garageTab);
   }
-  $('#options').replaceChildren(...OPTIONS.filter(o => (o.tab ?? 'bike') === garageTab).map(o => h('fieldset', { class:'opt' },
-    h('legend', {}, o.label),
-    o.colors
-      ? h('div', { class:'swatches' }, ...Object.entries(o.colors === true ? PALETTE : o.colors).map(([name, hex]) => h('button', {
-          class: 'sw' + (b[o.key] === hex ? ' on' : ''), style:`background:${hex}`,
-          title:name, 'aria-label':`${o.label} : ${name}`, 'aria-pressed': b[o.key] === hex,
-          onclick: () => set(o.key, hex),
-        })))
-      : h('div', { class:'seg' }, ...o.choices.map(([val, label]) => h('button', {
-          class: b[o.key] === val ? 'on' : '', 'aria-pressed': b[o.key] === val,
-          onclick: () => set(o.key, val),
-        }, label))),
-  )));
+  const shown = OPTIONS.filter(o => o.tab === garageTab && (!o.when || o.when(v)));
+  const groups = [...new Set(shown.map(o => o.group))];
+  $('#options').replaceChildren(...groups.map(name => h('section', { class:'ogroup' }, h('h3', {}, name),
+    ...shown.filter(o => o.group === name).map(o => h('fieldset', { class:'opt' },
+      h('legend', {}, o.label),
+      o.colors
+        ? h('div', { class:'swatches' }, ...Object.entries(o.colors === true ? PALETTE : o.colors).map(([name, hex]) => h('button', {
+            class: 'sw' + (v[o.key] === hex ? ' on' : ''), style:`background:${hex}`,
+            title:name, 'aria-label':`${o.label} : ${name}`, 'aria-pressed': v[o.key] === hex,
+            onclick: () => set(o.key, hex),
+          })))
+        : h('div', { class:'seg' }, ...o.choices.map(([val, label]) => h('button', {
+            class: v[o.key] === val ? 'on' : '', 'aria-pressed': v[o.key] === val,
+            onclick: () => set(o.key, val),
+          }, label))),
+    )))));
 }
 
 function set(key, val) {
-  current.bike[key] = val;
+  current[GARAGE[garageTab].obj][key] = val;
   persist();
   renderOptions();
-  draw(current.bike);
+  draw(current, garageTab);
 }
+
+// Random look for the open tab only.
+$('#surprise').addEventListener('click', () => {
+  const pick = list => list[Math.floor(Math.random() * list.length)];
+  for (const o of OPTIONS.filter(o => o.tab === garageTab))
+    current[GARAGE[garageTab].obj][o.key] = o.colors ? pick(Object.values(o.colors === true ? PALETTE : o.colors)) : pick(o.choices)[0];
+  persist();
+  renderOptions();
+  draw(current, garageTab);
+});
 
 // ---------- ride (live from the Rust engine: `le-mollet ride`) ----------
 const ride = { list:null, workouts:null, mode:'course', course:null, workout:null, state:null, events:null, session:0, auto:false, ended:false };
@@ -1923,28 +2070,91 @@ function farMesh(T) {
   return new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors:true, flatShading:true, roughness:0.6 }));
 }
 
-// Road of smooth Lego tiles on the course's smoothed elevation, with skirts down to the voxels.
+// ---------- asphalt: grain, aggregate, cracks, tar patches and polished wheel tracks, drawn once ----------
+// One tile is the 6 m road width (u) by 12 m along it (v); the normal map gives the grain its relief.
+let asphalt = null;
+function asphaltMats() {
+  return asphalt ??= (() => {
+    const [W, L] = [512, 1024], M = W / 6; // px per meter
+    const H = new Float32Array(W * L), lum = new Float32Array(W * L), rough = new Float32Array(W * L).fill(0.92);
+    const blob = (x, y, s, k) => { // tiling value noise, cell s px
+      const [nx, ny] = [W / s, L / s], [gx, gy] = [x / s, y / s], [i, j] = [Math.floor(gx), Math.floor(gy)], [fx, fy] = [gx - i, gy - j];
+      const v = (a, b) => hash(((i + a) % nx), ((j + b) % ny), k), sm = t => t * t * (3 - 2 * t);
+      return v(0, 0) + (v(1, 0) - v(0, 0)) * sm(fx) + ((v(0, 1) + (v(1, 1) - v(0, 1)) * sm(fx)) - (v(0, 0) + (v(1, 0) - v(0, 0)) * sm(fx))) * sm(fy);
+    };
+    const tracks = [-2.25, -0.75, 0.75, 2.25]; // wheel paths, two per lane
+    // Tar patches: rectangles of darker, smoother, slightly raised asphalt.
+    const patches = [0, 1].map(k => [hash(k, 1, 60) * (W - 160), hash(k, 2, 60) * (L - 260), 60 + hash(k, 3, 60) * 100, 80 + hash(k, 4, 60) * 180]);
+    for (let y = 0; y < L; y++) for (let x = 0; x < W; x++) {
+      const i = y * W + x, s = x / M - 3, t = Math.min(...tracks.map(c => Math.abs(s - c)));
+      const worn = t < 0.2 ? 1 - t / 0.2 : 0, grain = hash(x, y, 50) - 0.5, stone = hash(x >> 1, y >> 1, 52) < 0.05 ? hash(x >> 1, y >> 1, 53) : 0;
+      const patch = patches.some(([px, py, pw, ph]) => x > px && x < px + pw && y > py && y < py + ph);
+      lum[i] = 0.23 + grain * 0.07 * (1 - worn * 0.5) + (blob(x, y, 32, 51) - 0.5) * 0.07 + (blob(x, y, 128, 54) - 0.5) * 0.05 + stone * 0.22 - worn * 0.035 - (patch ? 0.035 : 0);
+      H[i] = (grain * 0.35 * (1 - worn * 0.6) + stone * 0.8) * (patch ? 0.4 : 1) + (patch ? 0.4 : 0);
+      rough[i] = patch ? 0.8 : 0.92 - worn * 0.3 - stone * 0.1;
+    }
+    // Cracks: wandering lines, sunk and dark, along the road more than across.
+    for (let k = 0; k < 7; k++) {
+      let [x, y, a] = [hash(k, 1, 61) * W, hash(k, 2, 61) * L, (hash(k, 3, 61) - 0.5) * 1.2 + (k % 2 ? Math.PI / 2 : 0)];
+      for (let n = 0; n < 120 + hash(k, 4, 61) * 300; n++) {
+        a += (hash(k, n, 62) - 0.5) * 0.7;
+        [x, y] = [(x + Math.sin(a) + W) % W, (y + Math.cos(a) + L) % L];
+        const i = Math.floor(y) * W + Math.floor(x);
+        [lum[i], H[i], rough[i]] = [0.1, -1.2, 0.95];
+      }
+    }
+    const canvas = f => {
+      const cv = Object.assign(document.createElement('canvas'), { width:W, height:L }), ctx = cv.getContext('2d'), img = ctx.createImageData(W, L);
+      for (let i = 0; i < W * L; i++) img.data.set([...f(i), 255], i * 4);
+      ctx.putImageData(img, 0, 0);
+      return cv;
+    };
+    const color = canvas(i => { const v = Math.max(0, Math.min(1, lum[i])) * 255; return [v, v * 1.01, v * 1.04] }); // a hint of blue-gray
+    const [map, normal] = legoTex(W, L, ctx => ctx.drawImage(color, 0, 0), (x, y) => H[y * W + x] * 0.35);
+    const roughMap = new THREE.CanvasTexture(canvas(i => { const v = rough[i] * 255; return [v, v, v] }));
+    [roughMap.wrapS, roughMap.wrapT, roughMap.anisotropy] = [THREE.RepeatWrapping, THREE.RepeatWrapping, 8];
+    const keep = { keep:true };
+    return {
+      road: Object.assign(new THREE.MeshStandardMaterial({ vertexColors:true, map, normalMap:normal, roughnessMap:roughMap, roughness:1 }), { userData:keep }),
+      // Paint follows the asphalt underneath: same normal map, smoother.
+      paint: Object.assign(new THREE.MeshStandardMaterial({ vertexColors:true, normalMap:normal, roughness:0.6, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 }), { userData:keep }),
+    };
+  })();
+}
+
+// Asphalt ribbon on the course's smoothed elevation: textured road, edge and center lines, skirts down to the voxels.
+// Material groups: 0 asphalt, 1 paint, 2 Lego skirts. u spans the width, v runs every 12 m along the road.
 function roadMesh(course, T) {
   const P = course.points.map(p => { const [x, z] = T.toXZ(p.lat, p.lon); return [x, p.ele + 0.2, z] });
-  const pos = [], col = [], asphalt = new THREE.Color('#595d60'), skirt = new THREE.Color('#6c6e68'), paint = new THREE.Color('#f4f4f4');
-  const quad = (pts, c) => { for (const i of [0, 1, 2, 0, 2, 3]) pos.push(...pts[i]); for (let k = 0; k < 6; k++) col.push(c.r, c.g, c.b) };
+  const G = [0, 1, 2].map(() => ({ pos:[], col:[], uv:[] })), HALF = 3, white = new THREE.Color('#eeeeea'), skirt = new THREE.Color('#6c6e68'), tint = new THREE.Color();
+  const quad = (g, pts, c, uvs = [[0, 0], [0, 0], [0, 0], [0, 0]]) => { for (const i of [0, 1, 2, 0, 2, 3]) { G[g].pos.push(...pts[i]); G[g].uv.push(...uvs[i]); G[g].col.push(c.r, c.g, c.b) } };
   const side = i => {
     const [a, b] = [P[Math.max(0, i - 1)], P[Math.min(P.length - 1, i + 1)]];
     const [dx, dz] = [b[0] - a[0], b[2] - a[2]], n = Math.hypot(dx, dz) || 1;
     return [-dz / n, dx / n];
   };
   const off = (i, d, dy = 0) => { const [sx, sz] = side(i); return [P[i][0] + sx * d, P[i][1] + dy, P[i][2] + sz * d] };
+  const v = [(course.points[0].d ?? 0) / 12]; // continuous across the pieces of a growing city route
+  for (let i = 1; i < P.length; i++) v.push(v[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][2] - P[i - 1][2]) / 12);
+  const strip = (g, i, s0, s1, c, dy = 0.01) => quad(g, [off(i, s0, dy), off(i, s1, dy), off(i + 1, s1, dy), off(i + 1, s0, dy)], c,
+    [[(s0 + HALF) / 6, v[i]], [(s1 + HALF) / 6, v[i]], [(s1 + HALF) / 6, v[i + 1]], [(s0 + HALF) / 6, v[i + 1]]]);
   for (let i = 0; i < P.length - 1; i++) {
-    quad([off(i, -3), off(i, 3), off(i + 1, 3), off(i + 1, -3)], asphalt);
-    quad([off(i, 3), off(i, 3, -4), off(i + 1, 3, -4), off(i + 1, 3)], skirt);
-    quad([off(i, -3), off(i, -3, -4), off(i + 1, -3, -4), off(i + 1, -3)], skirt);
-    if (i % 2 === 0) quad([off(i, -0.08, 0.02), off(i, 0.08, 0.02), off(i + 1, 0.08, 0.02), off(i + 1, -0.08, 0.02)], paint);
+    const k = Math.floor(v[i] * 12 / 25); // resurfaced every few tens of meters: older is grayer
+    strip(0, i, -HALF, HALF, tint.setScalar(0.88 + hash(k, 1, 63) * 0.2), 0);
+    for (const s of [-1, 1]) {
+      strip(1, i, s * (HALF - 0.3), s * (HALF - 0.18), white); // edge line
+      quad(2, [off(i, s * HALF), off(i, s * HALF, -4), off(i + 1, s * HALF, -4), off(i + 1, s * HALF)], skirt);
+    }
+    if (i % 2 === 0) strip(1, i, -0.07, 0.07, white); // center dashes
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const g = new THREE.BufferGeometry(), all = k => G.flatMap(s => s[k]);
+  g.setAttribute('position', new THREE.Float32BufferAttribute(all('pos'), 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(all('col'), 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(all('uv'), 2));
+  let start = 0;
+  G.forEach((s, k) => { g.addGroup(start, s.pos.length / 3, k); start += s.pos.length / 3 });
   g.computeVertexNormals();
-  const m = new THREE.Mesh(g, LEGO.smooth);
+  const A = asphaltMats(), m = new THREE.Mesh(g, [A.road, A.paint, LEGO.smooth]);
   m.receiveShadow = true;
   return m;
 }
@@ -1972,9 +2182,9 @@ function follow(shown, reported, speedKmh, dt) {
   return shown + (reported - shown) * Math.min(1, dt * 2);
 }
 
-function riderModel(bike) {
+function riderModel(bike, rider) {
   const inner = new THREE.Group();
-  inner.add(lowpolyBike({ ...bike, rider:true }));
+  inner.add(lowpolyBike(bike, rider));
   inner.position.set(-14, 9.5, 0); // wheelbase centered, tires on the road
   const g = new THREE.Group();
   g.add(inner);
@@ -2007,7 +2217,7 @@ function updateOthers(dt) {
     seen.add(o.id);
     let r = w3.others.get(o.id);
     if (!r) {
-      const holder = new THREE.Group(), bike = riderModel({ ...DEFAULT_BIKE, frame:o.color, frameType:o.frame });
+      const holder = new THREE.Group(), bike = riderModel({ ...DEFAULT_BIKE, frame:o.color, frameType:o.frame }, { ...DEFAULT_RIDER, jersey:o.color });
       holder.add(bike, nameTag(`${o.name}${o.country ? ' ' + flag(o.country) : ''}`));
       w3.group.add(holder);
       r = { holder, bike, dist:o.distance, lane:(hash(o.id % 100000, 1, 9) - 0.5) * 3 };
@@ -2217,7 +2427,7 @@ function enter3d(buf) {
   w3.group = new THREE.Group();
   [w3.far, w3.road] = [farMesh(w3.T), roadMesh(ride.course, w3.T)];
   w3.group.add(w3.far, w3.road);
-  w3.bike = riderModel(current.bike);
+  w3.bike = riderModel(current.bike, current.rider);
   w3.group.add(w3.bike);
   // A raptor circling above the high mountain.
   const brown = new THREE.MeshLambertMaterial({ color:'#5b3a1e' });
