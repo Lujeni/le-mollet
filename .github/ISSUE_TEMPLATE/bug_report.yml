@@ -1,0 +1,58 @@
+name: Bug report
+description: Something does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! Please search open issues first to avoid duplicates.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. cargo run -- serve --trainer kickr
+        2. Pick Alpe d'Huez
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Trainer / Bluetooth
+        - Ride (physics, courses, open world)
+        - Workouts / ERG
+        - 3D view / UI
+        - Multiplayer / LAN
+        - Course building (course, terrain, stats)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit hash (`git rev-parse --short HEAD`).
+      placeholder: a65ae69
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, browser, and trainer model if any.
+      placeholder: Ubuntu 26.04, Chrome 140, Wahoo KICKR CORE
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Server output. For trainer issues, run with `LE_MOLLET_RAW=1`. Browser console errors help for UI bugs.
+      render: text

@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest an idea, a new climb or an improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and why is it hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you would like to happen. Sketches or links to similar features are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways you considered or currently use.
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Project principles
+      description: See docs/CONTRIBUTING.md.
+      options:
+        - label: Works without an account, self-hosted, in a browser.
+          required: true
+        - label: I would like to implement it myself.

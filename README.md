@@ -65,6 +65,18 @@ Tested hardware:
 - [Getting started](docs/getting-started.md): run it locally, connect a trainer, play on the LAN, develop.
 - [Adding a course](courses/AGENTS.md): turn a real climb into a ridable course.
 - [How courses are built](docs/courses.md): data sources, smoothing, validation, recipes.
+- [Contributing](docs/CONTRIBUTING.md): principles, checks, commits, testing a trainer.
+
+## Contributing
+
+Contributions are welcome: bug reports, tested trainers, new climbs, code and docs.
+
+- Found a bug or have an idea? [Open an issue](https://github.com/Lujeni/le-mollet/issues/new/choose).
+- Own a smart trainer? Test it and add a row to the table above.
+- Want to code? Run `cargo fmt`, `cargo clippy --all-targets` and `cargo test`, use
+  [Conventional Commits](https://www.conventionalcommits.org), and open a pull request.
+
+Everything else is in the [contributing guide](docs/CONTRIBUTING.md).
 
 ## Credits
 

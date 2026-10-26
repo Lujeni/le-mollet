@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contributing guide
+    url: https://github.com/Lujeni/le-mollet/blob/main/docs/CONTRIBUTING.md
+    about: How to help, test a trainer or add a climb.
