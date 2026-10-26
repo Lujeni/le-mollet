@@ -35,8 +35,10 @@ h1 { font-size:24px } h2 { font-size:18px }
 .new { display:grid; grid-template-columns:1fr 1fr; gap:10px }
 .new .full { grid-column:1 / -1 }
 label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted) }
-input { font:inherit; color:var(--ink); background:var(--bg); border:3px solid var(--line); padding:8px 10px; width:100% }
-input:focus { outline:3px solid var(--accent); outline-offset:-3px }
+input, select { font:inherit; color:var(--ink); background:var(--bg); border:3px solid var(--line); padding:8px 10px; width:100% }
+input:focus, select:focus { outline:3px solid var(--accent); outline-offset:-3px }
+.inline { flex-direction:row; align-items:center; gap:8px; margin-top:6px }
+.inline select { width:auto; padding:4px 8px }
 
 .btn, .seg button { font-family:Silkscreen, monospace; font-size:14px; color:var(--ink); background:var(--panel-hi); border:3px solid var(--line); box-shadow:inset -3px -3px 0 rgba(0,0,0,.35), inset 3px 3px 0 rgba(255,255,255,.12); padding:8px 12px; cursor:pointer }
 .btn:active, .seg button:active { box-shadow:inset 3px 3px 0 rgba(0,0,0,.35) }
@@ -81,7 +83,80 @@ input:focus { outline:3px solid var(--accent); outline-offset:-3px }
 .demo .btn { padding:6px 10px }
 input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; background:none; height:28px }
 
+/* Home */
+#home, #training { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
+#home .panel { width:min(860px, 100%); max-height:100%; overflow:auto }
+#profileEdit { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
+#profileEdit .panel { width:min(520px, 100%); max-height:100%; overflow:auto }
+.ident { margin:16px 0 0; padding:10px 12px; background:var(--bg); border:3px solid var(--line); font-size:12px; color:var(--muted); overflow-wrap:anywhere }
+.ident code { color:var(--ink) }
+.form-actions { grid-column:1 / -1; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:4px }
+.hello { display:flex; align-items:center; gap:14px; margin-bottom:18px }
+.hello .avatar { width:56px; height:56px; font-size:28px }
+.hello h1 { margin:0 }
+.tiles { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px }
+.tile { display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding:18px; min-height:170px; text-align:left; cursor:pointer; color:var(--ink); font:inherit; border:3px solid var(--line); box-shadow:inset -5px -5px 0 rgba(0,0,0,.3), inset 5px 5px 0 rgba(255,255,255,.15) }
+.tile:hover, .tile:focus-visible { outline:3px solid var(--ink); outline-offset:2px; transform:translateY(-2px) }
+.tile b { font-family:Silkscreen, monospace; font-size:22px }
+.tile small { opacity:.85 }
+.tile svg { width:48px; height:48px; image-rendering:pixelated }
+.tile.ride { background:#c91a09 } .tile.train { background:#0055bf } .tile.garage { background:#237841 } .tile.me { background:#81007b }
+.home-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; flex-wrap:wrap }
+
+/* Fridge door with course magnets */
+#courses .panel { width:min(860px, 100%); max-height:100%; overflow:auto }
+.fridge { padding:28px 20px; display:flex; flex-wrap:wrap; gap:34px 28px; justify-content:center; border:3px solid var(--line);
+  background:linear-gradient(180deg, #e9edf1, #c9d0d6), repeating-linear-gradient(90deg, rgba(255,255,255,.18) 0 2px, transparent 2px 5px); background-blend-mode:overlay }
+.magnet { position:relative; width:230px; height:180px; padding:0; border:4px solid #fff; border-radius:16px; overflow:hidden; cursor:pointer;
+  transform:rotate(var(--r)); box-shadow:0 5px 0 rgba(0,0,0,.18), 0 12px 20px rgba(0,0,0,.35); transition:transform .15s, box-shadow .15s; background:#fff }
+.magnet:hover, .magnet:focus-visible { transform:rotate(0) translateY(-6px) scale(1.04); box-shadow:0 8px 0 rgba(0,0,0,.15), 0 22px 30px rgba(0,0,0,.4); outline:none }
+.magnet canvas { position:absolute; inset:0; width:100%; height:100% }
+.magnet .ribbon { position:absolute; left:0; right:0; bottom:0; padding:8px 10px 9px; font-family:Silkscreen, monospace; font-size:15px; font-weight:700; color:#fff; text-shadow:2px 2px 0 rgba(0,0,0,.4); text-align:left }
+.magnet .ribbon small { display:block; font-family:Inter, sans-serif; font-weight:600; font-size:11px; text-shadow:none; opacity:.9 }
+.magnet .badge { position:absolute; top:8px; right:8px; width:58px; height:58px; border-radius:50%; display:grid; place-items:center; text-align:center;
+  background:#f2cd37; color:#1b2a34; border:3px solid #fff; font-family:Silkscreen, monospace; font-size:12px; line-height:1.05; transform:rotate(12deg); box-shadow:0 3px 0 rgba(0,0,0,.2) }
+
+/* Open worlds */
+#rideMenu, #free { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
+#rideMenu .panel { width:min(620px, 100%); max-height:100%; overflow:auto }
+#free .panel { width:min(720px, 100%); max-height:100%; overflow:auto }
+.tiles.two { grid-template-columns:repeat(2, 1fr); margin-bottom:14px }
+.tile.free { background:#36aebf }
+.world-new { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px }
+.world-new select { width:auto; padding:6px 8px }
+.online { color:#5d9b3a; font-weight:600 }
+
+/* Training */
+#training .panel { width:min(720px, 100%); max-height:100%; overflow:auto }
+.workout-card { display:flex; flex-direction:column; gap:6px; padding:12px; cursor:pointer; background:var(--panel-hi) }
+.workout-card:hover, .workout-card:focus-visible { outline:3px solid var(--accent); outline-offset:-3px }
+.workout-card .row { display:flex; justify-content:space-between; gap:12px; align-items:baseline }
+.workout-card small { color:var(--muted) }
+.workout-card canvas { width:100%; height:44px; display:block }
+#autoBtn.on { background:var(--accent); color:#1b2a34 }
+
+/* Pause / end-of-ride menu */
+.modal { position:fixed; inset:0; z-index:10; display:grid; place-items:center; padding:16px; background:rgba(11,13,16,.6); pointer-events:auto }
+.modal .panel { width:min(520px, 100%); max-height:100%; overflow:auto }
+.summary { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin:8px 0 18px }
+.summary .stat b { font-size:22px }
+.menu-actions { display:flex; flex-direction:column; gap:10px }
+.menu-actions .btn { text-align:center }
+.danger { color:#ff8a7a }
+/* Ride history on the home screen */
+.history { margin-top:18px }
+.history h2 { font-size:14px; margin-bottom:8px }
+.history-row { display:flex; justify-content:space-between; gap:10px; padding:8px 10px; background:var(--panel-hi); border:3px solid var(--line); margin-top:6px; font-size:13px }
+.history-row span { color:var(--muted) }
+
+@media (max-width:900px) and (min-width:701px) { .tiles { grid-template-columns:repeat(2, 1fr) } }
+@media (max-width:700px) { .tiles.two { grid-template-columns:1fr } }
 @media (max-width:700px) {
+  .tiles { grid-template-columns:1fr }
+  .summary { grid-template-columns:repeat(2, 1fr) }
+  .history-row { flex-direction:column; gap:2px }
+  .tile { min-height:0; flex-direction:row; align-items:center }
+  .magnet { width:100%; max-width:300px }
   .stats { grid-template-columns:repeat(3, 1fr); padding:12px 16px }
   .stat b { font-size:20px }
   #ride { padding:0 0 0 }
@@ -112,28 +187,123 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <label class="full">Nom<input name="name" maxlength="24" required autocomplete="off"></label>
         <label>Poids (kg)<input name="weight" type="number" min="30" max="200" step="0.1" value="75" required></label>
         <label>FTP (W)<input name="ftp" type="number" min="50" max="600" value="200" required></label>
+        <label class="full">Nationalité (optionnel)<select name="country" class="countries"></select></label>
         <button class="btn primary full">Créer le profil</button>
       </form>
     </div>
   </main>
 
+  <main id="home" hidden>
+    <div class="block panel">
+      <div class="hello"><span class="avatar" id="homeAvatar"></span><div><h1 id="homeHello"></h1><small class="muted" id="homeStats"></small></div></div>
+      <div class="tiles">
+        <button class="tile ride" id="goRide">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M0 11h12v1H0zM1 10h10v1H1zM2 9h3V8h1V6h1v1h1v1h1v1h1v1H2zM5 5h2v1H5zM6 4h1v1H6z"/></svg>
+          <b>Rouler</b><small id="goRideSub">Cols mythiques et monde ouvert</small>
+        </button>
+        <button class="tile train" id="goTrain">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M0 11h12v1H0zM1 8h2v3H1zM4 5h2v6H4zM7 7h2v4H7zM10 2h2v9h-2z"/></svg>
+          <b>Training</b><small id="goTrainSub">Séances structurées sur ta FTP</small>
+        </button>
+        <button class="tile garage" id="goGarage">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M1 7h3v3H1zM8 7h3v3H8zM4 6h4v1H4zM5 4h2v2H5zM8 3h2v1H8zM2 5h1v2H2z"/></svg>
+          <b>Garage</b><small>Personnalise ton vélo</small>
+        </button>
+        <button class="tile me" id="goProfile">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M4 1h4v1h1v3H8v1H4V5H3V2h1zM2 7h8v1h1v3H1V8h1z"/></svg>
+          <b>Profil</b><small>Poids, FTP, nationalité</small>
+        </button>
+      </div>
+      <div class="history" id="history"></div>
+      <div class="home-foot">
+        <small class="muted" id="homeMode"></small>
+        <button class="btn" id="switchProfile">‹ Changer de profil</button>
+      </div>
+    </div>
+  </main>
+
+  <main id="profileEdit" hidden>
+    <div class="block panel">
+      <div class="ride-head">
+        <h1>Profil</h1>
+        <button class="btn" id="profileBack">‹ Accueil</button>
+      </div>
+      <form id="editProfile" class="new">
+        <label class="full">Nom<input name="name" maxlength="24" required autocomplete="off"></label>
+        <label>Poids (kg)<input name="weight" type="number" min="30" max="200" step="0.1" required></label>
+        <label>FTP (W)<input name="ftp" type="number" min="50" max="600" required></label>
+        <label class="full">Nationalité (optionnel)<select name="country" class="countries"></select></label>
+        <div class="form-actions">
+          <button class="btn primary">Enregistrer</button>
+          <button class="btn danger" type="button" id="deleteProfile">Supprimer le profil</button>
+        </div>
+      </form>
+      <p class="ident" id="profileIdent"></p>
+    </div>
+  </main>
+
   <main id="garage" hidden>
     <aside class="block panel side">
-      <button class="btn" id="back">‹ Profils</button>
+      <button class="btn" id="back">‹ Accueil</button>
       <h2>Garage de <span id="who"></span></h2>
-      <button class="btn primary" id="rideBtn" hidden>Choisir un circuit</button>
       <div id="options"></div>
       <p class="muted">Glisse pour tourner autour du vélo, molette ou pincement pour zoomer.</p>
     </aside>
   </main>
+  <main id="rideMenu" hidden>
+    <div class="block panel">
+      <div class="ride-head">
+        <h1>Où veux-tu rouler ?</h1>
+        <button class="btn" id="rideMenuBack">‹ Accueil</button>
+      </div>
+      <div class="tiles two">
+        <button class="tile ride" id="goCircuits">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M0 11h12v1H0zM1 10h10v1H1zM2 9h3V8h1V6h1v1h1v1h1v1h1v1H2zM5 5h2v1H5zM6 4h1v1H6z"/></svg>
+          <b>Circuits</b><small id="goCircuitsSub">Les cols mythiques, en vrai relief</small>
+        </button>
+        <button class="tile free" id="goFree">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M3 1h6v1h1v1h1v6h-1v1H9v1H3v-1H2V9H1V3h1V2h1zM3 3v6h6V3zM8 0h2v1H8zM10 1h1v2h-1z"/></svg>
+          <b>Free</b><small id="goFreeSub">Boucles aléatoires, ouvertes à tous</small>
+        </button>
+      </div>
+      <p class="muted" id="modeHint"></p>
+    </div>
+  </main>
+
   <main id="courses" hidden>
     <div class="block panel">
       <div class="ride-head">
-        <h1>Choisis ton circuit</h1>
-        <button class="btn" id="coursesBack">‹ Garage</button>
+        <h1>Circuits</h1>
+        <button class="btn" id="coursesBack">‹ Rouler</button>
       </div>
-      <p class="muted" id="modeHint"></p>
-      <div id="courseList" class="list"></div>
+      <div id="courseList" class="fridge"></div>
+    </div>
+  </main>
+
+  <main id="free" hidden>
+    <div class="block panel">
+      <div class="ride-head">
+        <h1>Free</h1>
+        <button class="btn" id="freeBack">‹ Rouler</button>
+      </div>
+      <p class="muted">Des boucles générées au hasard, ouvertes à tous : chaque cycliste connecté voit les autres rouler.</p>
+      <form class="world-new" id="worldNew">
+        <select name="length" aria-label="Longueur de la boucle"><option value="5">5 km</option><option value="10" selected>10 km</option><option value="20">20 km</option></select>
+        <select name="relief" aria-label="Relief"><option value="flat">Plat</option><option value="hills" selected>Vallonné</option><option value="mountains">Montagneux</option></select>
+        <button class="btn primary">Générer une boucle</button>
+      </form>
+      <div id="worldList" class="list"></div>
+    </div>
+  </main>
+
+  <main id="training" hidden>
+    <div class="block panel">
+      <div class="ride-head">
+        <h1>Training</h1>
+        <button class="btn" id="trainingBack">‹ Accueil</button>
+      </div>
+      <p class="muted" id="trainingHint"></p>
+      <div id="workoutList" class="list"></div>
     </div>
   </main>
 
@@ -152,11 +322,24 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <input type="range" id="watts" min="0" max="2000" step="5" aria-label="Puissance en watts">
         <button class="btn" data-dw="25" aria-label="Plus 25 watts">+</button>
         <output id="wattsOut" for="watts"></output>
+        <button class="btn" id="autoBtn" hidden aria-pressed="false" title="La puissance suit la cible de la séance">Auto</button>
       </div>
       <canvas id="profileCanvas"></canvas>
       <small class="attrib" id="attrib"></small>
     </div>
   </main>
+  <div class="modal" id="menu" hidden role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+    <div class="block panel">
+      <h2 id="menuTitle"></h2>
+      <div class="summary" id="menuStats"></div>
+      <div class="menu-actions">
+        <button class="btn primary" id="resume">Reprendre</button>
+        <button class="btn" id="saveQuit">Terminer et enregistrer</button>
+        <button class="btn danger" id="quitNoSave">Quitter sans enregistrer</button>
+        <button class="btn primary" id="toHome" hidden>Retour à l'accueil</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -168,10 +351,18 @@ const PALETTE = {
   Rouge:'#c91a09', Orange:'#fe8a18', Jaune:'#f2cd37', Citron:'#bbe90b', Vert:'#237841', Azur:'#36aebf',
   Bleu:'#0055bf', Violet:'#81007b', Rose:'#fc97ac', Blanc:'#f4f4f4', Gris:'#6c6e68', Noir:'#1b2a34',
 };
-const DEFAULT_BIKE = { style:'lego', frame:'#c91a09', accent:'#f4f4f4', rim:'#1b2a34', saddle:'#1b2a34', rimDepth:2, bars:'drop' };
+const DEFAULT_BIKE = { style:'lego', frameType:'road', frame:'#c91a09', accent:'#f4f4f4', rim:'#1b2a34', saddle:'#1b2a34', rimDepth:2, bars:'drop' };
+// Frame shapes, in garage voxels (side view): seat cluster, head tube top/bottom, and extras.
+const FRAMES = {
+  road:    { seat:[7, 12], ht:[23, 13], hb:[24, 10] },
+  aero:    { seat:[8, 11], ht:[23, 13], hb:[24, 10], thick:true, lowStays:true },
+  gravel:  { seat:[7, 12], ht:[23, 15], hb:[24, 10], fatTires:true },
+  vintage: { seat:[7, 13], ht:[23, 13], hb:[24, 10], lugs:true, fenders:true },
+};
 const OPTIONS = [
   { key:'style', label:'Style', choices:[['lego','Brique'], ['voxel','Cube']] },
-  { key:'frame', label:'Cadre', colors:true },
+  { key:'frameType', label:'Cadre', choices:[['road', 'Route'], ['aero', 'Aéro'], ['gravel', 'Gravel'], ['vintage', 'Vintage']] },
+  { key:'frame', label:'Couleur du cadre', colors:true },
   { key:'accent', label:'Fourche', colors:true },
   { key:'rim', label:'Couleur des jantes', colors:true },
   { key:'rimDepth', label:'Profil des jantes', choices:[[1,'Basses'], [2,'Aéro'], [3,'Profondes']] },
@@ -183,6 +374,29 @@ const OPTIONS = [
 const KEY = 'lemollet.profiles.v1';
 let profiles = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || [] } catch { return [] } })();
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(profiles)) } catch {} };
+
+// Profile id: UUID v4, the stable key for a future backend; the name is only a label.
+// crypto.randomUUID needs a secure context (not plain http on the LAN), getRandomValues does not.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+function newId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; // version 4
+  b[8] = (b[8] & 0x3f) | 0x80; // RFC 4122 variant
+  const x = [...b].map(v => v.toString(16).padStart(2, '0')).join('');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
+// Migrate older profiles (time-based ids, no creation date) once.
+{
+  const seen = new Set();
+  let changed = false;
+  for (const p of profiles) {
+    if (!UUID_RE.test(p.id ?? '') || seen.has(p.id)) { p.id = newId(); changed = true }
+    if (!p.createdAt) { p.createdAt = new Date().toISOString(); changed = true }
+    seen.add(p.id);
+  }
+  if (changed) persist();
+}
 let current = null;
 
 // ---------- voxel bike (side view in x/y, z = width; 1 unit ≈ 37 mm) ----------
@@ -203,32 +417,42 @@ function bikeVoxels(b) {
   };
 
   // Geometry keeps tubes clear of the tires (checked by distance to hub > R + 0.5).
-  const R = 9, REAR = 0, FRONT = 28, BB = [11, -2], SEAT = [7, 12], HB = [24, 10], HT = [23, 13];
+  const F = FRAMES[b.frameType] ?? FRAMES.road;
+  const R = 9, REAR = 0, FRONT = 28, BB = [11, -2], SEAT = F.seat, HB = F.hb, HT = F.ht;
+  const tireIn = F.fatTires ? R - 1 : R; // fat tires eat into the rim
   for (const hx of [REAR, FRONT]) {
-    const inner = R - 1 - b.rimDepth;
+    const inner = tireIn - 1 - b.rimDepth;
     for (let k = 0; k < 8; k++) {
       const a = k * Math.PI / 4 + Math.PI / 8;
       line(hx, 0, hx + Math.cos(a) * inner, Math.sin(a) * inner, 0, METAL);
     }
-    ring(hx, 0, R - b.rimDepth, R - 1, 0, b.rim);
-    ring(hx, 0, R, R, 0, TIRE);
+    ring(hx, 0, tireIn - b.rimDepth, tireIn - 1, 0, b.rim);
+    ring(hx, 0, tireIn, R, 0, TIRE);
     for (let z = -1; z <= 1; z++) put(hx, 0, z, METAL);
+    if (F.fenders) for (let a = 0.35; a <= 2.8; a += 0.08) put(Math.round(hx + Math.cos(a) * (R + 1.5)), Math.round(Math.sin(a) * (R + 1.5)), 0, METAL);
   }
 
   line(...SEAT, ...HT, 0, b.frame);   // top tube
   line(...BB, ...HB, 0, b.frame);     // down tube
   line(...BB, ...SEAT, 0, b.frame);   // seat tube
+  if (F.thick) { // aero: deep tube sections
+    line(SEAT[0], SEAT[1] - 1, HT[0], HT[1] - 1, 0, b.frame);
+    line(BB[0], BB[1] + 1, HB[0], HB[1] - 1, 0, b.frame);
+    line(BB[0] - 1, BB[1], SEAT[0] - 1, SEAT[1], 0, b.frame);
+  }
   line(...HB, ...HT, 0, b.accent);    // head tube
+  const stays = F.lowStays ? [Math.round(BB[0] + (SEAT[0] - BB[0]) * 0.6), Math.round(BB[1] + (SEAT[1] - BB[1]) * 0.6)] : SEAT;
   for (const z of [-1, 1]) {
-    line(...SEAT, REAR, 0, z, b.frame); // seat stays
+    line(...stays, REAR, 0, z, b.frame); // seat stays
     line(...BB, REAR, 0, z, b.frame);   // chainstays
     line(...HB, FRONT, 0, z, b.accent); // fork
   }
+  if (F.lugs) for (const [x, y] of [SEAT, HT, HB, BB]) for (let z = -1; z <= 1; z++) put(x, y, z, b.accent); // vintage lugs
 
   line(...SEAT, 6, 15, 0, METAL); // seatpost
   for (let x = 3; x <= 9; x++) for (let z = -1; z <= 1; z++) if (x < 8 || z === 0) put(x, 16, z, b.saddle);
 
-  const [BX, BY] = [25, 14];
+  const [BX, BY] = [HT[0] + 2, HT[1] + 1]; // bars sit just above the head tube
   line(...HT, BX, BY, 0, METAL); // stem
   if (b.bars === 'flat') {
     for (let z = -5; z <= 5; z++) put(BX, BY, z, Math.abs(z) >= 4 ? TIRE : METAL);
@@ -260,7 +484,7 @@ function bikeVoxels(b) {
       const knee = z > 0 ? [14, 6] : [16, 13];
       line(6, 17, ...knee, z, SHORTS);   // thigh
       line(...knee, px, py + 1, z, SKIN); // shin
-      line(18, 23, 25, 16, z, SKIN);      // arm to the hoods
+      line(18, 23, BX, BY + 2, z, SKIN);  // arm to the hoods
     }
     for (let x = 19; x <= 22; x++) for (let y = 24; y <= 27; y++) for (let z = -1; z <= 1; z++) put(x, y, z, y >= 26 ? HELMET : SKIN);
   }
@@ -393,31 +617,97 @@ function h(tag, props = {}, ...kids) {
   return e;
 }
 
+// One screen at a time. Leaving the ride stops its stream, sound and 3D world.
+const SCREENS = ['#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#courses', '#free', '#training', '#ride'];
+function show(id) {
+  if (id !== '#ride') {
+    exit3d();
+    ride.events?.close();
+    stopAmbience();
+  }
+  for (const sc of SCREENS) $(sc).hidden = sc !== id;
+  $('#menu').hidden = true;
+  controls.autoRotate = id !== '#garage';
+  resize();
+}
+
+// ---------- nationality (optional, ISO 3166-1 alpha-2; names localized by the browser) ----------
+const COUNTRY_CODES = ('AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ ' +
+  'CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI ' +
+  'GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI ' +
+  'LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF ' +
+  'PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL ' +
+  'TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW').split(' ');
+const countryName = new Intl.DisplayNames(['fr'], { type:'region' });
+// Regional-indicator emoji; platforms without flag glyphs show the two letters instead.
+const flag = code => String.fromCodePoint(...[...code].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+const countryOptions = [h('option', { value:'' }, '—'), ...COUNTRY_CODES
+  .map(code => [code, countryName.of(code)]).sort((a, b) => a[1].localeCompare(b[1], 'fr'))
+  .map(([code, name]) => h('option', { value:code }, `${flag(code)} ${name}`))];
+for (const sel of document.querySelectorAll('.countries')) sel.replaceChildren(...countryOptions.map(o => o.cloneNode(true)));
+
+function showProfileEdit() {
+  show('#profileEdit');
+  const f = $('#editProfile').elements;
+  [f.name.value, f.weight.value, f.ftp.value, f.country.value] = [current.name, current.weightKg, current.ftp, current.country ?? ''];
+  const since = new Date(current.createdAt).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+  $('#profileIdent').replaceChildren('Identifiant unique : ', h('code', {}, current.id), h('br'), `Créé le ${since}. Le nom est libre et peut être partagé, l'identifiant ne change jamais.`);
+}
+
+$('#editProfile').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const name = f.get('name').trim();
+  if (!name) return;
+  Object.assign(current, { name, weightKg: +f.get('weight'), ftp: +f.get('ftp') });
+  if (COUNTRY_CODES.includes(f.get('country'))) current.country = f.get('country');
+  else delete current.country;
+  persist();
+  showHome();
+});
+$('#deleteProfile').addEventListener('click', () => {
+  if (!confirm(`Supprimer le profil ${current.name} et ses ${current.history?.length ?? 0} sortie(s) ?`)) return;
+  profiles = profiles.filter(q => q !== current);
+  persist();
+  showProfiles();
+});
+$('#profileBack').addEventListener('click', () => showHome());
+$('#goProfile').addEventListener('click', showProfileEdit);
+
 function showProfiles() {
-  exit3d();
   current = null;
-  $('#garage').hidden = true;
-  $('#ride').hidden = true;
-  $('#courses').hidden = true;
-  ride.events?.close();
-  stopAmbience();
-  $('#profiles').hidden = false;
-  controls.autoRotate = true;
+  show('#profiles');
   draw(profiles.at(-1)?.bike ?? DEFAULT_BIKE);
   renderList();
-  resize();
+}
+
+function showHome(p = current) {
+  current = p;
+  show('#home');
+  draw(p.bike);
+  $('#homeAvatar').textContent = p.name[0].toUpperCase();
+  $('#homeAvatar').style.background = p.bike.frame;
+  $('#homeHello').textContent = `Salut ${p.name} !${p.country ? ` ${flag(p.country)}` : ''}`;
+  $('#homeStats').textContent = `${p.weightKg} kg · FTP ${p.ftp} W · ${(p.ftp / p.weightKg).toFixed(1)} W/kg`;
+  const n = ride.list?.courses.length ?? 0;
+  $('#goRideSub').textContent = `${n} col${n > 1 ? 's' : ''} mythique${n > 1 ? 's' : ''} et le monde ouvert`;
+  $('#goTrainSub').textContent = `${ride.workouts?.length ?? 0} séances calées sur ta FTP`;
+  renderHistory();
+  $('#homeMode').textContent = !ride.list ? '' : ride.list.trainer
+    ? `Home trainer connecté : ${ride.list.trainer}`
+    : 'Mode démo : pas de home trainer, tu règles les watts avec un curseur.';
 }
 
 function renderList() {
   $('#empty').hidden = profiles.length > 0;
   $('#list').replaceChildren(...profiles.map(p => h('div', {
       class:'card block', role:'button', tabindex:0,
-      onclick: () => openGarage(p),
-      onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openGarage(p) } },
+      onclick: () => showHome(p),
+      onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showHome(p) } },
     },
     h('span', { class:'avatar', style:`background:${p.bike.frame}` }, p.name[0].toUpperCase()),
     h('div', { class:'meta' },
-      h('strong', {}, p.name),
+      h('strong', {}, `${p.name}${p.country ? ` ${flag(p.country)}` : ''}`),
       h('small', {}, `${p.weightKg} kg · ${p.ftp} W · ${(p.ftp / p.weightKg).toFixed(1)} W/kg`)),
     h('button', {
       class:'del', title:'Supprimer', 'aria-label':`Supprimer ${p.name}`,
@@ -439,31 +729,23 @@ $('#new').addEventListener('submit', e => {
   if (!name) return;
   const colors = Object.values(PALETTE);
   const p = {
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+    id: newId(),
+    createdAt: new Date().toISOString(),
     name, weightKg: +f.get('weight'), ftp: +f.get('ftp'),
+    ...(COUNTRY_CODES.includes(f.get('country')) && { country: f.get('country') }),
     bike: { ...DEFAULT_BIKE, frame: colors[profiles.length % colors.length] },
   };
   profiles.push(p);
   persist();
   e.target.reset();
-  openGarage(p);
+  showHome(p);
 });
 
-function openGarage(p) {
-  exit3d();
-  current = p;
-  $('#profiles').hidden = true;
-  $('#garage').hidden = false;
-  controls.autoRotate = false;
-  $('#who').textContent = p.name;
-  $('#ride').hidden = true;
-  ride.events?.close();
-  stopAmbience();
-  $('#courses').hidden = true;
-  $('#rideBtn').hidden = !ride.list?.courses.length;
+function openGarage() {
+  show('#garage');
+  $('#who').textContent = current.name;
   renderOptions();
-  draw(p.bike);
-  resize();
+  draw(current.bike);
 }
 
 function renderOptions() {
@@ -491,35 +773,55 @@ function set(key, val) {
 }
 
 // ---------- ride (live from the Rust engine: `le-mollet ride`) ----------
-const ride = { list:null, course:null, state:null, events:null, session:0 };
+const ride = { list:null, workouts:null, mode:'course', course:null, workout:null, state:null, events:null, session:0, auto:false, ended:false };
 const GRADE_COLORS = [[0, '#36aebf'], [3, '#5d9b3a'], [6, '#f2cd37'], [9, '#fe8a18'], [12, '#c91a09'], [Infinity, '#7a0c0c']];
 const gradeColor = g => GRADE_COLORS.find(([max]) => g < max)[1];
 
-function showCourses() {
-  exit3d();
-  ride.events?.close();
-  stopAmbience();
-  for (const id of ['#garage', '#ride', '#profiles']) $(id).hidden = true;
-  $('#courses').hidden = false;
-  $('#modeHint').textContent = ride.list.trainer
+const MAGNET_THEMES = [
+  { sky:['#7ec8f0', '#e8f6ff'], far:'#8aa7b8', near:'#3f7a2c', ribbon:'#c91a09' },
+  { sky:['#f59b5a', '#ffe1a8'], far:'#b98a8a', near:'#6c6e68', ribbon:'#0055bf' },
+  { sky:['#5b7bd5', '#cfe0ff'], far:'#7f8fb0', near:'#237841', ribbon:'#fe8a18' },
+  { sky:['#9b6bd1', '#f6d5ff'], far:'#a08bb5', near:'#5b4330', ribbon:'#237841' },
+];
+
+function showRideMenu() {
+  show('#rideMenu');
+  const n = ride.list?.courses.length ?? 0;
+  $('#goCircuitsSub').textContent = `${n} col${n > 1 ? 's' : ''} mythique${n > 1 ? 's' : ''}, en vrai relief`;
+  $('#modeHint').textContent = !ride.list ? '' : ride.list.trainer
     ? `Home trainer connecté : ${ride.list.trainer}. La pente suit la route.`
     : 'Mode démo : pas de home trainer, tu règles les watts avec un curseur.';
-  $('#courseList').replaceChildren(...ride.list.courses.map(c => {
-    const cv = h('canvas', { 'aria-hidden':'true' });
-    const card = h('div', {
-        class:'course-card block', role:'button', tabindex:0,
-        onclick: () => openRide(c.id),
-        onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRide(c.id) } },
-      },
-      h('strong', {}, c.name),
-      h('small', {}, `${(c.length / 1000).toFixed(1)} km · +${c.gain} m · ${((c.profile.at(-1) - c.profile[0]) / c.length * 100).toFixed(1)} % moyen`),
-      cv);
-    requestAnimationFrame(() => sparkline(cv, c.profile));
-    return card;
-  }));
-  resize();
+  fetch('/worlds').then(r => r.json()).then(worlds => {
+    const online = worlds.reduce((a, w) => a + w.riders, 0);
+    $('#goFreeSub').textContent = `${worlds.length} boucle${worlds.length > 1 ? 's' : ''} ouverte${worlds.length > 1 ? 's' : ''} · ${online} cycliste${online > 1 ? 's' : ''} en ligne`;
+  }).catch(() => {});
 }
 
+function showFree() {
+  show('#free');
+  renderWorlds();
+}
+
+function showCourses() {
+  show('#courses');
+  $('#courseList').replaceChildren(...ride.list.courses.map((c, i) => {
+    const theme = MAGNET_THEMES[i % MAGNET_THEMES.length], cv = h('canvas', { 'aria-hidden':'true' });
+    const avg = ((c.profile.at(-1) - c.profile[0]) / c.length * 100).toFixed(1);
+    const card = h('button', {
+        class:'magnet', style:`--r:${((hash(i, 7, 3) - 0.5) * 9).toFixed(1)}deg`,
+        'aria-label':`${c.name}, ${(c.length / 1000).toFixed(1)} km, ${avg} % de moyenne`,
+        onclick: () => openRide(c.id, c.terrain),
+      },
+      cv,
+      h('span', { class:'badge' }, `${Math.round(Math.max(...c.profile))}`, h('br'), 'm'),
+      h('span', { class:'ribbon', style:`background:${theme.ribbon}` }, c.name,
+        h('small', {}, `${(c.length / 1000).toFixed(1)} km · +${c.gain} m · ${avg} %`)));
+    requestAnimationFrame(() => magnetArt(cv, c.profile, theme));
+    return card;
+  }));
+}
+
+// Elevation thumbnail filled in the accent color.
 function sparkline(cv, prof) {
   const [W, H] = [cv.clientWidth, cv.clientHeight], dpr = Math.min(devicePixelRatio, 2);
   cv.width = W * dpr; cv.height = H * dpr;
@@ -534,12 +836,155 @@ function sparkline(cv, prof) {
   ctx.fill();
 }
 
-async function openRide(id) {
+async function renderWorlds() {
+  const worlds = await fetch('/worlds').then(r => r.json()).catch(() => []);
+  $('#worldList').replaceChildren(...worlds.map(w => {
+    const cv = h('canvas', { 'aria-hidden':'true' });
+    const card = h('div', {
+        class:'workout-card block', role:'button', tabindex:0,
+        onclick: () => openRide(w.id, true),
+        onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRide(w.id, true) } },
+      },
+      h('div', { class:'row' }, h('strong', {}, w.name),
+        h('small', { class: w.riders ? 'online' : '' }, w.riders ? `${w.riders} cycliste${w.riders > 1 ? 's' : ''} en ligne` : 'personne pour l\'instant')),
+      h('small', {}, `${(w.length / 1000).toFixed(1)} km · +${w.gain} m par tour · ${w.relief}`),
+      cv);
+    requestAnimationFrame(() => sparkline(cv, w.profile));
+    return card;
+  }));
+}
+
+$('#worldNew').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = new FormData(e.target), btn = e.target.querySelector('button');
+  btn.disabled = true;
+  btn.textContent = 'Génération…';
+  try {
+    const r = await fetch(`/worlds/new?length=${f.get('length')}&relief=${f.get('relief')}`);
+    if (r.ok) await openRide((await r.json()).id, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Générer une boucle';
+  }
+});
+
+// Souvenir-magnet postcard: sky, a far ridge, the climb's real profile as the mountain, snow on top.
+function magnetArt(cv, prof, t) {
+  const [W, H] = [cv.clientWidth, cv.clientHeight], dpr = Math.min(devicePixelRatio, 2);
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, t.sky[0]); sky.addColorStop(1, t.sky[1]);
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#fff6c9'; ctx.beginPath(); ctx.arc(W * 0.2, H * 0.22, 14, 0, 7); ctx.fill();
+  const lo = Math.min(...prof), hi = Math.max(...prof);
+  const y = (e, top, bottom) => bottom - (e - lo) / (hi - lo || 1) * (bottom - top);
+  const ridge = (color, top, bottom) => {
+    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, H);
+    prof.forEach((e, i) => ctx.lineTo(i / (prof.length - 1) * W, y(e, top, bottom)));
+    ctx.lineTo(W, H); ctx.fill();
+  };
+  ridge(t.far, H * 0.25, H * 0.7); // far ridges: the same profile, and mirrored
+  ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1); ridge(t.far, H * 0.3, H * 0.72); ctx.restore();
+  ridge(t.near, H * 0.28, H * 0.86);
+  // Snow cap above 80 % of the climb height.
+  ctx.fillStyle = '#ffffff'; ctx.beginPath();
+  const snow = H * 0.28 + (H * 0.86 - H * 0.28) * 0.2;
+  prof.forEach((e, i) => { const yy = y(e, H * 0.28, H * 0.86); ctx[i ? 'lineTo' : 'moveTo'](i / (prof.length - 1) * W, Math.min(yy, snow)) });
+  ctx.lineTo(W, snow); ctx.lineTo(0, snow); ctx.fill();
+}
+
+// ---------- training ----------
+const ZONES = [[55, '#9aa4b2'], [76, '#36aebf'], [90, '#5d9b3a'], [105, '#f2cd37'], [119, '#fe8a18'], [Infinity, '#c91a09']];
+const zoneColor = pct => ZONES.find(([max]) => pct < max)[1];
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function showTraining() {
+  show('#training');
+  $('#trainingHint').textContent = ride.list?.trainer
+    ? `Le home trainer tient la puissance (mode ERG). Cibles calculées sur ta FTP de ${current.ftp} W.`
+    : `Mode démo : suis la cible au curseur, ou laisse le pilote auto. Cibles calculées sur ta FTP de ${current.ftp} W.`;
+  $('#workoutList').replaceChildren(...ride.workouts.map(({ w, duration }) => {
+    const cv = h('canvas', { 'aria-hidden':'true' });
+    const card = h('div', {
+        class:'workout-card block', role:'button', tabindex:0,
+        onclick: () => openWorkout(w),
+        onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openWorkout(w) } },
+      },
+      h('div', { class:'row' }, h('strong', {}, w.name), h('small', {}, `${Math.round(duration / 60)} min`)),
+      h('small', {}, w.description),
+      cv);
+    requestAnimationFrame(() => drawSteps(cv, w.steps, null));
+    return card;
+  }));
+}
+
+// Interval bars: height = % FTP, color = zone. With `t`, the done part is opaque and a cursor marks now.
+function drawSteps(cv, steps, t, pad = { l:0, r:0, t:2, b:0 }) {
+  const [W, H] = [cv.clientWidth, cv.clientHeight], dpr = Math.min(devicePixelRatio, 2);
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const total = steps.reduce((a, s) => a + s.secs, 0), top = 130;
+  const x = s => pad.l + s / total * (W - pad.l - pad.r), y = pct => H - pad.b - Math.min(pct, top) / top * (H - pad.t - pad.b);
+  let at = 0;
+  for (const s of steps) {
+    const n = s.from === s.to ? 1 : Math.max(2, Math.round(s.secs / 30)); // ramps drawn as small stairs
+    for (let k = 0; k < n; k++) {
+      const [a, b] = [at + s.secs * k / n, at + s.secs * (k + 1) / n], pct = s.from + (s.to - s.from) * (k + 0.5) / n;
+      ctx.globalAlpha = t == null || a < t ? 1 : 0.45;
+      ctx.fillStyle = zoneColor(pct);
+      ctx.fillRect(x(a), y(pct), x(b) - x(a) + 0.5, H - pad.b - y(pct));
+    }
+    at += s.secs;
+  }
+  ctx.globalAlpha = 1;
+  if (t != null) {
+    ctx.fillStyle = '#eef1f5';
+    ctx.fillRect(x(Math.min(t, total)) - 1, pad.t, 3, H - pad.t - pad.b);
+  }
+  return { x, total };
+}
+
+function openWorkout(w) {
+  ride.ended = false;
+  amb.ctx ??= new AudioContext();
+  amb.ctx.resume();
+  ride.mode = 'workout';
+  $('#leave').textContent = '‖ Pause';
+  ride.workout = w;
+  ride.course = null;
+  show('#ride');
+  $('#courseName').textContent = w.name;
+  $('#attrib').textContent = `Cibles en % de ta FTP (${current.ftp} W). Sons : Wikimedia Commons et Freesound (domaine public, CC0).`;
+  ride.state = null;
+  ride.session = Math.floor(Math.random() * 2 ** 52);
+  const demo = !ride.list?.trainer;
+  $('#demo').hidden = !demo;
+  $('#autoBtn').hidden = !demo;
+  $('#profileCanvas').classList.remove('seekable');
+  $('#profileCanvas').title = '';
+  if (demo) setPower(Math.round(current.ftp * 0.5 / 5) * 5);
+  renderStats();
+  ride.events = new EventSource(`/events?workout=${w.id}&ftp=${current.ftp}&mass=${current.weightKg + 8}&session=${ride.session}`);
+  ride.events.onmessage = e => {
+    ride.state = JSON.parse(e.data);
+    if (ride.auto && ride.state.workout && Math.round(ride.state.workout.target) !== +$('#watts').value) setPower(ride.state.workout.target);
+    renderStats(); drawProfile(); mixAmbience(); checkEnd();
+  };
+  startAmbience().catch(() => {});
+  resize();
+}
+
+async function openRide(id, hasTerrain) {
+  ride.ended = false;
   amb.ctx ??= new AudioContext(); // created inside the click so autoplay policies allow sound
   amb.ctx.resume();
+  ride.mode = 'course';
+  $('#leave').textContent = '‖ Pause';
   ride.course = await (await fetch(`/course?id=${encodeURIComponent(id)}`)).json();
-  $('#courses').hidden = true;
-  $('#ride').hidden = false;
+  show('#ride');
   $('#courseName').textContent = ride.course.name;
   $('#attrib').textContent = attribution();
   ride.state = null;
@@ -547,20 +992,22 @@ async function openRide(id) {
   ride.session = Math.floor(Math.random() * 2 ** 52);
   const demo = !ride.list.trainer;
   $('#demo').hidden = !demo;
+  $('#autoBtn').hidden = true;
   $('#profileCanvas').classList.toggle('seekable', demo);
   $('#profileCanvas').title = demo ? 'Clique pour te placer sur le parcours' : '';
   if (demo) {
     setPower(Math.round(current.ftp * 0.75 / 5) * 5); // start at endurance pace
   }
   // ponytail: 8 kg bike until the garage has weights
-  ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}`);
-  if (ride.list.courses.find(c => c.id === id)?.terrain) {
+  const me = `&name=${encodeURIComponent(current.name)}&color=${encodeURIComponent(current.bike.frame)}&frame=${current.bike.frameType ?? 'road'}&country=${current.country ?? ''}`;
+  ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}${me}`);
+  if (hasTerrain) {
     $('#attrib').textContent = 'Chargement du terrain…';
     const buf = await (await fetch(`/terrain?id=${encodeURIComponent(id)}`)).arrayBuffer();
     $('#attrib').textContent = attribution();
     if (!$('#ride').hidden) enter3d(buf);
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); renderStats(); drawProfile(); mixAmbience() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); renderStats(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -574,7 +1021,7 @@ function setPower(w) {
 $('#watts').addEventListener('input', e => setPower(+e.target.value));
 // Demo: click the profile to jump there.
 $('#profileCanvas').addEventListener('click', e => {
-  if ($('#demo').hidden || !profileLayout) return;
+  if ($('#demo').hidden || !profileLayout || ride.mode !== 'course') return;
   const { left, width, total } = profileLayout;
   const d = Math.max(0, Math.min(1, (e.offsetX - left) / width)) * total;
   fetch(`/seek?session=${ride.session}&d=${Math.round(d)}`).catch(() => {});
@@ -583,21 +1030,37 @@ $('#profileCanvas').addEventListener('click', e => {
 });
 for (const b of document.querySelectorAll('[data-dw]')) b.addEventListener('click', () => setPower(+$('#watts').value + +b.dataset.dw));
 addEventListener('keydown', e => {
-  if ($('#ride').hidden || $('#demo').hidden || e.target === $('#watts')) return;
+  if ($('#ride').hidden || !$('#menu').hidden || $('#demo').hidden || e.target === $('#watts')) return;
   const dw = { ArrowUp:10, ArrowDown:-10 }[e.key];
   if (dw) { e.preventDefault(); setPower(+$('#watts').value + dw) }
 });
 
 function renderStats() {
-  const s = ride.state ?? { power:0, speed_kmh:0, grade:0, distance:0, ele:ride.course.points[0].ele, elapsed:0 };
+  const s = ride.state ?? { power:0, speed_kmh:0, grade:0, distance:0, ele:ride.course?.points[0].ele ?? 0, elapsed:0 };
   const t = Math.floor(s.elapsed), hms = `${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
-  const total = ride.course.points.at(-1).d;
   const stat = (label, value, unit) => h('div', { class:'stat' }, h('small', {}, label), h('b', {}, value), h('i', {}, unit));
+  if (ride.mode === 'workout') {
+    const w = s.workout ?? { target:0, step_left:ride.workout.steps[0].secs, done:false };
+    const total = ride.workout.steps.reduce((a, st) => a + st.secs, 0);
+    $('#stats').replaceChildren(
+      stat('Puissance', Math.round(s.power), 'W'),
+      stat('Cible', Math.round(w.target), 'W'),
+      stat('Intervalle', mmss(w.step_left), ''),
+      stat('Séance', mmss(Math.min(s.elapsed, total)), `/ ${mmss(total)}`),
+      stat('Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
+      stat('Distance', (s.distance / 1000).toFixed(2), 'km'),
+      ...(w.done ? [h('div', { class:'finish' }, 'Séance terminée, bravo !')] : s.elapsed === 0 ? [h('div', { class:'finish' }, 'Pédale pour lancer la séance')] : []),
+    );
+    return;
+  }
+  const total = ride.course.points.at(-1).d;
   $('#stats').replaceChildren(
     stat('Puissance', Math.round(s.power), 'W'),
     stat('Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
     stat('Pente', s.grade.toFixed(1), '%'),
-    stat('Distance', (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`),
+    ride.course.looped
+      ? stat(`Tour ${(s.laps ?? 0) + 1}`, (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`)
+      : stat('Distance', (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`),
     stat('Altitude', Math.round(s.ele), 'm'),
     stat('Temps', hms, ''),
     ...(s.finished ? [h('div', { class:'finish' }, `Arrivée en ${hms} !`)] : []),
@@ -606,6 +1069,10 @@ function renderStats() {
 
 let profileLayout = null;
 function drawProfile() {
+  if (ride.mode === 'workout') {
+    drawSteps($('#profileCanvas'), ride.workout.steps, ride.state?.elapsed ?? 0, { l:8, r:8, t:8, b:8 });
+    return;
+  }
   const cv = $('#profileCanvas'), dpr = Math.min(devicePixelRatio, 2);
   const [W, H] = [cv.clientWidth, cv.clientHeight];
   cv.width = W * dpr; cv.height = H * dpr;
@@ -635,6 +1102,12 @@ function drawProfile() {
   ctx.fillText(`${Math.round(lo)} m`, pad.l - 6, H - pad.b);
   ctx.textAlign = 'center';
   for (let km = 0; km <= total / 1000; km += 2) ctx.fillText(`${km}`, x(km * 1000), H - 4);
+  // Other riders: small bricks in their frame color.
+  for (const o of ride.state?.others ?? []) {
+    const oe = pts[Math.min(pts.length - 1, Math.round(o.distance / 10))].ele;
+    ctx.fillStyle = o.color;
+    ctx.fillRect(x(o.distance) - 4, y(oe) - 10, 8, 8);
+  }
   // Rider marker: a little yellow brick.
   const ele = pts[Math.min(pts.length - 1, Math.round(pos / 10))].ele;
   ctx.fillStyle = '#f2cd37';
@@ -651,7 +1124,7 @@ const CHUNK = 64;          // cells per chunk side (5 m cells = 320 m)
 // ponytail: fixed view distance by screen width; measure fps on real devices before tuning
 const CHUNK_RADIUS = innerWidth <= 700 ? 2 : 3;
 const BIKE_SCALE = 0.037;  // one garage voxel = 37 mm
-const w3 = { T:null, group:null, chunks:new Map(), bike:null, eagle:null, dist:0, look:new THREE.Vector3(), snap:false, saved:null };
+const w3 = { T:null, group:null, chunks:new Map(), others:new Map(), bike:null, eagle:null, dist:0, look:new THREE.Vector3(), snap:false, saved:null };
 const terrainMat = new THREE.MeshLambertMaterial({ vertexColors:true, side:THREE.DoubleSide });
 
 function parseTerrain(buf, course) {
@@ -804,8 +1277,8 @@ function roadMesh(course, T) {
 }
 
 function pointAt(d) {
-  const p = ride.course.points;
-  d = Math.max(0, Math.min(p.at(-1).d, d));
+  const p = ride.course.points, len = p.at(-1).d;
+  d = ride.course.looped ? ((d % len) + len) % len : Math.max(0, Math.min(len, d));
   let i = Math.min(p.length - 2, Math.floor(d / 10));
   while (i > 0 && p[i].d > d) i--;
   while (i < p.length - 2 && p[i + 1].d < d) i++;
@@ -814,17 +1287,79 @@ function pointAt(d) {
   return new THREE.Vector3(x, p[i].ele + (p[i + 1].ele - p[i].ele) * t + 0.2, z);
 }
 
+// Smoothly follow a server distance (3 updates/s): extrapolate with speed, ease toward the truth,
+// and on a loop take the short way round when the reported distance wraps past the line.
+function follow(shown, reported, speedKmh, dt) {
+  const len = ride.course.points.at(-1).d;
+  if (ride.course.looped) {
+    if (reported - shown > len / 2) shown += len;
+    else if (shown - reported > len / 2) shown -= len;
+  }
+  shown += speedKmh / 3.6 * dt;
+  return shown + (reported - shown) * Math.min(1, dt * 2);
+}
+
+function riderModel(bike) {
+  const inner = new THREE.Group();
+  inner.add(...instanced(bikeVoxels({ ...bike, rider:true }), bike.style, false));
+  inner.position.set(-14, 9.5, 0); // wheelbase centered, tires on the road
+  const g = new THREE.Group();
+  g.add(inner);
+  g.scale.setScalar(BIKE_SCALE);
+  g.rotation.order = 'YZX';
+  return g;
+}
+
+function nameTag(text) {
+  const c = document.createElement('canvas');
+  [c.width, c.height] = [256, 56];
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(11,13,16,.75)';
+  g.fillRect(0, 0, 256, 56);
+  g.fillStyle = '#eef1f5';
+  g.font = 'bold 26px Silkscreen, monospace';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 128, 30, 244);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), transparent:true }));
+  sprite.scale.set(2.6, 0.57, 1);
+  sprite.position.y = 2.4;
+  return sprite;
+}
+
+// Other riders on the same course: their bike in their frame color, a name tag, spread across the road.
+function updateOthers(dt) {
+  const seen = new Set();
+  for (const o of ride.state?.others ?? []) {
+    seen.add(o.id);
+    let r = w3.others.get(o.id);
+    if (!r) {
+      const holder = new THREE.Group(), bike = riderModel({ ...DEFAULT_BIKE, style:current.bike.style, frame:o.color, frameType:o.frame });
+      holder.add(bike, nameTag(`${o.name}${o.country ? ' ' + flag(o.country) : ''}`));
+      w3.group.add(holder);
+      r = { holder, bike, dist:o.distance, lane:(hash(o.id % 100000, 1, 9) - 0.5) * 3 };
+      w3.others.set(o.id, r);
+    }
+    r.dist = follow(r.dist, o.distance, o.speed_kmh, dt);
+    const p = pointAt(r.dist), dir = pointAt(r.dist + 8).sub(pointAt(r.dist - 8));
+    dir.y = 0;
+    dir.normalize();
+    r.holder.position.set(p.x - dir.z * r.lane, p.y, p.z + dir.x * r.lane);
+    r.bike.rotation.set(0, Math.atan2(-dir.z, dir.x), 0);
+  }
+  for (const [id, r] of w3.others) {
+    if (seen.has(id)) continue;
+    w3.group.remove(r.holder);
+    r.holder.traverse(o => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose() });
+    w3.others.delete(id);
+  }
+}
+
 function enter3d(buf) {
   w3.T = parseTerrain(buf, ride.course);
   w3.group = new THREE.Group();
   w3.group.add(farMesh(w3.T), roadMesh(ride.course, w3.T));
-  const inner = new THREE.Group();
-  inner.add(...instanced(bikeVoxels({ ...current.bike, rider:true }), current.bike.style, false));
-  inner.position.set(-14, 9.5, 0); // wheelbase centered, tires on the road
-  w3.bike = new THREE.Group();
-  w3.bike.add(inner);
-  w3.bike.scale.setScalar(BIKE_SCALE);
-  w3.bike.rotation.order = 'YZX';
+  w3.bike = riderModel(current.bike);
   w3.group.add(w3.bike);
   // A raptor circling above the high mountain.
   const brown = new THREE.MeshLambertMaterial({ color:'#5b3a1e' });
@@ -856,6 +1391,7 @@ function exit3d() {
   w3.group.traverse(o => { o.geometry?.dispose(); if (o.material !== terrainMat) o.material?.dispose() });
   Object.assign(w3, { group:null, T:null, bike:null, eagle:null });
   w3.chunks.clear();
+  w3.others.clear();
   $('#ride').classList.remove('world3d');
   world.visible = true;
   scene.fog = w3.saved.fog;
@@ -871,8 +1407,7 @@ function exit3d() {
 function update3d(dt) {
   const s = ride.state, T = w3.T;
   // Extrapolate between server updates (~3 per second), then ease toward the server distance.
-  w3.dist += (s?.speed_kmh ?? 0) / 3.6 * dt;
-  w3.dist += ((s?.distance ?? 0) - w3.dist) * Math.min(1, dt * 2);
+  w3.dist = follow(w3.dist, s?.distance ?? 0, s?.speed_kmh ?? 0, dt);
   const p = pointAt(w3.dist), dir = pointAt(w3.dist + 8).sub(pointAt(w3.dist - 8));
   dir.y = 0;
   dir.normalize();
@@ -891,6 +1426,7 @@ function update3d(dt) {
   // Circles 60 m ahead of the rider, 15 m up, so the chase cam catches it under the stats bar.
   w3.eagle.position.set(p.x + dir.x * 60 + Math.cos(a) * 35, p.y + 15, p.z + dir.z * 60 + Math.sin(a) * 35);
   w3.eagle.rotation.set(0.3, Math.atan2(-Math.cos(a), -Math.sin(a)), 0); // nose along the circle, banked
+  updateOthers(dt);
 
   // Voxel chunks around the rider: build nearest first (one per frame), drop far ones.
   const [ci, cj] = [Math.floor((p.x - T.ox) / T.cx / CHUNK), Math.floor((p.z - T.oz) / T.cz / CHUNK)];
@@ -1029,13 +1565,118 @@ $('#mute').addEventListener('click', () => {
 });
 renderMute();
 
-$('#rideBtn').addEventListener('click', showCourses);
-$('#leave').addEventListener('click', showCourses);
-$('#coursesBack').addEventListener('click', () => openGarage(current));
-$('#back').addEventListener('click', showProfiles);
-fetch('/courses').then(r => r.ok ? r.json() : null).catch(() => null).then(list => {
-  ride.list = list;
-  if (current && !$('#garage').hidden) openGarage(current);
+// ---------- pause menu, ride summary and history ----------
+const hms = s => { s = Math.floor(s); return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` };
+
+// Totals come from the Rust ride (energy, max power, climbing); averages derive from them.
+function summary(s = ride.state ?? {}) {
+  const t = s.elapsed ?? 0;
+  return {
+    date: new Date().toISOString(),
+    kind: ride.mode,
+    name: ride.mode === 'workout' ? ride.workout.name : ride.course.name,
+    elapsed: t,
+    distance: s.ridden ?? 0, // ridden, not position: demo jumps don't count
+    climbed: s.climbed ?? 0,
+    avgPower: t ? (s.energy_kj ?? 0) * 1000 / t : 0,
+    maxPower: s.max_power ?? 0,
+    avgSpeed: t ? (s.ridden ?? 0) / t * 3.6 : 0,
+    energyKj: s.energy_kj ?? 0,
+    completed: ride.mode === 'workout' ? !!s.workout?.done : !!s.finished,
+  };
+}
+
+function renderSummary(r) {
+  const stat = (label, value, unit) => h('div', { class:'stat' }, h('small', {}, label), h('b', {}, value), h('i', {}, unit));
+  $('#menuStats').replaceChildren(
+    stat('Durée', hms(r.elapsed), ''),
+    stat('Distance', (r.distance / 1000).toFixed(2), 'km'),
+    r.kind === 'course' ? stat('Dénivelé', Math.round(r.climbed), 'm') : stat('Vitesse moy.', r.avgSpeed.toFixed(1), 'km/h'),
+    stat('Puissance moy.', Math.round(r.avgPower), 'W'),
+    stat('Puissance max', Math.round(r.maxPower), 'W'),
+    stat('Énergie', Math.round(r.energyKj), 'kJ'), // ~ kcal burnt, human efficiency cancels out the unit change
+  );
+}
+
+// mode: 'pause' (rider asked), 'end' (finish line / workout done), 'saved'.
+function openMenu(mode) {
+  const r = summary();
+  const titles = { pause:'Pause', end:ride.mode === 'workout' ? 'Séance terminée, bravo !' : 'Arrivée !', saved:'Sortie enregistrée' };
+  $('#menuTitle').textContent = titles[mode];
+  renderSummary(r);
+  $('#resume').hidden = mode !== 'pause';
+  $('#saveQuit').hidden = $('#quitNoSave').hidden = mode === 'saved';
+  $('#saveQuit').disabled = r.elapsed < 1;
+  $('#toHome').hidden = mode !== 'saved';
+  $('#menu').hidden = false;
+  if (mode === 'pause') fetch(`/pause?session=${ride.session}&on=1`).catch(() => {});
+  ($('#resume').hidden ? ($('#toHome').hidden ? $('#saveQuit') : $('#toHome')) : $('#resume')).focus();
+}
+
+function resumeRide() {
+  $('#menu').hidden = true;
+  fetch(`/pause?session=${ride.session}&on=0`).catch(() => {});
+}
+
+function checkEnd() {
+  const s = ride.state;
+  if (ride.ended || !s || !(ride.mode === 'workout' ? s.workout?.done : s.finished)) return;
+  ride.ended = true;
+  openMenu('end');
+}
+
+// ponytail: history lives in the browser profile (cap 200), move to the Rust backend with login
+function saveRide() {
+  const r = summary();
+  current.history = [r, ...(current.history ?? [])].slice(0, 200);
+  persist();
+  ride.events?.close();
+  stopAmbience();
+  openMenu('saved');
+}
+
+function renderHistory() {
+  const list = current.history ?? [];
+  if (!list.length) { $('#history').replaceChildren(); return }
+  const km = list.reduce((a, r) => a + r.distance, 0) / 1000, up = list.reduce((a, r) => a + r.climbed, 0);
+  $('#history').replaceChildren(
+    h('h2', {}, `Tes sorties · ${list.length} · ${km.toFixed(0)} km · +${Math.round(up)} m`),
+    ...list.slice(0, 5).map(r => h('div', { class:'history-row' },
+      h('strong', {}, `${new Date(r.date).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' })} · ${r.name}${r.completed ? ' ✓' : ''}`),
+      h('span', {}, `${hms(r.elapsed)} · ${(r.distance / 1000).toFixed(1)} km · ${Math.round(r.avgPower)} W moy.`))),
+  );
+}
+
+$('#resume').addEventListener('click', resumeRide);
+$('#saveQuit').addEventListener('click', saveRide);
+$('#quitNoSave').addEventListener('click', () => { if (confirm('Quitter sans enregistrer cette sortie ?')) showHome() });
+$('#toHome').addEventListener('click', () => showHome());
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || $('#ride').hidden) return;
+  if ($('#menu').hidden) openMenu('pause');
+  else if (!$('#resume').hidden) resumeRide();
+});
+
+$('#goRide').addEventListener('click', showRideMenu);
+$('#goCircuits').addEventListener('click', showCourses);
+$('#goFree').addEventListener('click', showFree);
+$('#rideMenuBack').addEventListener('click', () => showHome());
+$('#freeBack').addEventListener('click', showRideMenu);
+$('#goTrain').addEventListener('click', showTraining);
+$('#goGarage').addEventListener('click', openGarage);
+$('#switchProfile').addEventListener('click', showProfiles);
+$('#leave').addEventListener('click', () => openMenu('pause'));
+$('#coursesBack').addEventListener('click', showRideMenu);
+$('#trainingBack').addEventListener('click', () => showHome());
+$('#back').addEventListener('click', () => showHome());
+$('#autoBtn').addEventListener('click', () => {
+  ride.auto = !ride.auto;
+  $('#autoBtn').classList.toggle('on', ride.auto);
+  $('#autoBtn').setAttribute('aria-pressed', ride.auto);
+});
+Promise.all(['/courses', '/workouts'].map(u => fetch(u).then(r => r.ok ? r.json() : null).catch(() => null))).then(([list, workouts]) => {
+  [ride.list, ride.workouts] = [list, workouts ?? []];
+  if (current && !$('#home').hidden) showHome();
 });
 showProfiles();
 </script>
