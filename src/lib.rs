@@ -5,6 +5,8 @@ pub mod physics;
 pub mod protocol;
 pub mod ride;
 pub mod terrain;
+pub mod workout;
+pub mod world;
 
 use anyhow::{Context, Result, bail};
 use btleplug::api::{Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType};

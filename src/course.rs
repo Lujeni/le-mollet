@@ -25,6 +25,9 @@ pub struct Course {
     /// Road refs the route sticks to, e.g. "D 211". Kept for rebuilds.
     #[serde(default)]
     pub roads: Vec<String>,
+    /// Closed loop: riders go round and round, no finish line.
+    #[serde(default)]
+    pub looped: bool,
     pub points: Vec<Point>,
 }
 
@@ -56,8 +59,29 @@ impl Course {
         (self.ele_at(b) - self.ele_at(a)) / (b - a) * 100.0
     }
 
+    /// Average grade of each full kilometer, in %.
+    pub fn km_grades(&self) -> Vec<f32> {
+        (0..(self.length() / 1000.0) as usize)
+            .map(|k| (self.ele_at((k + 1) as f32 * 1000.0) - self.ele_at(k as f32 * 1000.0)) / 10.0)
+            .collect()
+    }
+
+    /// Steepest and most downhill grade over any `window` m stretch (10 m steps), in %.
+    pub fn grade_extremes(&self, window: f32) -> (f32, f32) {
+        let n = ((self.length() - window) / 10.0).max(0.0) as usize;
+        (0..=n)
+            .map(|i| (self.ele_at(i as f32 * 10.0 + window) - self.ele_at(i as f32 * 10.0)) / window * 100.0)
+            .fold((f32::MIN, f32::MAX), |(hi, lo), g| (hi.max(g), lo.min(g)))
+    }
+
     pub fn elevation_gain(&self) -> f32 {
         self.points.windows(2).map(|w| (w[1].ele - w[0].ele).max(0.0)).sum()
+    }
+
+    /// Flat straight road, for workouts: grade is always 0.
+    pub fn flat(length_m: f32) -> Self {
+        let p = |d| Point { d, lat: 0.0, lon: 0.0, ele: 0.0 };
+        Self { name: "Route plate".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points: vec![p(0.0), p(length_m)] }
     }
 
     pub fn load(path: &str) -> Result<Self> {
@@ -103,6 +127,7 @@ impl Course {
             attribution: "Route © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).".into(),
             waypoints: waypoints.to_vec(),
             roads: roads.to_vec(),
+            looped: false,
             points,
         })
     }
@@ -278,11 +303,14 @@ mod tests {
         let points = (0..=10)
             .map(|i| Point { d: i as f32 * 10.0, lat: 0.0, lon: 0.0, ele: i as f32 * 0.8 })
             .collect();
-        let c = Course { name: "8%".into(), attribution: String::new(), waypoints: vec![], roads: vec![], points };
+        let c = Course { name: "8%".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points };
         assert!((c.grade_at(50.0) - 8.0).abs() < 1e-3);
         assert!((c.ele_at(55.0) - 4.4).abs() < 1e-3);
         assert!((c.elevation_gain() - 8.0).abs() < 1e-3);
         assert_eq!(c.ele_at(-10.0), 0.0);
+        let (hi, lo) = c.grade_extremes(50.0);
+        assert!((hi - 8.0).abs() < 1e-3 && (lo - 8.0).abs() < 1e-3);
+        assert!(c.km_grades().is_empty()); // 100 m course: no full km
         assert_eq!(c.ele_at(1e6), 8.0);
     }
 }

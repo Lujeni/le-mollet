@@ -23,6 +23,11 @@ enum Cmd {
         /// Name substring, e.g. "kickr"
         filter: Option<String>,
     },
+    /// Print the validation figures of a course file (see courses/AGENTS.md)
+    Stats {
+        /// Course JSON file
+        course: String,
+    },
     /// (Re)build the 3D terrain of an existing course file
     Terrain {
         /// Course JSON file
@@ -62,6 +67,10 @@ enum Cmd {
 async fn main() -> anyhow::Result<()> {
     match Cli::parse().cmd {
         Cmd::Trainer { filter } => trainer_console(filter).await,
+        Cmd::Stats { course } => {
+            print_course_stats(&course, &Course::load(&course)?);
+            Ok(())
+        }
         Cmd::Terrain { course } => tokio::task::spawn_blocking(move || build_terrain(&course)).await?,
         Cmd::Serve { addr, trainer, difficulty, courses } => serve(&addr, trainer, difficulty, &courses).await,
         Cmd::Course { name, out, road, waypoints } => {
@@ -76,14 +85,7 @@ async fn main() -> anyhow::Result<()> {
             std::fs::write(&out, serde_json::to_string(&c)?)?;
             let course_path = out.clone();
             tokio::task::spawn_blocking(move || build_terrain(&course_path)).await??;
-            println!(
-                "{out}: {:.2} km, +{:.0} m, {:.0} m to {:.0} m, avg {:.1} %",
-                c.length() / 1000.0,
-                c.elevation_gain(),
-                c.points[0].ele,
-                c.points.last().unwrap().ele,
-                (c.points.last().unwrap().ele - c.points[0].ele) / c.length() * 100.0
-            );
+            print_course_stats(&out, &c);
             Ok(())
         }
     }
@@ -172,4 +174,17 @@ fn build_terrain(course_path: &str) -> anyhow::Result<()> {
     std::fs::write(&out, t.to_bytes())?;
     println!("{out}: {}x{} cells of {} m", t.w, t.h, le_mollet::terrain::CELL_M);
     Ok(())
+}
+
+/// Figures to compare with the climb's reference profile (courses/AGENTS.md checklist).
+fn print_course_stats(path: &str, c: &Course) {
+    let (first, last) = (c.points[0].ele, c.points.last().unwrap().ele);
+    let (steep, down) = c.grade_extremes(100.0);
+    let kms: Vec<String> = c.km_grades().iter().map(|g| format!("{g:.1}")).collect();
+    println!("{path}: {}", c.name);
+    println!("  length    {:.2} km", c.length() / 1000.0);
+    println!("  altitude  {first:.0} m -> {last:.0} m (net {:+.0} m, gain +{:.0} m)", last - first, c.elevation_gain());
+    println!("  average   {:.1} %", (last - first) / c.length() * 100.0);
+    println!("  100 m     max {steep:.1} %, min {down:.1} %");
+    println!("  per km    {}", kms.join(" / "));
 }

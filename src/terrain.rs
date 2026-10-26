@@ -114,7 +114,7 @@ impl Terrain {
     }
 
     /// Flatten a road strip at the course's smoothed elevation, 45° banks beside it.
-    fn carve_road(&mut self, course: &Course) {
+    pub fn carve_road(&mut self, course: &Course) {
         let cell_x = (self.east - self.west) / self.w as f64 * course.points[0].lat.to_radians().cos() * 111_320.0;
         let cell_z = (self.north - self.south) / self.h as f64 * 110_540.0;
         let mut best = vec![(f64::INFINITY, 0.0f64); self.w * self.h]; // (distance to road, road elevation)
