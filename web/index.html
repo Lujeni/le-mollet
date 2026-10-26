@@ -386,7 +386,7 @@ const FRAMES = {
 };
 // Garage options; tab:'rider' ones show under "Cycliste" in the left menu, the rest under "Vélo".
 const OPTIONS = [
-  { key:'style', label:'Style', choices:[['lego','Brique'], ['voxel','Cube']] },
+  { key:'style', label:'Style', choices:[['lego','Brique'], ['voxel','Cube'], ['lowpoly','Low-poly']] },
   { key:'frameType', label:'Cadre', choices:[['road', 'Route'], ['aero', 'Aéro'], ['gravel', 'Gravel'], ['vintage', 'Vintage']] },
   { key:'frame', label:'Couleur du cadre', colors:true },
   { key:'accent', label:'Fourche', colors:true },
@@ -715,6 +715,170 @@ function instanced(vox, style, cast) {
   return meshes;
 }
 
+// ---------- low-poly bike + rider: same side-view coordinates as the voxels (x forward, y up, z across) ----------
+// Returns a group whose userData.tick(dt, rpm) turns the cranks and moves the legs with them.
+function lowpolyBike(b) {
+  const g = new THREE.Group(), mats = new Map(), UP = new THREE.Vector3(0, 1, 0);
+  const mat = hex => mats.get(hex) ?? mats.set(hex, new THREE.MeshStandardMaterial({ color:hex, flatShading:true, roughness:0.65 })).get(hex);
+  const add = (geo, hex, parent = g) => {
+    const m = new THREE.Mesh(geo, mat(hex));
+    m.castShadow = m.receiveShadow = true;
+    parent.add(m);
+    return m;
+  };
+  const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
+  // A tapered cylinder of length 1 along y, stretched between two points by place(a, b).
+  const limb = (r0, r1, hex, sides = 6, parent = g) => {
+    const m = add(new THREE.CylinderGeometry(r1, r0, 1, sides), hex, parent);
+    m.place = (a, c) => {
+      const d = c.clone().sub(a), len = d.length();
+      m.position.copy(a).addScaledVector(d, 0.5);
+      m.scale.set(1, len, 1);
+      m.quaternion.setFromUnitVectors(UP, d.divideScalar(len || 1));
+      return m;
+    };
+    return m;
+  };
+  const tube = (a, c, r, hex, sides = 6, parent = g) => limb(r, r, hex, sides, parent).place(a, c);
+  const ball = (p, r, hex, detail = 0, parent = g) => { const m = add(new THREE.IcosahedronGeometry(r, detail), hex, parent); m.position.copy(p); return m };
+  const box = (p, [sx, sy, sz], hex, rz = 0, parent = g) => { const m = add(new THREE.BoxGeometry(sx, sy, sz), hex, parent); m.position.copy(p); m.rotation.z = rz; return m };
+
+  const F = FRAMES[b.frameType] ?? FRAMES.road;
+  const R = 9, FRONT = 28, BB = V(11, -2), SEAT = V(...F.seat), HT = V(...F.ht), HB = V(...F.hb);
+  const [BX, BY] = [HT.x + 2, HT.y + 1];
+
+  // Wheels: tire, rim (deeper with rimDepth), 16 laced spokes, hub.
+  for (const hx of [0, FRONT]) {
+    const tire = F.fatTires ? 1.1 : 0.7;
+    add(new THREE.TorusGeometry(R - tire, tire, 6, 32), TIRE).position.x = hx;
+    const depth = 0.4 + b.rimDepth * 0.55, rimR = R - tire * 2 - depth / 2;
+    add(new THREE.TorusGeometry(rimR, depth / 2, 4, 32), b.rim).position.x = hx;
+    for (let k = 0; k < 16; k++) {
+      const a = k / 16 * Math.PI * 2, z = k % 2 ? 0.5 : -0.5;
+      tube(V(hx, 0, z), V(hx + Math.cos(a) * (rimR - depth / 2), Math.sin(a) * (rimR - depth / 2)), 0.06, METAL, 3);
+    }
+    tube(V(hx, 0, -1.2), V(hx, 0, 1.2), 0.5, METAL, 8);
+    if (F.fenders) {
+      const f = add(new THREE.TorusGeometry(R + 1.2, 0.25, 3, 24, 2.4), METAL);
+      f.position.x = hx; f.rotation.z = 0.35;
+    }
+  }
+
+  // Frame.
+  const r = F.thick ? 0.75 : 0.45;
+  tube(SEAT, HT, r, b.frame); tube(BB, HB, r * 1.2, b.frame); tube(BB, SEAT, r, b.frame);
+  tube(HB, HT.clone().add(V(-0.2, 0.6)), 0.6, b.accent, 8);
+  const stays = F.lowStays ? BB.clone().lerp(SEAT, 0.6) : SEAT;
+  for (const z of [-0.9, 0.9]) {
+    tube(stays.clone().setZ(z * 0.5), V(0, 0, z), 0.28, b.frame);
+    tube(BB.clone().setZ(z * 0.6), V(0, 0, z), 0.32, b.frame);
+    tube(HB.clone().setZ(z * 0.4), V(FRONT, 0, z * 1.1), 0.35, b.accent);
+  }
+  if (F.lugs) for (const p of [SEAT, HT, HB, BB]) ball(p, 0.8, b.accent);
+  tube(SEAT, V(6, 15.6), 0.32, METAL, 8); // seatpost
+  box(V(5.8, 16.1), [5.5, 0.7, 1.7], b.saddle, -0.04);
+  tube(HT, V(BX, BY), 0.4, METAL); // stem
+  const tape = TIRE;
+  if (b.bars === 'flat') {
+    tube(V(BX, BY, -5), V(BX, BY, 5), 0.3, METAL, 8);
+    for (const z of [-4.5, 4.5]) tube(V(BX, BY, z - 1), V(BX, BY, z + 1), 0.45, tape, 8);
+  } else {
+    tube(V(BX, BY, -3), V(BX, BY, 3), 0.3, METAL, 8);
+    for (const z of [-3, 3]) {
+      const path = b.bars === 'drop' ? [[0, 0], [1.4, 0.3], [2.4, -0.8], [2.2, -2.4], [0.8, -3]] : [[0, 0], [1.5, 0], [3, 1]];
+      for (let i = 1; i < path.length; i++) tube(V(BX + path[i - 1][0], BY + path[i - 1][1], z), V(BX + path[i][0], BY + path[i][1], z), 0.35, tape, 6);
+      if (b.bars === 'drop') box(V(BX + 1.6, BY + 0.7, z), [1.4, 1, 0.8], tape, -0.3); // hoods
+    }
+    if (b.bars === 'aero') for (const z of [-1, 1]) tube(V(BX, BY + 1, z), V(BX + 5, BY + 1, z), 0.25, METAL, 6);
+  }
+
+  // Drivetrain; the crank group spins around the bottom bracket.
+  const ring = add(new THREE.TorusGeometry(3.6, 0.35, 4, 24), METAL); ring.position.copy(BB).setZ(1.4);
+  add(new THREE.CylinderGeometry(1.8, 1.8, 0.8, 12), METAL).position.set(0, 0, 1.3);
+  g.children.at(-1).rotation.x = Math.PI / 2;
+  tube(V(BB.x, BB.y + 3.6, 1.4), V(0, 1.8, 1.3), 0.12, CHAIN, 3);
+  tube(V(BB.x, BB.y - 3.6, 1.4), V(0, -1.8, 1.3), 0.12, CHAIN, 3);
+  const crank = new THREE.Group();
+  crank.position.copy(BB);
+  g.add(crank);
+  const ARM = 4.6;
+  for (const [s, z] of [[1, 2.2], [-1, -2.2]]) {
+    tube(V(0, 0, z * 0.6), V(s * ARM, 0, z), 0.35, METAL, 6, crank);
+    box(V(s * ARM, 0, z * 1.45), [1.6, 0.4, 1.4], TIRE, 0, crank);
+  }
+
+  // Rider.
+  let legs = [];
+  if (b.rider) {
+    const a = { ...DEFAULT_RIDER, jersey:b.frame, ...b }, helmet = a.helmet === 'on';
+    const HIP = V(6.2, 17.2), SH = V(17.5, 23.2), HEAD = V(20.6, 26.2), hand = z => V(BX + 1.6, BY + 1.1, z);
+    ball(HIP, 2.4, a.shorts, 1).scale.set(1.2, 1, 1.15);
+    limb(2.5, 2.2, a.jersey, 7).place(V(6.8, 18.5), SH.clone().add(V(-0.5, -0.4)));
+    for (const z of [-2.1, 2.1]) {
+      const s = SH.clone().setZ(z), h = hand(z * 1.25), elbow = s.clone().lerp(h, 0.5).add(V(-0.6, -1.6, z * 0.15));
+      ball(s, 1.25, a.jersey);
+      tube(s, s.clone().lerp(elbow, 0.55), 0.95, a.jersey, 6); // short sleeve
+      limb(0.8, 0.7, a.skin, 6).place(s.clone().lerp(elbow, 0.5), elbow);
+      limb(0.7, 0.55, a.skin, 6).place(elbow, h);
+      ball(h, 0.65, a.skin);
+    }
+    tube(V(18.6, 24), V(19.6, 25.2), 0.8, a.skin, 6); // neck
+    ball(HEAD, 1.9, a.skin, 1).scale.set(1.1, 1, 0.95);
+    if (helmet) {
+      const hm = add(new THREE.SphereGeometry(2.2, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), a.helmetColor);
+      hm.position.copy(HEAD).add(V(-0.2, 0.15)); hm.scale.set(1.3, 1, 1.05); hm.rotation.z = 0.2;
+    } else if (a.hair !== 'bald') {
+      const hr = add(new THREE.SphereGeometry(2.05, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), a.hairColor);
+      hr.position.copy(HEAD).add(V(-0.25, 0.1)); hr.scale.set(1.15, 1, 1.02); hr.rotation.z = 0.45;
+    }
+    if (a.hair === 'long') limb(1.7, 1.3, a.hairColor, 6).place(HEAD.clone().add(V(-1.2, 0.6)), V(17.4, 22.2));
+    if (a.hair === 'ponytail') { limb(0.7, 0.35, a.hairColor, 5).place(HEAD.clone().add(V(-1.8, 0.5)), V(16.2, 23.4)); ball(HEAD.clone().add(V(-1.9, 0.5)), 0.6, a.hairColor) }
+
+    // Legs: thigh + shin solved from hip to pedal (two-bone, knee forward), shoe flat on the pedal.
+    const L1 = 12.6, L2 = 11.8; // hip to ankle at the bottom of the stroke is ~23.5, keep a slight knee bend
+    legs = [[1, 1.7], [-1, -1.7]].map(([s, z]) => ({
+      s, z,
+      thigh: limb(1.55, 1.15, a.shorts, 7), shin: limb(1.05, 0.7, a.skin, 6),
+      knee: ball(V(0, 0), 1.1, a.skin), shoe: box(V(0, 0), [3.2, 1.1, 1.3], a.shoes),
+    }));
+    g.userData.legs = { HIP, L1, L2 };
+  }
+
+  let angle = -0.6;
+  const pose = () => {
+    crank.rotation.z = angle;
+    for (const l of legs) {
+      const { HIP, L1, L2 } = g.userData.legs;
+      const pedal = BB.clone().add(V(Math.cos(angle) * ARM * l.s, Math.sin(angle) * ARM * l.s, l.z * 1.6));
+      const ankle = pedal.clone().add(V(-0.4, 1.2)), hip = HIP.clone().setZ(l.z);
+      const d = Math.min(ankle.distanceTo(hip), L1 + L2 - 0.01), dir = ankle.clone().sub(hip).normalize();
+      const t = Math.acos(Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d)));
+      const knee = hip.clone().add(dir.clone().applyAxisAngle(new THREE.Vector3(0, 0, 1), t).multiplyScalar(L1));
+      l.thigh.place(hip, knee); l.shin.place(knee, ankle); l.knee.position.copy(knee);
+      l.shoe.position.copy(pedal).add(V(0.3, 0.75));
+    }
+  };
+  pose();
+  g.userData.tick = (dt, rpm) => { angle -= dt * rpm / 60 * Math.PI * 2; pose() };
+  return g;
+}
+
+// Pain cave for the low-poly garage: rubber mat, wheel-on trainer at the back, riser under the front wheel.
+function painCave() {
+  const g = new THREE.Group(), m = hex => new THREE.MeshStandardMaterial({ color:hex, flatShading:true, roughness:0.8 });
+  const add = (geo, hex, [x, y, z]) => { const o = new THREE.Mesh(geo, m(hex)); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; g.add(o); return o };
+  add(new THREE.BoxGeometry(62, 0.6, 26), '#2b2f36', [14, -9.8, 0]);
+  add(new THREE.BoxGeometry(5, 1.4, 9), '#1b1e24', [28, -8.9, 0]); // front riser
+  add(new THREE.CylinderGeometry(1.4, 1.4, 4, 10), '#1b1e24', [-1.8, -8.2, 0]).rotation.x = Math.PI / 2; // roller on the rear tire
+  for (const s of [-1, 1]) for (const dx of [-5, 5]) { // A-frame from the rear hub to the floor
+    const [a, c] = [new THREE.Vector3(0, 0, s * 1.6), new THREE.Vector3(dx, -9.4, s * 4.5)], d = c.clone().sub(a);
+    const leg = add(new THREE.CylinderGeometry(0.45, 0.45, d.length(), 6), '#3a3f47', [0, 0, 0]);
+    leg.position.copy(a).addScaledVector(d, 0.5);
+    leg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+  }
+  return g;
+}
+
 let world;
 function draw(bike) {
   if (world) {
@@ -723,9 +887,15 @@ function draw(bike) {
   }
   world = new THREE.Group();
   const b = new THREE.Group();
-  b.add(...instanced(bikeVoxels({ ...bike, rider:true }), bike.style, true));
+  if (bike.style === 'lowpoly') {
+    b.add(lowpolyBike({ ...bike, rider:true }), painCave());
+    world.userData.tick = dt => b.children[0].userData.tick(dt, 80); // steady spin in the garage
+  } else {
+    b.add(...instanced(bikeVoxels({ ...bike, rider:true }), bike.style, true));
+    world.add(...instanced(groundVoxels(bike.style), bike.style, false).map(g => (g.position.x = -14, g)));
+  }
   b.position.x = -14; // center wheelbase on origin
-  world.add(b, ...instanced(groundVoxels(bike.style), bike.style, false).map(g => (g.position.x = -14, g)));
+  world.add(b);
   scene.add(world);
 }
 
@@ -756,6 +926,7 @@ renderer.setAnimationLoop(() => {
   if (w3.group) update3d(dt);
   else {
     animateMenu(dt);
+    world?.userData.tick?.(dt);
     const target = $('#ride').hidden ? 0 : Math.atan((ride.state?.grade ?? 0) / 100) * 2;
     tilt += (target - tilt) * 0.05;
     if (world) world.rotation.z = tilt;
@@ -1520,7 +1691,8 @@ function follow(shown, reported, speedKmh, dt) {
 
 function riderModel(bike) {
   const inner = new THREE.Group();
-  inner.add(...instanced(bikeVoxels({ ...bike, rider:true }), bike.style, false));
+  if (bike.style === 'lowpoly') inner.add(lowpolyBike({ ...bike, rider:true }));
+  else inner.add(...instanced(bikeVoxels({ ...bike, rider:true }), bike.style, false));
   inner.position.set(-14, 9.5, 0); // wheelbase centered, tires on the road
   const g = new THREE.Group();
   g.add(inner);
@@ -1785,6 +1957,7 @@ function update3d(dt) {
   dir.normalize();
   w3.bike.position.copy(p);
   w3.bike.rotation.set(0, Math.atan2(-dir.z, dir.x), Math.atan((s?.grade ?? 0) / 100));
+  w3.bike.children[0].children[0]?.userData.tick?.(dt, s?.cadence ?? (s?.speed_kmh ?? 0) * 3); // low-poly legs: ~90 rpm at 30 km/h without a cadence sensor
   // Chase cam: rider in the lower third, horizon visible (60° FOV, see enter3d).
   const want = p.clone().addScaledVector(dir, -8).add(new THREE.Vector3(0, 2.5, 0));
   const look = p.clone().addScaledVector(dir, 10).add(new THREE.Vector3(0, 0.5, 0));
