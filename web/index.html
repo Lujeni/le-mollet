@@ -327,6 +327,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
       <div class="ride-head">
         <h2 id="courseName"></h2>
         <span>
+          <button class="btn" id="night" aria-label="Rouler de jour ou de nuit" hidden></button>
           <button class="btn" id="mute" aria-label="Couper ou remettre le son"></button>
           <button class="btn" id="leave">‹ Circuits</button>
         </span>
@@ -366,6 +367,8 @@ const PALETTE = {
   Bleu:'#0055bf', Violet:'#81007b', Rose:'#fc97ac', Blanc:'#f4f4f4', Gris:'#6c6e68', Noir:'#1b2a34',
 };
 const DEFAULT_BIKE = { style:'lego', frameType:'road', frame:'#c91a09', accent:'#f4f4f4', rim:'#1b2a34', saddle:'#1b2a34', rimDepth:2, bars:'drop' };
+// The rider's outfit and look live in the same profile object as the bike (no jersey: it follows the frame).
+const DEFAULT_RIDER = { shorts:'#1b2a34', shoes:'#f4f4f4', helmet:'on', helmetColor:'#f4f4f4', hair:'short', hairColor:'#3b2416', skin:'#e0ac69' };
 // Frame shapes, in garage voxels (side view): seat cluster, head tube top/bottom, and extras.
 const FRAMES = {
   road:    { seat:[7, 12], ht:[23, 13], hb:[24, 10] },
@@ -374,6 +377,7 @@ const FRAMES = {
   vintage: { seat:[7, 13], ht:[23, 13], hb:[24, 10], lugs:true, fenders:true },
 };
 const OPTIONS = [
+  { title:'Vélo' },
   { key:'style', label:'Style', choices:[['lego','Brique'], ['voxel','Cube']] },
   { key:'frameType', label:'Cadre', choices:[['road', 'Route'], ['aero', 'Aéro'], ['gravel', 'Gravel'], ['vintage', 'Vintage']] },
   { key:'frame', label:'Couleur du cadre', colors:true },
@@ -382,6 +386,15 @@ const OPTIONS = [
   { key:'rimDepth', label:'Profil des jantes', choices:[[1,'Basses'], [2,'Aéro'], [3,'Profondes']] },
   { key:'bars', label:'Cintre', choices:[['drop','Route'], ['flat','Plat'], ['aero','Chrono']] },
   { key:'saddle', label:'Selle', colors:true },
+  { title:'Cycliste' },
+  { key:'jersey', label:'Maillot', colors:true },
+  { key:'shorts', label:'Cuissard', colors:true },
+  { key:'shoes', label:'Chaussures', colors:true },
+  { key:'helmet', label:'Casque', choices:[['on', 'Oui'], ['off', 'Non']] },
+  { key:'helmetColor', label:'Couleur du casque', colors:true },
+  { key:'hair', label:'Coiffure', choices:[['short', 'Courte'], ['long', 'Longue'], ['ponytail', 'Queue'], ['bald', 'Rasé']] },
+  { key:'hairColor', label:'Cheveux', colors:{ Blond:'#e8c872', Châtain:'#8b5a2b', Brun:'#3b2416', Noir:'#1b1b1b', Roux:'#b5481d', Gris:'#b9b9b9' } },
+  { key:'skin', label:'Peau', colors:{ Porcelaine:'#f6d7b3', Clair:'#e8b98f', Doré:'#e0ac69', Mat:'#c68642', Brun:'#8d5524', Ébène:'#5c3a21', Brique:'#f2cd37' } },
 ];
 
 // ponytail: profiles live in this browser only, move to the Rust backend when login lands
@@ -491,16 +504,30 @@ function bikeVoxels(b) {
   line(bx, by, bx + 2, by - 4, 3, TIRE); put(bx + 2, by - 4, 4, TIRE); // cranks + pedals
   line(bx, by, bx - 2, by + 4, -3, TIRE); put(bx - 2, by + 4, -4, TIRE);
 
-  if (b.rider) { // seated rider on the hoods, jersey in the frame color
-    const [SKIN, SHORTS, HELMET] = ['#e0ac69', '#1b2a34', '#f4f4f4'];
-    for (let z = -2; z <= 2; z++) line(6, 17, 18, 23, z, b.frame); // torso
+  if (b.rider) { // seated rider on the hoods; older profiles fall back to a jersey in the frame color
+    const a = { ...DEFAULT_RIDER, jersey:b.frame, ...b };
+    const SKIN = a.skin, HAIR = a.hairColor, helmet = a.helmet === 'on';
+    for (let z = -2; z <= 2; z++) line(6, 17, 18, 23, z, a.jersey); // torso
+    const sleeve = [Math.round(18 + (BX - 18) * 0.35), Math.round(23 + (BY + 2 - 23) * 0.35)];
     for (const [z, px, py] of [[3, bx + 2, by - 4], [-3, bx - 2, by + 4]]) {
       const knee = z > 0 ? [14, 6] : [16, 13];
-      line(6, 17, ...knee, z, SHORTS);   // thigh
+      line(6, 17, ...knee, z, a.shorts); // thigh
       line(...knee, px, py + 1, z, SKIN); // shin
+      put(px, py + 1, z, a.shoes); put(px + 1, py + 1, z, a.shoes); // shoe on the pedal
       line(18, 23, BX, BY + 2, z, SKIN);  // arm to the hoods
+      line(18, 23, ...sleeve, z, a.jersey); // short sleeve
     }
-    for (let x = 19; x <= 22; x++) for (let y = 24; y <= 27; y++) for (let z = -1; z <= 1; z++) put(x, y, z, y >= 26 ? HELMET : SKIN);
+    // Head faces +x: x 19..22, y 24..27. Helmet covers the top two rows, hair shows below it or on top without.
+    for (let x = 19; x <= 22; x++) for (let y = 24; y <= 27; y++) for (let z = -1; z <= 1; z++)
+      put(x, y, z, helmet && y >= 26 ? a.helmetColor : SKIN);
+    const hair = [];
+    if (!helmet && a.hair !== 'bald') {
+      for (let x = 19; x <= 22; x++) hair.push([x, 27]);
+      hair.push([19, 26], [19, 25]);
+    }
+    if (a.hair === 'long') for (let y = 21; y <= (helmet ? 25 : 27); y++) hair.push([18, y]);
+    if (a.hair === 'ponytail') for (const [x, y] of [[18, 25], [17, 24], [17, 23], [16, 22]]) put(x, y, 0, HAIR);
+    for (const [x, y] of hair) for (let z = -1; z <= 1; z++) put(x, y, z, HAIR);
   }
   return v;
 }
@@ -530,10 +557,118 @@ sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left:-40, right:40, top:40, bottom:-40, near:1, far:150 });
 scene.add(sun);
 
+// Day and night skies, shared by the menu backdrop and the 3D ride.
+const SKY = {
+  day: { bg:'#8ec5ee', fog:'#8ec5ee', hemi:['#ffffff', '#3d5a2a', 1.6], sun:['#fff4dd', 2.4] },
+  night: { bg:'#070b1f', fog:'#0b1233', hemi:['#6f86c9', '#0b0f1a', 0.6], sun:['#9fb4ff', 0.7] },
+};
+function setSky(k, near, far) {
+  const s = SKY[k];
+  scene.background = new THREE.Color(s.bg);
+  scene.fog = new THREE.Fog(s.fog, near, far);
+  hemi.color.set(s.hemi[0]); hemi.groundColor.set(s.hemi[1]); hemi.intensity = s.hemi[2];
+  sun.color.set(s.sun[0]); sun.intensity = s.sun[1];
+}
+function starField(n, radius) { // upper hemisphere of points, unaffected by fog
+  const pos = [];
+  for (let i = 0; i < n; i++) {
+    const [u, v] = [Math.random() * Math.PI * 2, 0.05 + Math.random() * 0.9];
+    const r = Math.sqrt(1 - v * v);
+    pos.push(Math.cos(u) * r * radius, v * radius, Math.sin(u) * r * radius);
+  }
+  const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  return new THREE.Points(g, new THREE.PointsMaterial({ color:'#ffffff', size:2, sizeAttenuation:false, fog:false }));
+}
+// ---------- Menu backdrop: gradient sky, two voxel mountain ranges, sun and clouds by day, moon and stars by night ----------
+const menuBg = new THREE.Group();
+scene.add(menuBg);
+const MENU = {
+  day: { top:'#2f7fd0', horizon:'#d3ecf8', near:'#4f7a52', far:'#8fb0c4', ground:'#b3cf8f' },
+  night: { top:'#02040f', horizon:'#26306a', near:'#1c2a3a', far:'#2c3a5e', ground:'#24304f' },
+};
+const skyTex = {};
+function gradient(k) { // vertical sky gradient as a 2x256 texture
+  if (skyTex[k]) return skyTex[k];
+  const cv = Object.assign(document.createElement('canvas'), { width:2, height:256 }), ctx = cv.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, MENU[k].top); g.addColorStop(0.75, MENU[k].horizon); g.addColorStop(1, MENU[k].horizon);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 2, 256);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return (skyTex[k] = t);
+}
+const unitBox = new THREE.BoxGeometry(1, 1, 1);
+// A ring of voxel columns; height is a sum of sines so peaks look irregular but stay seamless around the circle.
+function range(radius, cell, base, amp, seed, mat) {
+  const n = Math.round(Math.PI * 2 * radius / cell), cols = [];
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2;
+    const hgt = base + amp * Math.max(0, Math.sin(a * 3 + seed) * 0.5 + Math.sin(a * 7 + seed * 2) * 0.3 + Math.sin(a * 13 + seed * 3) * 0.2 + 0.25);
+    for (let y = 0; y < hgt; y += cell) cols.push([Math.cos(a) * radius, y + cell / 2, Math.sin(a) * radius, y + cell >= hgt && hgt > base + amp * 0.55]);
+  }
+  const rock = new THREE.InstancedMesh(unitBox, mat, cols.length), snow = new THREE.InstancedMesh(unitBox, new THREE.MeshLambertMaterial({ color:'#f4f7fb', fog:false }), cols.length);
+  const m = new THREE.Matrix4();
+  let [r, s] = [0, 0];
+  for (const [x, y, z, cap] of cols) {
+    m.makeScale(cell, cell, cell).setPosition(x, y - 12, z);
+    if (cap) snow.setMatrixAt(s++, m); else rock.setMatrixAt(r++, m);
+  }
+  rock.count = r; snow.count = s;
+  menuBg.add(rock, snow);
+  return mat;
+}
+const nearMat = range(230, 6, 6, 26, 1.3, new THREE.MeshLambertMaterial({ fog:false }));
+const farMat = range(340, 8, 12, 38, 4.1, new THREE.MeshLambertMaterial({ fog:false }));
+// Ground the ranges stand on, so nothing floats.
+const groundMat = new THREE.MeshLambertMaterial({ fog:false });
+const ground = new THREE.Mesh(new THREE.CircleGeometry(420, 48), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -12; // just under the garage plate (voxel y = -10)
+menuBg.add(ground);
+const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(16, 32), new THREE.MeshBasicMaterial({ color:'#fff6c9', fog:false }));
+const moonDisc = new THREE.Mesh(new THREE.CircleGeometry(11, 32), new THREE.MeshBasicMaterial({ color:'#f4f1de', fog:false }));
+for (const d of [sunDisc, moonDisc]) { d.position.set(-230, 62, -300); d.lookAt(0, 0, 0); menuBg.add(d) }
+const menuStars = starField(900, 450);
+menuBg.add(menuStars);
+// Blocky clouds drifting around the plate.
+const clouds = new THREE.Group(), cloudMat = new THREE.MeshLambertMaterial({ color:'#ffffff', fog:false });
+for (let c = 0; c < 9; c++) {
+  const cl = new THREE.Group(), a = c / 9 * Math.PI * 2;
+  for (let b = 0; b < 6; b++) {
+    const box = new THREE.Mesh(unitBox, cloudMat);
+    box.scale.set(14 + (b * 7) % 12, 6 + (b % 2) * 4, 10 + (b * 5) % 8);
+    box.position.set((b - 2.5) * 9, (b % 3) * 3, ((b * 3) % 5 - 2) * 4);
+    cl.add(box);
+  }
+  cl.position.set(Math.cos(a) * (270 + c * 6), 44 + (c % 3) * 6, Math.sin(a) * (270 + c * 6));
+  cl.lookAt(0, cl.position.y, 0);
+  clouds.add(cl);
+}
+menuBg.add(clouds);
+function animateMenu(dt) {
+  clouds.rotation.y += dt * 0.01;
+  if (menuStars.visible) menuStars.material.opacity = 0.75 + Math.sin(clock.elapsedTime * 1.7) * 0.25;
+}
+menuStars.material.transparent = true;
+
+// Menu backdrop follows the page theme.
+function menuSky() {
+  const dark = document.documentElement.dataset.theme !== 'light', k = dark ? 'night' : 'day';
+  setSky(k, 80, 160);
+  scene.background = gradient(k);
+  scene.fog.color.set(MENU[k].horizon);
+  if (dark) { hemi.intensity = 1.1; sun.intensity = 1.3 } // brighter moon: the garage bike must stay readable
+  nearMat.color.set(MENU[k].near); farMat.color.set(MENU[k].far); groundMat.color.set(MENU[k].ground);
+  cloudMat.color.set(dark ? '#3a4470' : '#ffffff');
+  menuStars.visible = moonDisc.visible = dark;
+  sunDisc.visible = !dark;
+  menuBg.visible = true;
+}
+
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 500);
-camera.position.set(30, 16, 66);
+camera.position.set(36, 22, 84); // frames bike + rider (head ~27 voxels up)
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(0, 2, 0);
+controls.target.set(0, 7, 0);
 controls.enableDamping = true;
 controls.autoRotateSpeed = 1.2;
 controls.minDistance = 20;
@@ -581,7 +716,7 @@ function draw(bike) {
   }
   world = new THREE.Group();
   const b = new THREE.Group();
-  b.add(...instanced(bikeVoxels(bike), bike.style, true));
+  b.add(...instanced(bikeVoxels({ ...bike, rider:true }), bike.style, true));
   b.position.x = -14; // center wheelbase on origin
   world.add(b, ...instanced(groundVoxels(bike.style), bike.style, false).map(g => (g.position.x = -14, g)));
   scene.add(world);
@@ -611,6 +746,7 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.1);
   if (w3.group) update3d(dt);
   else {
+    animateMenu(dt);
     const target = $('#ride').hidden ? 0 : Math.atan((ride.state?.grade ?? 0) / 100) * 2;
     tilt += (target - tilt) * 0.05;
     if (world) world.rotation.z = tilt;
@@ -765,11 +901,11 @@ function openGarage() {
 }
 
 function renderOptions() {
-  const b = current.bike;
-  $('#options').replaceChildren(...OPTIONS.map(o => h('fieldset', { class:'opt' },
+  const b = { ...DEFAULT_RIDER, jersey:current.bike.frame, ...current.bike };
+  $('#options').replaceChildren(...OPTIONS.map(o => o.title ? h('h2', {}, o.title) : h('fieldset', { class:'opt' },
     h('legend', {}, o.label),
     o.colors
-      ? h('div', { class:'swatches' }, ...Object.entries(PALETTE).map(([name, hex]) => h('button', {
+      ? h('div', { class:'swatches' }, ...Object.entries(o.colors === true ? PALETTE : o.colors).map(([name, hex]) => h('button', {
           class: 'sw' + (b[o.key] === hex ? ' on' : ''), style:`background:${hex}`,
           title:name, 'aria-label':`${o.label} : ${name}`, 'aria-pressed': b[o.key] === hex,
           onclick: () => set(o.key, hex),
@@ -1441,10 +1577,10 @@ function enter3d(buf) {
   w3.group.add(w3.eagle);
   scene.add(w3.group);
   world.visible = false;
-  w3.saved = { fog:scene.fog, near:camera.near, far:camera.far, fov:camera.fov, bg:scene.background,
-    light:[hemi.color.clone(), hemi.groundColor.clone(), hemi.intensity, sun.color.clone(), sun.intensity] };
-  scene.fog = new THREE.Fog('#8ec5ee', 900, 5000);
+  w3.saved = { near:camera.near, far:camera.far, fov:camera.fov };
+  menuBg.visible = false;
   if (ride.mode === 'zombie') halloween();
+  nightSky();
   camera.near = 0.3; camera.far = 12000; camera.fov = 60;
   sun.castShadow = false;
   controls.enabled = false;
@@ -1458,23 +1594,60 @@ function exit3d() {
   if (!w3.group) return;
   scene.remove(w3.group);
   w3.group.traverse(o => { o.geometry?.dispose(); if (o.material !== terrainMat) o.material?.dispose() });
-  Object.assign(w3, { group:null, T:null, bike:null, eagle:null, horde:null, bonus:null, mirror:null });
+  Object.assign(w3, { group:null, T:null, bike:null, eagle:null, horde:null, bonus:null, mirror:null, sky:null, lamp:null });
   $('#mirror').hidden = true;
+  renderNight();
   w3.chunks.clear();
   w3.others.clear();
   $('#ride').classList.remove('world3d');
   world.visible = true;
-  scene.fog = w3.saved.fog;
-  scene.background = w3.saved.bg;
-  [hemi.color, hemi.groundColor, hemi.intensity, sun.color, sun.intensity] = w3.saved.light;
+  menuSky();
   camera.near = w3.saved.near; camera.far = w3.saved.far; camera.fov = w3.saved.fov;
-  camera.position.set(30, 16, 66);
-  controls.target.set(0, 2, 0);
+  camera.position.set(36, 22, 84); // frames bike + rider (head ~27 voxels up)
+  controls.target.set(0, 7, 0);
   camera.lookAt(controls.target);
   sun.castShadow = true;
   controls.enabled = true;
   resize();
 }
+
+// ---------- Night ride: stars and moon around the camera, moonlight, a headlamp on the bike ----------
+let night = (() => { try { return localStorage.getItem('lemollet.night') === '1' } catch { return false } })();
+
+function nightSky() {
+  w3.sky = new THREE.Group();
+  w3.sky.add(starField(1500, 5000)); // follows the camera so it never gets closer
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(140, 16, 12), new THREE.MeshBasicMaterial({ color:'#f4f1de', fog:false }));
+  moon.position.set(-2600, 2400, -3000);
+  w3.sky.add(moon);
+  w3.group.add(w3.sky);
+  // Headlamp: the bike model faces +x.
+  w3.lamp = new THREE.SpotLight('#fff3d0', 900, 140, 0.45, 0.8);
+  w3.lamp.position.set(0.8, 1.2, 0);
+  w3.lamp.target.position.set(40, 0.5, 0);
+  w3.bike.add(w3.lamp, w3.lamp.target);
+  setNight();
+}
+
+function setNight() {
+  if (!w3.sky) return renderNight();
+  w3.sky.visible = w3.lamp.visible = night && ride.mode !== 'zombie';
+  if (ride.mode === 'zombie') return renderNight();
+  if (night) setSky('night', 60, 1500);
+  else setSky('day', 900, 5000);
+  renderNight();
+}
+
+function renderNight() {
+  $('#night').hidden = !w3.sky || ride.mode === 'zombie';
+  $('#night').textContent = night ? '☀ jour' : '☾ nuit';
+  $('#night').setAttribute('aria-pressed', night);
+}
+$('#night').addEventListener('click', () => {
+  night = !night;
+  try { localStorage.setItem('lemollet.night', night ? '1' : '0') } catch {}
+  setNight();
+});
 
 // ---------- Zombie Halloween in 3D: dusk, pumpkins along the road, the horde, the next bonus ----------
 const ZOMBIE_MAX = 30;
@@ -1605,7 +1778,8 @@ function update3d(dt) {
   camera.lookAt(w3.look);
   w3.snap = false;
   const a = (w3.eagleAngle = (w3.eagleAngle ?? 0) + dt * 0.25);
-  w3.eagle.visible = (s?.ele ?? 0) > 1400;
+  w3.eagle.visible = (s?.ele ?? 0) > 1400 && !w3.sky?.visible;
+  if (w3.sky?.visible) w3.sky.position.copy(camera.position);
   // Circles 60 m ahead of the rider, 15 m up, so the chase cam catches it under the stats bar.
   w3.eagle.position.set(p.x + dir.x * 60 + Math.cos(a) * 35, p.y + 15, p.z + dir.z * 60 + Math.sin(a) * 35);
   w3.eagle.rotation.set(0.3, Math.atan2(-Math.cos(a), -Math.sin(a)), 0); // nose along the circle, banked
@@ -1711,11 +1885,12 @@ function mixAmbience() {
       if (kind) near[kind] = Math.min(near[kind], Math.hypot(dc * T.cx, dr * T.cz));
     }
   }
+  const day = w3.sky?.visible ? 0 : 1; // night ride: birds and herds go quiet, streams and wind stay
   const set = (k, v) => amb.gains[k].gain.setTargetAtTime(v, t, 1.5);
-  set('forest', forest * (1 - high) * 0.9);
-  set('meadow', grass * (1 - high) * 0.6);
+  set('forest', forest * (1 - high) * 0.9 * day);
+  set('meadow', grass * (1 - high) * 0.6 * day);
   set('stream', water * 0.8);
-  set('cowbells', near.cow < 200 ? (1 - near.cow / 200) ** 1.5 * 0.9 : 0);
+  set('cowbells', day && near.cow < 200 ? (1 - near.cow / 200) ** 1.5 * 0.9 : 0);
   set('wind', 0.06 + high * 0.25 + Math.min(1, speed / 60) ** 2 * 0.5);
   amb.windFilter.frequency.setTargetAtTime(300 + speed * 12, t, 1);
 
@@ -1730,14 +1905,15 @@ function mixAmbience() {
     src.start();
     amb.next[name] = t + min + Math.random() * (max - min);
   };
-  maybe('moo', near.cow < 120, 0.7 * (1 - near.cow / 120), 12, 35);
-  maybe('marmot', near.marmot < 180, 0.8 * (1 - near.marmot / 180), 10, 30);
+  maybe('moo', day && near.cow < 120, 0.7 * (1 - near.cow / 120), 12, 35);
+  maybe('marmot', day && near.marmot < 180, 0.8 * (1 - near.marmot / 180), 10, 30);
   maybe('deer', near.deer < 150, 0.6 * (1 - near.deer / 150), 20, 50);
-  maybe('woodpecker', forest > 0.4 && high < 0.5, 0.5, 15, 45);
+  maybe('woodpecker', day && forest > 0.4 && high < 0.5, 0.5, 15, 45);
   maybe('buzzard', w3.eagle?.visible, 0.35, 25, 60);
 }
 
 function renderTheme() {
+  if (!w3.group) menuSky();
   const light = document.documentElement.dataset.theme === 'light';
   $('#theme').textContent = light ? '☾ sombre' : '☀ clair';
   $('#theme').setAttribute('aria-pressed', light);
@@ -1749,6 +1925,7 @@ $('#theme').addEventListener('click', () => {
   renderTheme();
 });
 renderTheme();
+
 
 function renderMute() {
   $('#mute').textContent = amb.muted ? '♪ off' : '♪ on';
