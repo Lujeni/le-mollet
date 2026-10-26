@@ -130,8 +130,6 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 #free .panel { width:min(720px, 100%); max-height:100%; overflow:auto }
 .tiles.two { grid-template-columns:repeat(2, 1fr); margin-bottom:14px }
 .tile.free { background:#36aebf }
-.world-new { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px }
-.world-new select { width:auto; padding:6px 8px }
 .online { color:#5d9b3a; font-weight:600 }
 
 /* Training */
@@ -275,7 +273,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         </button>
         <button class="tile free" id="goFree">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M3 1h6v1h1v1h1v6h-1v1H9v1H3v-1H2V9H1V3h1V2h1zM3 3v6h6V3zM8 0h2v1H8zM10 1h1v2h-1z"/></svg>
-          <b>Free</b><small id="goFreeSub">Boucles aléatoires, ouvertes à tous</small>
+          <b>Free</b><small id="goFreeSub">Boucles ouvertes à tous</small>
         </button>
       </div>
       <p class="muted" id="modeHint"></p>
@@ -298,12 +296,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <h1>Free</h1>
         <button class="btn" id="freeBack">‹ Rouler</button>
       </div>
-      <p class="muted">Des boucles générées au hasard, ouvertes à tous : chaque cycliste connecté voit les autres rouler.</p>
-      <form class="world-new" id="worldNew">
-        <select name="length" aria-label="Longueur de la boucle"><option value="5">5 km</option><option value="10" selected>10 km</option><option value="20">20 km</option></select>
-        <select name="relief" aria-label="Relief"><option value="flat">Plat</option><option value="hills" selected>Vallonné</option><option value="mountains">Montagneux</option></select>
-        <button class="btn primary">Générer une boucle</button>
-      </form>
+      <p class="muted">Des boucles ouvertes à tous : chaque cycliste connecté voit les autres rouler.</p>
       <div id="worldList" class="list"></div>
     </div>
   </main>
@@ -868,20 +861,6 @@ async function renderWorlds() {
     return card;
   }));
 }
-
-$('#worldNew').addEventListener('submit', async e => {
-  e.preventDefault();
-  const f = new FormData(e.target), btn = e.target.querySelector('button');
-  btn.disabled = true;
-  btn.textContent = 'Génération…';
-  try {
-    const r = await fetch(`/worlds/new?length=${f.get('length')}&relief=${f.get('relief')}`);
-    if (r.ok) await openRide((await r.json()).id, true);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Générer une boucle';
-  }
-});
 
 // Souvenir-magnet postcard: sky, a far ridge, the climb's real profile as the mountain, snow on top.
 function magnetArt(cv, prof, t) {
