@@ -10,44 +10,63 @@ A multiplayer, online cycling and running physical training program. Open source
 - **Highly modular.** Trainers, courses, terrain and UI are independent pieces you can swap or extend.
 - **Just a browser.** No heavy client to install: the UI runs in any modern web browser.
 
-## Trainer engine (BLE)
+## Ride
 
-Supports FTMS trainers and Wahoo KICKR (proprietary protocol fallback).
+- **Real climbs, in real relief.** Legendary climbs rebuilt from OpenStreetMap roads and IGN elevation data,
+  validated against their official profiles: Alpe d'Huez, Mont Ventoux from Bédoin. Pick them as souvenir
+  fridge magnets.
+- **Free roam.** Random loops generated on demand (5, 10 or 20 km; flat, rolling or mountainous), and a
+  "Boucle du jour" that is the same for everyone today. Ride lap after lap, no finish line.
+- **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
+  bike. Self-host it and invite your club on your LAN.
+- **You feel the road.** Speed comes from your watts, weight, the grade, rolling resistance and thinner air up
+  high. A smart trainer gets the slope under your wheels, scaled by a difficulty setting.
+- **No trainer? Demo mode.** Ride with a power slider, jump anywhere on the profile to explore a climb.
 
-```sh
-cargo run -- trainer kickr                   # connect, print power/cadence/speed
-# then type: erg 200 | grade 5 | quit
-LE_MOLLET_RAW=1 cargo run -- trainer kickr   # also dump raw BLE frames
-```
+## Train
 
-## Web UI: profiles, garage, courses
+- **Structured sessions** calibrated on your FTP: recovery, endurance, sweet spot, threshold, VO2max.
+- **ERG mode**: the trainer holds each target power for you. In demo mode, follow the target or turn on autopilot.
+- **Interval chart** colored by training zone, with time left in the interval and in the session.
 
-```sh
-cargo run -- serve                         # demo mode: pick a course, ride with a power slider
-cargo run -- serve --trainer kickr         # ride for real: power from the trainer, grade sent to it
-cargo run -- serve --addr 0.0.0.0:8080     # expose on the LAN
-```
+## Your rider
 
-Open http://127.0.0.1:8080 and pick a profile. The home screen leads to:
+- **Profiles** without an account: name, weight, FTP, optional nationality. Each profile has a unique id; the
+  name is just a label.
+- **Garage**: frame shape (road, aero, gravel, vintage), colors, rims, handlebars, in Lego-like bricks or
+  Minecraft-like cubes.
+- **Ride history**: pause anytime, then save or drop the ride. Duration, distance, climbing, average and max
+  power and energy are kept and listed on the home screen.
 
-- **Rouler**: two tiles. **Circuits**: the climbs, shown as fridge magnets on a fridge door. **Free**, the open world: procedurally generated loops (5, 10 or 20 km; flat, rolling or mountainous) built by the Rust core (`src/world.rs`), with a "Boucle du jour" always open. Everyone connected to the server rides together: other riders show up in 3D with their name and flag, on every course.
-- **Training**: structured sessions in % of FTP (recovery, endurance, sweet spot, threshold, VO2max). With a trainer, it holds each target in ERG mode; in demo mode, follow the target with the slider or turn on "Auto".
-- **Garage**: customize the bike: frame shape (road, aero, gravel, vintage), colors, rims, bars, brick or cube style. Other riders see your frame.
-- **Profil**: name, weight, FTP, optional nationality, delete. Each profile has a UUID v4 id (stable key for a future backend); the name is only a label and may be shared.
+## The world
 
-During a ride or a workout, "‖ Pause" (or Escape) freezes the ride and opens a menu: resume, finish and save, or quit without saving. It also opens by itself at the finish line or when the workout ends. Saved rides (duration, ridden distance, climbing, average and max power, energy) are kept in the profile and listed on the home screen.
-Rides play a nature ambience that follows the terrain (forest birds, meadow birds, streams, wind with altitude and speed). Wildlife is placed from land cover and altitude (cows in alpine pastures, marmots and chamois up high, deer at forest edges, a raptor over the summits) and calls when you ride by. Sound sources and licences: [web/audio/CREDITS.md](web/audio/CREDITS.md).
+- **Voxel 3D** built from real terrain: forests, rock, lakes, villages, with the road carved into the mountain.
+- **Wildlife** placed by land cover and altitude: cows in alpine pastures, marmots and chamois up high, deer at
+  forest edges, a raptor circling over the summits.
+- **Nature ambience** that follows the terrain: forest and meadow birds, streams, cowbells, wind growing with
+  altitude and speed.
 
-The page (`web/index.html`) and sounds are embedded in the binary at build time. Profiles are stored in the browser (no login yet).
+## Trainers
 
-## Real-world courses
+Bluetooth smart trainers speaking FTMS (most recent trainers), with the Wahoo proprietary protocol as a fallback
+for older KICKRs.
 
-Built from OpenStreetMap roads and IGN elevation, in `courses/`: Alpe d'Huez, Mont Ventoux (Bédoin).
-To add one, follow [courses/AGENTS.md](courses/AGENTS.md) (`cargo run -- stats courses/<id>.json` prints the validation figures). Method and recipes: [docs/courses.md](docs/courses.md).
+Tested hardware:
 
-The 3D voxel terrain files are not committed. Build them once (needs network, ~1 min each):
+| Trainer | Protocol | Connection | Speed | Power | Grade / ERG control |
+|---|---|---|---|---|---|
+| Wahoo KICKR CORE | FTMS | ✅ | ✅ | ⚠️ only 0 W seen so far, at low speed | ⏳ not verified yet |
+| Older Wahoo KICKR (no FTMS) | Wahoo proprietary | ⏳ implemented, untested | ⏳ | ⏳ | ⏳ |
 
-```sh
-cargo run -- terrain courses/alpe-dhuez.json
-cargo run -- terrain courses/ventoux-bedoin.json
-```
+✅ verified on the device · ⚠️ partial · ⏳ not tested yet. Tested another trainer? Add a row.
+
+## Docs
+
+- [Getting started](docs/getting-started.md): run it locally, connect a trainer, play on the LAN, develop.
+- [Adding a course](courses/AGENTS.md): turn a real climb into a ridable course.
+- [How courses are built](docs/courses.md): data sources, smoothing, validation, recipes.
+
+## Credits
+
+Road data © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).
+Sounds from Wikimedia Commons and Freesound, public domain and CC0: see [web/audio/CREDITS.md](web/audio/CREDITS.md).
