@@ -2,7 +2,7 @@
 
 # le-mollet
 
-A multiplayer, online cycling and running physical training program. Open source, core in Rust.
+A multiplayer, online indoor cycling training program. Open source, core in Rust.
 
 - **Free forever.** No subscription, no paywall, ever.
 - **No account required.** Want to just ride? Open it and train, no sign-up.
