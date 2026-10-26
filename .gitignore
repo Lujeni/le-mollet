@@ -1,3 +1,9 @@
 /target
 # rebuilt by `le-mollet terrain courses/<id>.json`
 courses/*.terrain.bin
+# fetched by `le-mollet buildings courses/<id>.city.json`
+courses/*.buildings.bin
+# fetched by `le-mollet district courses/<id>.city.json --bbox ...`
+courses/*.district/
+# fetched by `le-mollet ortho courses/<id>.json`
+courses/*.ortho/

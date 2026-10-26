@@ -5,6 +5,9 @@
 //!   GET /worlds/new?length=<5|10|20>&relief=<flat|hills|mountains>   generate an open world, {id}
 //!   GET /course?id=<id>                        full course JSON (climb or world)
 //!   GET /terrain?id=<id>                       binary voxel terrain (see le_mollet::terrain)
+//!   GET /buildings?id=<id>                     open city: binary real buildings (see le_mollet::buildings)
+//!   GET /district?id=<id>&f=<file>             open city: realistic district files (see le_mollet::district)
+//!   GET /ortho?id=<id>&f=<file>                aerial photo tiles for the realistic render (see le_mollet::ortho)
 //!   GET /workouts                              built-in training sessions
 //!   GET /turn?session=<n>&dir=<left|straight|right>   open city: turn to take at the next junction
 //!   GET /events?course=<id>&mass=<kg>&session=<n>[&name=&color=&frame=&country=]
@@ -16,6 +19,7 @@
 //!   GET /seek?session=<n>&d=<m>                demo mode: teleport the rider along the course
 //!   GET /pause?session=<n>&on=<0|1>            freeze or resume a ride (menu open)
 //!   GET /audio/<name>.mp3                      nature ambience loops (web/audio/CREDITS.md)
+//!   GET /textures/<name>                       CC0 PBR textures and sky (web/textures/CREDITS.md)
 //!
 //! With a trainer, power comes from it and the latest ride drives its grade.
 //! Without, each browser tab rides on its own with the power slider (demo mode).
@@ -48,7 +52,26 @@ const AUDIO: &[(&str, &[u8])] = &[
     ("/audio/buzzard.mp3", include_bytes!("../web/audio/buzzard.mp3")),
     ("/audio/deer.mp3", include_bytes!("../web/audio/deer.mp3")),
 ];
+/// CC0 PBR textures and sky for realistic districts, see web/textures/CREDITS.md.
+const TEXTURES: &[(&str, &[u8])] = &[
+    ("/textures/sky.hdr", include_bytes!("../web/textures/sky.hdr")),
+    ("/textures/stone_color.jpg", include_bytes!("../web/textures/stone_color.jpg")),
+    ("/textures/stone_normal.jpg", include_bytes!("../web/textures/stone_normal.jpg")),
+    ("/textures/stone_rough.jpg", include_bytes!("../web/textures/stone_rough.jpg")),
+    ("/textures/road_color.jpg", include_bytes!("../web/textures/road_color.jpg")),
+    ("/textures/road_normal.jpg", include_bytes!("../web/textures/road_normal.jpg")),
+    ("/textures/road_rough.jpg", include_bytes!("../web/textures/road_rough.jpg")),
+    ("/textures/sidewalk_color.jpg", include_bytes!("../web/textures/sidewalk_color.jpg")),
+    ("/textures/sidewalk_normal.jpg", include_bytes!("../web/textures/sidewalk_normal.jpg")),
+    ("/textures/sidewalk_rough.jpg", include_bytes!("../web/textures/sidewalk_rough.jpg")),
+    ("/textures/setts_color.jpg", include_bytes!("../web/textures/setts_color.jpg")),
+    ("/textures/setts_normal.jpg", include_bytes!("../web/textures/setts_normal.jpg")),
+    ("/textures/setts_rough.jpg", include_bytes!("../web/textures/setts_rough.jpg")),
+    ("/textures/zinc_normal.jpg", include_bytes!("../web/textures/zinc_normal.jpg")),
+    ("/textures/zinc_rough.jpg", include_bytes!("../web/textures/zinc_rough.jpg")),
+];
 const DT: f32 = 0.1;
+const DISTRICT_FILES: [&str; 7] = ["meta.json", "dem.bin", "ortho.jpg", "trees.json", "buildings.bin", "osm.json", "surface.bin"];
 // ponytail: worlds live in memory, oldest empty ones dropped past this; persist them if people want to keep maps
 const MAX_WORLDS: usize = 12;
 
@@ -76,20 +99,48 @@ struct Track {
     terrain: Option<Vec<u8>>,
     relief: Option<Relief>, // Some = open world
     city: Option<City>,
+    buildings: Option<Vec<u8>>,
+    /// Realistic district files by name (meta.json, dem.bin, ortho.jpg, trees.json, buildings.bin).
+    district: HashMap<&'static str, Vec<u8>>,
+    /// Aerial photo files by name (meta.json, overview.jpg, <i>_<j>.jpg).
+    ortho: HashMap<String, Vec<u8>>,
     riders: Mutex<HashMap<u64, Presence>>,
 }
 
 impl Track {
     fn new(id: String, course: Course, terrain: Option<Vec<u8>>, relief: Option<Relief>) -> anyhow::Result<Self> {
         let json = serde_json::to_string(&course)?;
-        Ok(Self { id, course, json, terrain, relief, city: None, riders: Mutex::new(HashMap::new()) })
+        Ok(Self { id, course, json, terrain, relief, city: None, buildings: None, district: HashMap::new(), ortho: HashMap::new(), riders: Mutex::new(HashMap::new()) })
     }
 
     /// An open city: its course is only the first street, each rider grows their own route.
-    fn city(id: String, city: City, terrain: Option<Vec<u8>>) -> anyhow::Result<Self> {
+    fn city(id: String, city: City, terrain: Option<Vec<u8>>, buildings: Option<Vec<u8>>) -> anyhow::Result<Self> {
         let mut t = Self::new(id, Route::start(&city).course, terrain, None)?;
-        t.city = Some(city);
+        (t.city, t.buildings) = (Some(city), buildings);
         Ok(t)
+    }
+
+    /// Aerial photo tiles and real buildings next to a course or city file, when they were fetched.
+    fn with_extras(mut self, path: &str) -> Self {
+        for e in std::fs::read_dir(crate::ortho_dir(path)).into_iter().flatten().flatten() {
+            if let (Some(name), Ok(b)) = (e.file_name().to_str().map(str::to_owned), std::fs::read(e.path())) {
+                self.ortho.insert(name, b);
+            }
+        }
+        if !self.ortho.contains_key("meta.json") { self.ortho.clear() }
+        if self.buildings.is_none() { self.buildings = std::fs::read(crate::buildings_path(path)).ok() }
+        self
+    }
+
+    /// Realistic district files from `dir`, all or nothing.
+    fn with_district(mut self, dir: &str) -> Self {
+        for f in DISTRICT_FILES {
+            if let Ok(b) = std::fs::read(format!("{dir}/{f}")) {
+                self.district.insert(f, b);
+            }
+        }
+        if self.district.len() < DISTRICT_FILES.len() { self.district.clear() }
+        self
     }
 
     fn summary(&self) -> serde_json::Value {
@@ -100,7 +151,7 @@ impl Track {
             "id": self.id, "name": c.name, "length": c.length(), "gain": c.elevation_gain().round(), "profile": profile,
             "terrain": self.terrain.is_some(), "looped": c.looped,
             "relief": self.relief.map(Relief::label), "riders": self.riders.lock().unwrap().len(),
-            "city": self.city.as_ref().map(|c| c.streets.len()),
+            "city": self.city.as_ref().map(|c| c.streets.len()), "buildings": self.buildings.is_some(), "district": !self.district.is_empty(), "ortho": !self.ortho.is_empty(),
         })
     }
 }
@@ -140,7 +191,7 @@ impl App {
         for p in paths {
             let path = p.to_string_lossy();
             let id = p.file_stem().unwrap().to_string_lossy().into_owned();
-            tracks.push(Arc::new(Track::new(id, Course::load(&path)?, std::fs::read(crate::terrain_path(&path)).ok(), None)?));
+            tracks.push(Arc::new(Track::new(id, Course::load(&path)?, std::fs::read(crate::terrain_path(&path)).ok(), None)?.with_extras(&path)));
         }
         let summaries: Vec<_> = tracks.iter().map(|t| t.summary()).collect();
         // Open cities: `x.city.json` (+ `x.city.terrain.bin`), id `x`.
@@ -149,7 +200,9 @@ impl App {
             let path = p.to_string_lossy();
             let Some(stem) = path.strip_suffix(".city.json") else { continue };
             let id = stem.rsplit('/').next().unwrap_or(stem).to_owned();
-            let t = Track::city(id, City::load(&path)?, std::fs::read(crate::terrain_path(&path)).ok())?;
+            let t = Track::city(id, City::load(&path)?, std::fs::read(crate::terrain_path(&path)).ok(), std::fs::read(crate::buildings_path(&path)).ok())?
+                .with_district(&crate::district_dir(&path))
+                .with_extras(&path);
             cities.push(t.summary());
             tracks.push(Arc::new(t));
         }
@@ -265,6 +318,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let session: Option<u64> = param(query, "session").and_then(|s| s.parse().ok());
     match (path, track) {
         ("/", _) => reply(&mut sock, "200 OK", "text/html; charset=utf-8", PAGE.as_bytes()).await,
+        (p, _) if p.starts_with("/textures/") => match TEXTURES.iter().find(|a| a.0 == p) {
+            Some((name, bytes)) => reply(&mut sock, "200 OK", if name.ends_with(".hdr") { "application/octet-stream" } else { "image/jpeg" }, bytes).await,
+            None => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
+        },
         (p, _) if p.starts_with("/audio/") => match AUDIO.iter().find(|a| a.0 == p) {
             Some((_, bytes)) => reply(&mut sock, "200 OK", "audio/mpeg", bytes).await,
             None => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
@@ -291,6 +348,20 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/terrain", Some(t)) if t.terrain.is_some() => {
             reply(&mut sock, "200 OK", "application/octet-stream", t.terrain.as_deref().unwrap()).await
         }
+        ("/buildings", Some(t)) if t.buildings.is_some() => {
+            reply(&mut sock, "200 OK", "application/octet-stream", t.buildings.as_deref().unwrap()).await
+        }
+        ("/ortho", Some(t)) => match param(query, "f").and_then(|f| t.ortho.get(f)) {
+            Some(b) => reply(&mut sock, "200 OK", if param(query, "f").is_some_and(|f| f.ends_with(".json")) { "application/json" } else { "image/jpeg" }, b).await,
+            None => reply(&mut sock, "404 Not Found", "text/plain", b"no such ortho file").await,
+        },
+        ("/district", Some(t)) => match param(query, "f").and_then(|f| t.district.get(f)) {
+            Some(b) => {
+                let ctype = match param(query, "f") { Some("ortho.jpg") => "image/jpeg", Some(f) if f.ends_with(".json") => "application/json", _ => "application/octet-stream" };
+                reply(&mut sock, "200 OK", ctype, b).await
+            }
+            None => reply(&mut sock, "404 Not Found", "text/plain", b"no such district file").await,
+        },
         ("/power", _) => {
             let w = param(query, "w").and_then(|w| w.parse::<f32>().ok()).filter(|w| (0.0..=2000.0).contains(w));
             match (session, w) {

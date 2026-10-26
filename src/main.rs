@@ -61,6 +61,24 @@ enum Cmd {
         #[arg(long)]
         start: String,
     },
+    /// (Re)fetch the real buildings (IGN BD TOPO) of an open city, over its terrain box
+    Buildings {
+        /// City file, e.g. courses/paris.city.json (its terrain file must exist)
+        city: String,
+    },
+    /// Fetch a realistic district of an open city (aerial photo, 1 m elevation, roofs, trees), see docs/city.md
+    District {
+        /// City file, e.g. courses/paris.city.json
+        city: String,
+        /// "south,west,north,east" box, at most ~4 km a side
+        #[arg(long)]
+        bbox: String,
+    },
+    /// Fetch the IGN aerial photo over a course or city terrain, for the realistic render
+    Ortho {
+        /// Course or city file whose terrain file exists, e.g. courses/alpe-dhuez.json
+        course: String,
+    },
     /// Build a course file from waypoints, see docs/courses.md
     Course {
         /// Display name, e.g. "Alpe d'Huez"
@@ -87,11 +105,26 @@ async fn main() -> anyhow::Result<()> {
         }
         Cmd::Terrain { course } => tokio::task::spawn_blocking(move || build_terrain(&course)).await?,
         Cmd::Serve { addr, trainer, difficulty, courses } => serve(&addr, trainer, difficulty, &courses).await,
+        Cmd::District { city, bbox } => {
+            let v: Vec<f64> = bbox.split(',').map(|x| x.trim().parse()).collect::<Result<_, _>>().context("bbox: expected south,west,north,east")?;
+            let bbox: [f64; 4] = v.try_into().map_err(|_| anyhow::anyhow!("bbox: expected 4 numbers"))?;
+            let dir = district_dir(&city);
+            tokio::task::spawn_blocking(move || le_mollet::district::build(&dir, bbox)).await?
+        }
+        Cmd::Ortho { course } => tokio::task::spawn_blocking(move || {
+            let head = std::fs::read(terrain_path(&course)).with_context(|| format!("{course}: build its terrain first"))?;
+            let f = |o: usize| f64::from_le_bytes(head[o..o + 8].try_into().unwrap());
+            let u = |o: usize| u32::from_le_bytes(head[o..o + 4].try_into().unwrap()) as usize;
+            le_mollet::ortho::build(&ortho_dir(&course), [f(8), f(16), f(24), f(32)], u(0), u(4))
+        }).await?,
+        Cmd::Buildings { city } => tokio::task::spawn_blocking(move || build_buildings(&city)).await?,
         Cmd::City { name, out, relation, start } => {
             let start = parse_latlon(&start)?;
             let (city, terrain) = tokio::task::spawn_blocking(move || le_mollet::city::build(&name, relation, start)).await??;
             std::fs::write(&out, serde_json::to_string(&city)?)?;
             std::fs::write(terrain_path(&out), terrain.to_bytes())?;
+            let city_path = out.clone();
+            tokio::task::spawn_blocking(move || build_buildings(&city_path)).await??;
             let km: f64 = city.streets.iter().map(|s| s.pts.windows(2).map(|w| ((w[1][0] - w[0][0]) * 110_540.0).hypot((w[1][1] - w[0][1]) * 73_000.0)).sum::<f64>()).sum::<f64>() / 1000.0;
             println!("{out}: {} streets, ~{km:.0} km; terrain {}x{} cells", city.streets.len(), terrain.w, terrain.h);
             Ok(())
@@ -195,6 +228,33 @@ fn build_terrain(course_path: &str) -> anyhow::Result<()> {
     let out = terrain_path(course_path);
     std::fs::write(&out, t.to_bytes())?;
     println!("{out}: {}x{} cells of {} m", t.w, t.h, le_mollet::terrain::CELL_M);
+    Ok(())
+}
+
+/// Aerial photo tiles next to a course: `x.json` -> `x.ortho/`.
+pub fn ortho_dir(course: &str) -> String {
+    format!("{}.ortho", course.strip_suffix(".json").unwrap_or(course))
+}
+
+/// Realistic district next to a city: `x.city.json` -> `x.city.district/`.
+pub fn district_dir(city: &str) -> String {
+    format!("{}.district", city.strip_suffix(".json").unwrap_or(city))
+}
+
+/// Buildings file next to a city: `x.city.json` -> `x.city.buildings.bin`.
+pub fn buildings_path(city: &str) -> String {
+    format!("{}.buildings.bin", city.strip_suffix(".json").unwrap_or(city))
+}
+
+/// Fetch the buildings over the box of the city's terrain file (its 40-byte header).
+fn build_buildings(city_path: &str) -> anyhow::Result<()> {
+    let head = std::fs::read(terrain_path(city_path)).with_context(|| format!("{city_path}: build its terrain first"))?;
+    let f = |o: usize| f64::from_le_bytes(head[o..o + 8].try_into().unwrap());
+    let (west, south, east, north) = (f(8), f(16), f(24), f(32));
+    let b = le_mollet::buildings::fetch(west, south, east, north)?;
+    let out = buildings_path(city_path);
+    std::fs::write(&out, le_mollet::buildings::to_bytes(&b, west, north))?;
+    println!("{out}: {} buildings", b.len());
     Ok(())
 }
 

@@ -28,7 +28,7 @@ pub const ROAD: u8 = 5;
 pub const PAVE: u8 = 6;
 
 /// Polygon ring in fractional grid coordinates (column, row).
-type Ring = Vec<(f64, f64)>;
+pub(crate) type Ring = Vec<(f64, f64)>;
 
 pub struct Terrain {
     pub w: usize,
@@ -172,7 +172,7 @@ impl Terrain {
     }
 }
 
-fn fetch_heights(west: f64, south: f64, east: f64, north: f64, w: usize, h: usize) -> Result<Vec<f32>> {
+pub(crate) fn fetch_heights(west: f64, south: f64, east: f64, north: f64, w: usize, h: usize) -> Result<Vec<f32>> {
     let url = format!(
         "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES\
          &STYLES=&CRS=EPSG:4326&BBOX={south},{west},{north},{east}&WIDTH={w}&HEIGHT={h}&FORMAT=image/x-bil;bits=32"
@@ -186,7 +186,7 @@ fn fetch_heights(west: f64, south: f64, east: f64, north: f64, w: usize, h: usiz
 }
 
 /// Scanline even-odd fill of polygon edges given in fractional grid coordinates.
-fn fill_even_odd(rings: &[Ring], w: usize, h: usize, mut set: impl FnMut(usize, usize)) {
+pub(crate) fn fill_even_odd(rings: &[Ring], w: usize, h: usize, mut set: impl FnMut(usize, usize)) {
     let edges: Vec<_> = rings.iter().flat_map(|r| r.windows(2).map(|e| (e[0], e[1]))).collect();
     let (lo, hi) = edges.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), (a, b)| (lo.min(a.1).min(b.1), hi.max(a.1).max(b.1)));
     if edges.is_empty() { return }
