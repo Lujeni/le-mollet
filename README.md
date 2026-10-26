@@ -46,9 +46,12 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 
 ## The world
 
-- **Voxel 3D** built from real terrain: forests, rock, lakes, villages, with the road carved into the mountain.
-- **Wildlife** placed by land cover and altitude: cows in alpine pastures, marmots and chamois up high, deer at
-  forest edges, a raptor circling over the summits.
+- **A Lego world** built from real terrain: every voxel is a studded brick in glossy plastic, Lego pines, brick
+  buildings, trans-blue lakes, with the road carved into the mountain.
+- **Alive**: minifig fans packed toward the summits cheer and wave flags as you pass, cars come the other way,
+  pedestrians and pigeons fill the city streets, clouds drift by.
+- **Wildlife** placed by land cover and altitude: cows wander and graze, marmots dive into their burrow, deer bolt
+  from the road, chamois up high, a raptor circling over the summits.
 - **Nature ambience** that follows the terrain: forest and meadow birds, streams, cowbells, wind growing with
   altitude and speed.
 

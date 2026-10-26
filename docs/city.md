@@ -83,6 +83,9 @@ straight. No U-turn unless the street is a dead end.
       (background and image-based lighting), sun shadows, ACES, GTAO ambient occlusion. Textures in
       `web/textures/` (CREDITS.md), served from the binary. Cost on screen: ~0.8 M triangles of facade kit
       + 0.6 M of ground.
+- [x] Lego look (2026-10-26) replaces the realistic district on the page: studded bricks everywhere, Lego
+      facades, pedestrians, pigeons and oncoming cars. The page no longer reads `district` or `ortho` data;
+      the commands and endpoints stay until they are reused or removed. PBR textures and HDRI are gone.
 - [ ] Phase 4: polish. Performance on the full city, landmarks, start points (Notre-Dame, Concorde,
       Montmartre).
 

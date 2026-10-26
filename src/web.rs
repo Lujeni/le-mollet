@@ -19,7 +19,6 @@
 //!   GET /seek?session=<n>&d=<m>                demo mode: teleport the rider along the course
 //!   GET /pause?session=<n>&on=<0|1>            freeze or resume a ride (menu open)
 //!   GET /audio/<name>.mp3                      nature ambience loops (web/audio/CREDITS.md)
-//!   GET /textures/<name>                       CC0 PBR textures and sky (web/textures/CREDITS.md)
 //!
 //! With a trainer, power comes from it and the latest ride drives its grade.
 //! Without, each browser tab rides on its own with the power slider (demo mode).
@@ -51,24 +50,6 @@ const AUDIO: &[(&str, &[u8])] = &[
     ("/audio/woodpecker.mp3", include_bytes!("../web/audio/woodpecker.mp3")),
     ("/audio/buzzard.mp3", include_bytes!("../web/audio/buzzard.mp3")),
     ("/audio/deer.mp3", include_bytes!("../web/audio/deer.mp3")),
-];
-/// CC0 PBR textures and sky for realistic districts, see web/textures/CREDITS.md.
-const TEXTURES: &[(&str, &[u8])] = &[
-    ("/textures/sky.hdr", include_bytes!("../web/textures/sky.hdr")),
-    ("/textures/stone_color.jpg", include_bytes!("../web/textures/stone_color.jpg")),
-    ("/textures/stone_normal.jpg", include_bytes!("../web/textures/stone_normal.jpg")),
-    ("/textures/stone_rough.jpg", include_bytes!("../web/textures/stone_rough.jpg")),
-    ("/textures/road_color.jpg", include_bytes!("../web/textures/road_color.jpg")),
-    ("/textures/road_normal.jpg", include_bytes!("../web/textures/road_normal.jpg")),
-    ("/textures/road_rough.jpg", include_bytes!("../web/textures/road_rough.jpg")),
-    ("/textures/sidewalk_color.jpg", include_bytes!("../web/textures/sidewalk_color.jpg")),
-    ("/textures/sidewalk_normal.jpg", include_bytes!("../web/textures/sidewalk_normal.jpg")),
-    ("/textures/sidewalk_rough.jpg", include_bytes!("../web/textures/sidewalk_rough.jpg")),
-    ("/textures/setts_color.jpg", include_bytes!("../web/textures/setts_color.jpg")),
-    ("/textures/setts_normal.jpg", include_bytes!("../web/textures/setts_normal.jpg")),
-    ("/textures/setts_rough.jpg", include_bytes!("../web/textures/setts_rough.jpg")),
-    ("/textures/zinc_normal.jpg", include_bytes!("../web/textures/zinc_normal.jpg")),
-    ("/textures/zinc_rough.jpg", include_bytes!("../web/textures/zinc_rough.jpg")),
 ];
 const DT: f32 = 0.1;
 const DISTRICT_FILES: [&str; 7] = ["meta.json", "dem.bin", "ortho.jpg", "trees.json", "buildings.bin", "osm.json", "surface.bin"];
@@ -318,10 +299,6 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let session: Option<u64> = param(query, "session").and_then(|s| s.parse().ok());
     match (path, track) {
         ("/", _) => reply(&mut sock, "200 OK", "text/html; charset=utf-8", PAGE.as_bytes()).await,
-        (p, _) if p.starts_with("/textures/") => match TEXTURES.iter().find(|a| a.0 == p) {
-            Some((name, bytes)) => reply(&mut sock, "200 OK", if name.ends_with(".hdr") { "application/octet-stream" } else { "image/jpeg" }, bytes).await,
-            None => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
-        },
         (p, _) if p.starts_with("/audio/") => match AUDIO.iter().find(|a| a.0 == p) {
             Some((_, bytes)) => reply(&mut sock, "200 OK", "audio/mpeg", bytes).await,
             None => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
