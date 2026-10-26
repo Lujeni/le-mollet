@@ -47,6 +47,20 @@ enum Cmd {
         #[arg(long, default_value = "courses")]
         courses: String,
     },
+    /// Build an open city (every street inside an OSM boundary) and its terrain, see docs/city.md
+    City {
+        /// Display name, e.g. "Paris"
+        name: String,
+        /// Output file, e.g. courses/paris.city.json
+        #[arg(long, short)]
+        out: String,
+        /// OpenStreetMap boundary relation id, e.g. 7444 for Paris
+        #[arg(long)]
+        relation: u64,
+        /// "lat,lon" where riders start
+        #[arg(long)]
+        start: String,
+    },
     /// Build a course file from waypoints, see docs/courses.md
     Course {
         /// Display name, e.g. "Alpe d'Huez"
@@ -73,14 +87,17 @@ async fn main() -> anyhow::Result<()> {
         }
         Cmd::Terrain { course } => tokio::task::spawn_blocking(move || build_terrain(&course)).await?,
         Cmd::Serve { addr, trainer, difficulty, courses } => serve(&addr, trainer, difficulty, &courses).await,
+        Cmd::City { name, out, relation, start } => {
+            let start = parse_latlon(&start)?;
+            let (city, terrain) = tokio::task::spawn_blocking(move || le_mollet::city::build(&name, relation, start)).await??;
+            std::fs::write(&out, serde_json::to_string(&city)?)?;
+            std::fs::write(terrain_path(&out), terrain.to_bytes())?;
+            let km: f64 = city.streets.iter().map(|s| s.pts.windows(2).map(|w| ((w[1][0] - w[0][0]) * 110_540.0).hypot((w[1][1] - w[0][1]) * 73_000.0)).sum::<f64>()).sum::<f64>() / 1000.0;
+            println!("{out}: {} streets, ~{km:.0} km; terrain {}x{} cells", city.streets.len(), terrain.w, terrain.h);
+            Ok(())
+        }
         Cmd::Course { name, out, road, waypoints } => {
-            let wps = waypoints
-                .iter()
-                .map(|w| {
-                    let (lat, lon) = w.split_once(',').with_context(|| format!("waypoint {w:?}: expected lat,lon"))?;
-                    Ok([lat.trim().parse()?, lon.trim().parse()?])
-                })
-                .collect::<anyhow::Result<Vec<[f64; 2]>>>()?;
+            let wps = waypoints.iter().map(|w| parse_latlon(w)).collect::<anyhow::Result<Vec<[f64; 2]>>>()?;
             let c = tokio::task::spawn_blocking(move || Course::build(&name, &wps, &road)).await??;
             std::fs::write(&out, serde_json::to_string(&c)?)?;
             let course_path = out.clone();
@@ -89,6 +106,11 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
     }
+}
+
+fn parse_latlon(w: &str) -> anyhow::Result<[f64; 2]> {
+    let (lat, lon) = w.split_once(',').with_context(|| format!("{w:?}: expected lat,lon"))?;
+    Ok([lat.trim().parse()?, lon.trim().parse()?])
 }
 
 async fn trainer_console(filter: Option<String>) -> anyhow::Result<()> {

@@ -44,6 +44,15 @@ impl Course {
         self.points.last().map_or(0.0, |p| p.d)
     }
 
+    /// `[lat, lon]` at distance `d`, interpolated.
+    pub fn latlon_at(&self, d: f32) -> [f64; 2] {
+        let p = &self.points;
+        let i = p.partition_point(|q| q.d <= d).clamp(1, p.len() - 1);
+        let (a, b) = (p[i - 1], p[i]);
+        let t = ((d - a.d) / (b.d - a.d)).clamp(0.0, 1.0) as f64;
+        [a.lat + (b.lat - a.lat) * t, a.lon + (b.lon - a.lon) * t]
+    }
+
     pub fn ele_at(&self, d: f32) -> f32 {
         let p = &self.points;
         let i = p.partition_point(|q| q.d <= d).clamp(1, p.len() - 1);
@@ -220,7 +229,7 @@ pub(crate) fn request_json(send: impl Fn() -> Result<ureq::Response, ureq::Error
     bail!("still rate limited after 5 attempts")
 }
 
-fn haversine_m(a: [f64; 2], b: [f64; 2]) -> f64 {
+pub(crate) fn haversine_m(a: [f64; 2], b: [f64; 2]) -> f64 {
     let (la1, la2) = (a[0].to_radians(), b[0].to_radians());
     let (dla, dlo) = (la2 - la1, (b[1] - a[1]).to_radians());
     let h = (dla / 2.0).sin().powi(2) + la1.cos() * la2.cos() * (dlo / 2.0).sin().powi(2);
@@ -228,7 +237,7 @@ fn haversine_m(a: [f64; 2], b: [f64; 2]) -> f64 {
 }
 
 /// Points every `step` m along a `[lat, lon]` polyline, with their distance from start.
-fn resample(line: &[[f64; 2]], step: f64) -> Vec<(f64, [f64; 2])> {
+pub(crate) fn resample(line: &[[f64; 2]], step: f64) -> Vec<(f64, [f64; 2])> {
     let mut out = vec![(0.0, line[0])];
     let (mut walked, mut next) = (0.0, step);
     for w in line.windows(2) {
@@ -247,7 +256,7 @@ fn resample(line: &[[f64; 2]], step: f64) -> Vec<(f64, [f64; 2])> {
 }
 
 /// Gaussian smoothing, `sigma` in points; weights renormalized at both ends.
-fn smooth(v: &[f32], sigma: f32) -> Vec<f32> {
+pub(crate) fn smooth(v: &[f32], sigma: f32) -> Vec<f32> {
     let r = (3.0 * sigma).ceil() as isize;
     let w: Vec<f32> = (-r..=r).map(|k| (-0.5 * (k as f32 / sigma).powi(2)).exp()).collect();
     (0..v.len() as isize)

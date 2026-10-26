@@ -79,6 +79,7 @@ Profiles and ride history stay in each browser.
 | `course <name> -o <file> --road <ref> <lat,lon>...` | build a real course from OpenStreetMap + IGN |
 | `stats <course.json>` | validation figures of a course |
 | `terrain <course.json>` | (re)build the 3D terrain of a course |
+| `city <name> -o <file> --relation <osm id> --start <lat,lon>` | build an open city, see [city.md](city.md) |
 
 `cargo run -- <command> --help` lists every option. Adding a course step by step:
 [courses/AGENTS.md](../courses/AGENTS.md).
@@ -106,6 +107,7 @@ Layout:
 | `web/index.html` | the whole UI (three.js) |
 | `courses/` | course files, see its AGENTS.md |
 | `docs/courses.md` | how real roads become courses |
+| `src/city.rs`, `docs/city.md` | open city: street graph, turns, growing route |
 
 ## Troubleshooting
 

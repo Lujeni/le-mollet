@@ -17,6 +17,8 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
   La Planche des Belles Filles. Pick them as souvenir fridge
   magnets.
 - **Free roam.** A procedural "Boucle du jour", the same for everyone today. Ride lap after lap, no finish line.
+- **Paris, every street.** All 1,790 km of Paris streets with real elevation: pick left, straight or right at
+  each junction, a minimap shows where you go. Montmartre hurts.
 - **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
   bike. Self-host it and invite your club on your LAN.
 - **You feel the road.** Speed comes from your watts, weight, the grade, rolling resistance and thinner air up

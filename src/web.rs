@@ -1,11 +1,12 @@
 //! Tiny HTTP server: embedded web UI + ride sessions.
 //!   GET /                                      page
-//!   GET /courses                               {trainer, courses: [summary]}  (real climbs)
+//!   GET /courses                               {trainer, courses: [summary], cities: [summary]}  (real climbs, open cities)
 //!   GET /worlds                                [summary + relief + riders]   (open worlds)
 //!   GET /worlds/new?length=<5|10|20>&relief=<flat|hills|mountains>   generate an open world, {id}
 //!   GET /course?id=<id>                        full course JSON (climb or world)
 //!   GET /terrain?id=<id>                       binary voxel terrain (see le_mollet::terrain)
 //!   GET /workouts                              built-in training sessions
+//!   GET /turn?session=<n>&dir=<left|straight|right>   open city: turn to take at the next junction
 //!   GET /events?course=<id>&mass=<kg>&session=<n>[&name=&color=&frame=&country=]
 //!                                              Server-Sent Events, one ride per connection; riders on the
 //!                                              same course see each other ("others" in each frame)
@@ -20,7 +21,8 @@
 //! Without, each browser tab rides on its own with the power slider (demo mode).
 
 use le_mollet::Trainer;
-use le_mollet::course::Course;
+use le_mollet::city::{City, Exit, Route, Turn};
+use le_mollet::course::{Course, Point};
 use le_mollet::ride::Ride;
 use le_mollet::workout::{self, Progress, Workout};
 use le_mollet::world::{self, Relief};
@@ -61,6 +63,9 @@ struct Presence {
     distance: f32,
     speed_kmh: f32,
     power: f32,
+    /// `[lat, lon]` in an open city, where `distance` along each rider's own route means nothing to others.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pos: Option<[f64; 2]>,
 }
 
 /// A rideable road: a real climb loaded from disk or a generated open world.
@@ -70,13 +75,21 @@ struct Track {
     json: String,
     terrain: Option<Vec<u8>>,
     relief: Option<Relief>, // Some = open world
+    city: Option<City>,
     riders: Mutex<HashMap<u64, Presence>>,
 }
 
 impl Track {
     fn new(id: String, course: Course, terrain: Option<Vec<u8>>, relief: Option<Relief>) -> anyhow::Result<Self> {
         let json = serde_json::to_string(&course)?;
-        Ok(Self { id, course, json, terrain, relief, riders: Mutex::new(HashMap::new()) })
+        Ok(Self { id, course, json, terrain, relief, city: None, riders: Mutex::new(HashMap::new()) })
+    }
+
+    /// An open city: its course is only the first street, each rider grows their own route.
+    fn city(id: String, city: City, terrain: Option<Vec<u8>>) -> anyhow::Result<Self> {
+        let mut t = Self::new(id, Route::start(&city).course, terrain, None)?;
+        t.city = Some(city);
+        Ok(t)
     }
 
     fn summary(&self) -> serde_json::Value {
@@ -87,6 +100,7 @@ impl Track {
             "id": self.id, "name": c.name, "length": c.length(), "gain": c.elevation_gain().round(), "profile": profile,
             "terrain": self.terrain.is_some(), "looped": c.looped,
             "relief": self.relief.map(Relief::label), "riders": self.riders.lock().unwrap().len(),
+            "city": self.city.as_ref().map(|c| c.streets.len()),
         })
     }
 }
@@ -109,6 +123,8 @@ pub struct App {
     demo_power: Mutex<HashMap<u64, f32>>,
     demo_seek: Mutex<HashMap<u64, f32>>,
     paused: Mutex<HashSet<u64>>,
+    /// Open city: turn each session asked for at its next junction.
+    turns: Mutex<HashMap<u64, Turn>>,
     /// Session allowed to drive the trainer grade: the most recent one.
     driver: AtomicU64,
 }
@@ -117,7 +133,7 @@ impl App {
     /// Load every `*.json` course in `dir` (the id is the file stem) and open today's world.
     pub fn new(dir: &str, trainer: Option<Trainer>, difficulty: f32) -> anyhow::Result<Self> {
         let mut paths: Vec<_> = std::fs::read_dir(dir)
-            .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json")).collect())
+            .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json")).collect())
             .unwrap_or_default();
         paths.sort();
         let mut tracks = vec![];
@@ -127,7 +143,17 @@ impl App {
             tracks.push(Arc::new(Track::new(id, Course::load(&path)?, std::fs::read(crate::terrain_path(&path)).ok(), None)?));
         }
         let summaries: Vec<_> = tracks.iter().map(|t| t.summary()).collect();
-        let list_json = json!({ "trainer": trainer.as_ref().map(|t| &t.name), "courses": summaries }).to_string();
+        // Open cities: `x.city.json` (+ `x.city.terrain.bin`), id `x`.
+        let mut cities = vec![];
+        for p in std::fs::read_dir(dir).map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).collect::<Vec<_>>()).unwrap_or_default() {
+            let path = p.to_string_lossy();
+            let Some(stem) = path.strip_suffix(".city.json") else { continue };
+            let id = stem.rsplit('/').next().unwrap_or(stem).to_owned();
+            let t = Track::city(id, City::load(&path)?, std::fs::read(crate::terrain_path(&path)).ok())?;
+            cities.push(t.summary());
+            tracks.push(Arc::new(t));
+        }
+        let list_json = json!({ "trainer": trainer.as_ref().map(|t| &t.name), "courses": summaries, "cities": cities }).to_string();
         // Same daily loop for everyone, so there is always a world to meet in.
         let day = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs() / 86_400;
         tracks.push(Arc::new(world_track(day, 10, Relief::Hills, "Boucle du jour".into())?));
@@ -143,6 +169,7 @@ impl App {
             demo_power: Mutex::new(HashMap::new()),
             demo_seek: Mutex::new(HashMap::new()),
             paused: Mutex::new(HashSet::new()),
+            turns: Mutex::new(HashMap::new()),
             driver: AtomicU64::new(0),
         })
     }
@@ -224,6 +251,7 @@ fn presence(query: &str, sid: u64) -> Presence {
         distance: 0.0,
         speed_kmh: 0.0,
         power: 0.0,
+        pos: None,
     }
 }
 
@@ -282,6 +310,13 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and d >= 0").await,
             }
         }
+        ("/turn", _) => match (session, param(query, "dir").and_then(Turn::parse)) {
+            (Some(s), Some(t)) => {
+                app.turns.lock().unwrap().insert(s, t);
+                reply(&mut sock, "204 No Content", "text/plain", b"").await
+            }
+            _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and dir=left|straight|right").await,
+        },
         ("/pause", _) => match (session, param(query, "on")) {
             (Some(s), Some(on)) => {
                 {
@@ -313,6 +348,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             }
             app.demo_power.lock().unwrap().remove(&sid);
             app.paused.lock().unwrap().remove(&sid);
+            app.turns.lock().unwrap().remove(&sid);
             res
         }
         _ => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
@@ -330,6 +366,19 @@ struct Frame<'a> {
     zombie: Option<&'a Game>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     others: Vec<Presence>,
+    /// Open city: route points added since the last frame (all of them in the first one).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    route: Vec<Point>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    junction: Option<Junction>,
+}
+
+/// Open city: the next junction, how far it is and the ways out, left to right.
+#[derive(Serialize)]
+struct Junction {
+    in_m: f32,
+    exits: Vec<Exit>,
+    next: Turn,
 }
 
 async fn ride_session(
@@ -341,12 +390,22 @@ async fn ride_session(
     sid: u64,
     mass: f32,
 ) -> std::io::Result<()> {
-    let course = track.map_or(&app.flat, |t| &t.course);
+    let base = track.map_or(&app.flat, |t| &t.course);
+    // Open city: this rider's own route, grown street by street; `sent` route points already streamed.
+    let city = track.and_then(|t| t.city.as_ref());
+    let (mut route, mut sent_pts) = (city.map(Route::start), 0);
     let mut ride = Ride::new(mass);
     let mut tick = tokio::time::interval(Duration::from_secs_f32(DT));
     let (mut n, mut sent) = (0u32, None::<f32>);
     loop {
         tick.tick().await;
+        if let (Some(c), Some(r)) = (city, route.as_mut()) {
+            if let Some(t) = app.turns.lock().unwrap().remove(&sid) {
+                r.next = t;
+            }
+            r.extend(c, ride.distance);
+        }
+        let course = route.as_ref().map_or(base, |r| &r.course);
         (ride.power, ride.cadence) = match app.trainer {
             Some(_) => *app.trainer_sample.lock().unwrap(),
             None => (app.demo_power.lock().unwrap().get(&sid).copied().unwrap_or(0.0), None),
@@ -376,10 +435,17 @@ async fn ride_session(
                 let mut riders = t.riders.lock().unwrap();
                 if let Some(me) = riders.get_mut(&sid) {
                     (me.distance, me.speed_kmh, me.power) = (ride.distance, ride.speed_kmh, ride.power);
+                    me.pos = city.map(|_| course.latlon_at(ride.distance));
                 }
                 riders.values().filter(|p| p.id != sid).take(50).cloned().collect()
             });
-            let frame = Frame { ride: &ride, workout: progress, zombie: game.as_ref(), others };
+            let fresh = route.as_ref().map_or(vec![], |r| r.course.points[sent_pts..].to_vec());
+            sent_pts += fresh.len();
+            let junction = city.zip(route.as_ref()).map(|(c, r)| {
+                let (in_m, exits) = r.upcoming(c, ride.distance);
+                Junction { in_m, exits, next: r.next }
+            });
+            let frame = Frame { ride: &ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction };
             let json = serde_json::to_string(&frame).expect("frame serializes");
             sock.write_all(format!("data: {json}\n\n").as_bytes()).await?;
         }

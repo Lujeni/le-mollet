@@ -140,6 +140,11 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 #free .panel { width:min(720px, 100%); max-height:100%; overflow:auto }
 .tiles.two { grid-template-columns:repeat(2, 1fr); margin-bottom:14px }
 .tile.free { background:#36aebf }
+.tile.city { background:#002654; grid-column:1 / -1; min-height:0; flex-direction:row; align-items:center }
+.junction { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:0 0 8px }
+.junction .btn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px }
+.junction .btn.on { background:var(--accent); color:#1b2a34 }
+.junction small { color:var(--muted); width:100% }
 .online { color:#5d9b3a; font-weight:600 }
 
 /* Training */
@@ -291,6 +296,10 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M3 1h6v1h1v1h1v6h-1v1H9v1H3v-1H2V9H1V3h1V2h1zM3 3v6h6V3zM8 0h2v1H8zM10 1h1v2h-1z"/></svg>
           <b>Free</b><small id="goFreeSub">Boucles ouvertes à tous</small>
         </button>
+        <button class="tile city" id="goCity" hidden>
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M5 0h2v2H5zM5 2h2v3H5zM4 5h4v1H4zM4 6h1v2H4zM7 6h1v2H7zM3 8h6v1H3zM2 9h2v3H2zM8 9h2v3H8zM4 9h4v1H4z"/></svg>
+          <b id="goCityName">Ville</b><small id="goCitySub">Toutes les rues, choisis ta route à chaque carrefour</small>
+        </button>
       </div>
       <p class="muted" id="modeHint"></p>
     </div>
@@ -347,6 +356,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <output id="wattsOut" for="watts"></output>
         <button class="btn" id="autoBtn" hidden aria-pressed="false" title="La puissance suit la cible de la séance">Auto</button>
       </div>
+      <div class="junction" id="junction" hidden aria-live="polite"></div>
       <canvas id="profileCanvas"></canvas>
       <small class="attrib" id="attrib"></small>
     </div>
@@ -988,6 +998,12 @@ function showRideMenu() {
   $('#modeHint').textContent = !ride.list ? '' : ride.list.trainer
     ? `Home trainer connecté : ${ride.list.trainer}. La pente suit la route.`
     : 'Mode démo : pas de home trainer, tu règles les watts avec un curseur.';
+  const city = ride.list?.cities?.[0];
+  $('#goCity').hidden = !city;
+  if (city) {
+    $('#goCityName').textContent = city.name;
+    $('#goCitySub').textContent = `${city.city.toLocaleString('fr')} rues : choisis ta route à chaque carrefour`;
+  }
   fetch('/worlds').then(r => r.json()).then(worlds => {
     const online = worlds.reduce((a, w) => a + w.riders, 0);
     $('#goFreeSub').textContent = `${worlds.length} boucle${worlds.length > 1 ? 's' : ''} ouverte${worlds.length > 1 ? 's' : ''} · ${online} cycliste${online > 1 ? 's' : ''} en ligne`;
@@ -1167,17 +1183,20 @@ async function openZombie() {
   amb.ctx ??= new AudioContext(); // still inside the click
   try {
     const r = await fetch('/worlds/new?length=5&relief=flat');
-    if (r.ok) await openRide((await r.json()).id, true, true);
+    if (r.ok) await openRide((await r.json()).id, true, 'zombie');
   } finally {
     sub.textContent = text;
   }
 }
 
-async function openRide(id, hasTerrain, zombie = false) {
+// kind: 'course' (climb or loop), 'zombie' (chased on a loop) or 'city' (open city, the route grows as you ride).
+async function openRide(id, hasTerrain, kind = 'course') {
+  const zombie = kind === 'zombie';
   ride.ended = false;
+  ride.routed = false;
   amb.ctx ??= new AudioContext(); // created inside the click so autoplay policies allow sound
   amb.ctx.resume();
-  ride.mode = zombie ? 'zombie' : 'course';
+  ride.mode = kind;
   ride.zombie = { prev:null, toast:'', toastUntil:0 };
   $('#leave').textContent = '‖ Pause';
   ride.course = await (await fetch(`/course?id=${encodeURIComponent(id)}`)).json();
@@ -1190,7 +1209,7 @@ async function openRide(id, hasTerrain, zombie = false) {
   const demo = !ride.list.trainer;
   $('#demo').hidden = !demo;
   $('#autoBtn').hidden = true;
-  const seek = demo && !zombie; // no teleporting away from the horde
+  const seek = demo && kind === 'course'; // no teleporting away from the horde, nor along a city route that does not exist yet
   $('#profileCanvas').classList.toggle('seekable', seek);
   $('#profileCanvas').title = seek ? 'Clique pour te placer sur le parcours' : '';
   if (demo) {
@@ -1206,9 +1225,95 @@ async function openRide(id, hasTerrain, zombie = false) {
     $('#attrib').textContent = attribution();
     if (!$('#ride').hidden) enter3d(buf);
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); zombieNews(); renderStats(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
+}
+
+// ---------- Open city: the route grows street by street, the rider picks each turn ----------
+// New route points come with the frames; the first frame repeats the starting street.
+function growRoute() {
+  const fresh = ride.state?.route;
+  if (!fresh?.length) return;
+  if (!ride.routed) { ride.course.points = fresh; ride.routed = true; return }
+  const pts = ride.course.points, from = pts.at(-1);
+  pts.push(...fresh);
+  // ponytail: one ribbon mesh per frame of new street, kept for the whole ride; merge or drop far ones if an hour-long ride gets heavy
+  if (w3.group) w3.group.add(roadMesh({ points:[from, ...fresh] }, w3.T));
+}
+
+// Mirrors city::choose on the server: what each turn request would pick.
+function pickExit(exits, turn) {
+  const straight = exits.reduce((a, b) => Math.abs(b.turn) < Math.abs(a.turn) ? b : a);
+  if (turn === 'left') return exits[0].turn > 30 ? exits[0] : straight;
+  if (turn === 'right') return exits.at(-1).turn < -30 ? exits.at(-1) : straight;
+  return straight;
+}
+
+function turnTo(dir) {
+  if (ride.mode !== 'city') return;
+  fetch(`/turn?session=${ride.session}&dir=${dir}`).catch(() => {});
+  if (ride.state?.junction) { ride.state.junction.next = dir; renderJunction() }
+}
+
+function renderJunction() {
+  const j = ride.state?.junction, box = $('#junction');
+  box.hidden = !j || j.in_m > 250 || j.exits.length < 2;
+  if (box.hidden) return;
+  const seen = new Set(), opts = [['left', '◀'], ['straight', '▲'], ['right', '▶']].flatMap(([dir, arrow]) => {
+    const e = pickExit(j.exits, dir), key = `${e.street}:${e.forward}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [[dir, arrow, e]];
+  });
+  const chosen = pickExit(j.exits, j.next);
+  box.replaceChildren(
+    h('small', {}, `Carrefour dans ${Math.max(0, Math.round(j.in_m / 10) * 10)} m · ← → pour tourner, espace tout droit`),
+    ...opts.map(([dir, arrow, e]) => h('button', {
+      class: 'btn' + (e === chosen ? ' on' : ''), 'aria-pressed': e === chosen,
+      title: e.name || 'Rue sans nom', onclick: () => turnTo(dir),
+    }, `${arrow} ${e.name || 'Rue sans nom'}`)),
+  );
+}
+addEventListener('keydown', e => {
+  if (ride.mode !== 'city' || $('#ride').hidden || !$('#menu').hidden || e.target.matches?.('input, textarea')) return;
+  const dir = { ArrowLeft:'left', ArrowRight:'right', ' ':'straight' }[e.key];
+  if (dir) { e.preventDefault(); turnTo(dir) }
+});
+
+// Minimap in place of the elevation profile: heading up, rider in the lower third, route ahead in orange.
+const MAP_COLORS = { 0:[106, 168, 79], 1:[63, 122, 44], 2:[59, 125, 216], 3:[205, 196, 176], 4:[163, 163, 155], 5:[74, 79, 85], 6:[154, 150, 142] };
+function drawMap() {
+  const cv = $('#profileCanvas'), T = w3.T, dpr = 1; // ponytail: 1 px per canvas px keeps the per-pixel loop cheap
+  const [W, H] = [cv.clientWidth, cv.clientHeight];
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  const pts = ride.course.points;
+  if (!T || pts.length < 2) { ctx.fillStyle = '#888'; ctx.fillText('Chargement de la carte…', 10, 20); return }
+  const d = w3.dist ?? ride.state?.distance ?? 0, me = pointAt(d), ahead = pointAt(d + 15).sub(pointAt(d - 15));
+  const ang = Math.atan2(ahead.x, -ahead.z); // heading, 0 = north (-z)
+  const [cs, sn] = [Math.cos(ang), Math.sin(ang)], M = 1.6; // meters per pixel
+  const [cx0, cy0] = [W / 2, H * 0.7];
+  const img = ctx.createImageData(W, H);
+  for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) {
+    const [u, v] = [(px - cx0) * M, (py - cy0) * M]; // right, back
+    const [x, z] = [me.x + u * cs - v * sn, me.z + u * sn + v * cs];
+    const c = Math.floor((x - T.ox) / T.cx), r = Math.floor((z - T.oz) / T.cz), o = (py * W + px) * 4;
+    const rgb = c >= 0 && r >= 0 && c < T.w && r < T.h ? MAP_COLORS[T.cover[r * T.w + c]] ?? MAP_COLORS[6] : [30, 30, 30];
+    [img.data[o], img.data[o + 1], img.data[o + 2], img.data[o + 3]] = [...rgb, 255];
+  }
+  ctx.putImageData(img, 0, 0);
+  const screen = p => { const [dx, dz] = [p.x - me.x, p.z - me.z]; return [cx0 + (dx * cs + dz * sn) / M, cy0 + (-dx * sn + dz * cs) / M] };
+  ctx.strokeStyle = '#fe8a18'; ctx.lineWidth = 4; ctx.beginPath();
+  for (let k = 0; k <= 30; k++) { const [sx, sy] = screen(pointAt(Math.min(d + k * 10, pts.at(-1).d))); k ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy) }
+  ctx.stroke();
+  for (const o of ride.state?.others ?? []) {
+    if (!o.pos) continue;
+    const [x, z] = T.toXZ(...o.pos), [sx, sy] = screen({ x, z });
+    ctx.fillStyle = o.color; ctx.fillRect(sx - 4, sy - 4, 8, 8);
+  }
+  ctx.fillStyle = '#f2cd37'; ctx.strokeStyle = '#1b2a34'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx0, cy0 - 9); ctx.lineTo(cx0 + 7, cy0 + 7); ctx.lineTo(cx0 - 7, cy0 + 7); ctx.closePath(); ctx.fill(); ctx.stroke();
 }
 
 function setPower(w) {
@@ -1293,7 +1398,9 @@ function renderStats() {
     stat('Puissance', Math.round(s.power), 'W'),
     stat('Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
     stat('Pente', s.grade.toFixed(1), '%'),
-    ride.course.looped
+    ride.mode === 'city'
+      ? stat('Distance', (s.ridden / 1000).toFixed(2), 'km')
+      :     ride.course.looped
       ? stat(`Tour ${(s.laps ?? 0) + 1}`, (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`)
       : stat('Distance', (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`),
     stat('Altitude', Math.round(s.ele), 'm'),
@@ -1304,6 +1411,7 @@ function renderStats() {
 
 let profileLayout = null;
 function drawProfile() {
+  if (ride.mode === 'city') return drawMap();
   if (ride.mode === 'workout') {
     drawSteps($('#profileCanvas'), ride.workout.steps, ride.state?.elapsed ?? 0, { l:8, r:8, t:8, b:8 });
     return;
@@ -1366,7 +1474,7 @@ function drawProfile() {
 }
 
 // ---------- 3D course world (terrain from `le-mollet course` / `le-mollet terrain`) ----------
-const COVER = { GRASS:0, FOREST:1, WATER:2, BUILDING:3, ROCK:4, ROAD:5 };
+const COVER = { GRASS:0, FOREST:1, WATER:2, BUILDING:3, ROCK:4, ROAD:5, PAVE:6 };
 const STEP_Y = 2;          // voxel height, m. Calibration knob: smaller = finer terraces
 const CHUNK = 64;          // cells per chunk side (5 m cells = 320 m)
 // ponytail: fixed view distance by screen width; measure fps on real devices before tuning
@@ -1376,6 +1484,7 @@ const w3 = { T:null, group:null, chunks:new Map(), others:new Map(), bike:null, 
 const terrainMat = new THREE.MeshLambertMaterial({ vertexColors:true, side:THREE.DoubleSide });
 
 function parseTerrain(buf, course) {
+  const city = ride.mode === 'city';
   const dv = new DataView(buf);
   const w = dv.getUint32(0, true), h = dv.getUint32(4, true);
   const [west, south, east, north] = [8, 16, 24, 32].map(o => dv.getFloat64(o, true));
@@ -1388,19 +1497,22 @@ function parseTerrain(buf, course) {
   const ele = i => heights[i] / 10;
   const top = (c, r) => {
     const i = r * w + c;
-    return Math.floor(ele(i) / STEP_Y) * STEP_Y + (cover[i] === COVER.BUILDING ? 6 : 0);
+    const step = city ? 0.5 : STEP_Y; // a city is nearly flat: fine steps, no staircase streets
+    return Math.floor(ele(i) / step) * step + (cover[i] === COVER.BUILDING ? (city ? 18 : 6) : 0); // Haussmann blocks in a city
   };
-  return { w, h, cover, ele, top, toXZ, ox, oz, cx:(east - west) / w * kx, cz:(north - south) / h * kz };
+  return { w, h, cover, ele, top, toXZ, ox, oz, city, cx:(east - west) / w * kx, cz:(north - south) / h * kz };
 }
 
 function topColor(cov, e) {
   if (cov === COVER.ROAD) return '#5a5f66';
+  if (cov === COVER.PAVE) return '#b9b3a6';
+  if (cov === COVER.BUILDING && w3.T?.city) return '#6d7680'; // zinc roofs
   if (cov === COVER.WATER) return '#3b7dd8';
   if (cov === COVER.BUILDING) return '#b5523b';
   if (cov === COVER.ROCK || e > 2400) return e > 2800 ? '#f4f4f4' : '#a3a39b';
   return cov === COVER.FOREST ? '#3f7a2c' : '#6aa84f';
 }
-const sideColor = (cov, e) => cov === COVER.BUILDING ? '#e6d9b8' : cov === COVER.ROCK || e > 2400 ? '#7d7d76' : '#7a4f2e';
+const sideColor = (cov, e) => cov === COVER.PAVE ? '#9a948a' : cov === COVER.BUILDING ? '#e6d9b8' : cov === COVER.ROCK || e > 2400 ? '#7d7d76' : '#7a4f2e';
 const shade = (hex, c, r) => new THREE.Color(hex).offsetHSL(0, 0, (hash(c, r, 7) - 0.5) * 0.07);
 const TRUNK = new THREE.Color('#5b3a1e'), LEAVES = '#2f6b24';
 
@@ -1588,8 +1700,18 @@ function updateOthers(dt) {
       r = { holder, bike, dist:o.distance, lane:(hash(o.id % 100000, 1, 9) - 0.5) * 3 };
       w3.others.set(o.id, r);
     }
-    r.dist = follow(r.dist, o.distance, o.speed_kmh, dt);
-    const p = pointAt(r.dist), dir = pointAt(r.dist + 8).sub(pointAt(r.dist - 8));
+    let p, dir;
+    if (o.pos) { // open city: everyone has their own route, place by position and ease toward it
+      const [x, z] = w3.T.toXZ(...o.pos), c = Math.floor((x - w3.T.ox) / w3.T.cx), rw = Math.floor((z - w3.T.oz) / w3.T.cz);
+      const target = new THREE.Vector3(x, w3.T.ele(Math.max(0, rw) * w3.T.w + Math.max(0, c)) + 0.2, z);
+      p = r.pos ? r.pos.lerp(target, Math.min(1, dt * 2)) : target.clone();
+      dir = r.pos && target.distanceTo(r.last ?? target) > 0.5 ? target.clone().sub(r.last) : r.dir ?? new THREE.Vector3(1, 0, 0);
+      [r.pos, r.last, r.dir] = [p, target, dir];
+    } else {
+      r.dist = follow(r.dist, o.distance, o.speed_kmh, dt);
+      p = pointAt(r.dist);
+      dir = pointAt(r.dist + 8).sub(pointAt(r.dist - 8));
+    }
     dir.y = 0;
     dir.normalize();
     r.holder.position.set(p.x - dir.z * r.lane, p.y, p.z + dir.x * r.lane);
@@ -2096,6 +2218,7 @@ addEventListener('keydown', e => {
 $('#goRide').addEventListener('click', showRideMenu);
 $('#goCircuits').addEventListener('click', showCourses);
 $('#goFree').addEventListener('click', showFree);
+$('#goCity').addEventListener('click', () => { const c = ride.list.cities[0]; openRide(c.id, c.terrain, 'city') });
 $('#rideMenuBack').addEventListener('click', () => showHome());
 $('#freeBack').addEventListener('click', showRideMenu);
 $('#goTrain').addEventListener('click', showTraining);

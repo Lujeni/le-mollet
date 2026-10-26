@@ -24,6 +24,8 @@ pub const WATER: u8 = 2;
 pub const BUILDING: u8 = 3;
 pub const ROCK: u8 = 4;
 pub const ROAD: u8 = 5;
+/// City ground between streets and buildings: sidewalks, squares, courtyards.
+pub const PAVE: u8 = 6;
 
 /// Polygon ring in fractional grid coordinates (column, row).
 type Ring = Vec<(f64, f64)>;
@@ -46,15 +48,32 @@ impl Terrain {
         let fold = |f: fn(f64, f64) -> f64, init: f64, get: fn(&crate::course::Point) -> f64| course.points.iter().map(get).fold(init, f);
         let (south, north) = (fold(f64::min, 90.0, |p| p.lat) - MARGIN_M / kz, fold(f64::max, -90.0, |p| p.lat) + MARGIN_M / kz);
         let (west, east) = (fold(f64::min, 180.0, |p| p.lon) - MARGIN_M / kx, fold(f64::max, -180.0, |p| p.lon) + MARGIN_M / kx);
-        let w = ((east - west) * kx / CELL_M).round() as usize;
-        let h = ((north - south) * kz / CELL_M).round() as usize;
-        // ponytail: single WMS request, IGN accepts up to 4096 px a side; tile it for longer routes
-        if w > 4096 || h > 4096 { bail!("terrain {w}x{h} cells exceeds one IGN request (4096 max)") }
-
-        let mut t = Self { w, h, west, south, east, north, heights: fetch_heights(west, south, east, north, w, h)?, cover: vec![GRASS; w * h] };
+        let mut t = Self::for_bbox(west, south, east, north)?;
         t.paint_land_cover()?;
         t.carve_road(course);
         Ok(t)
+    }
+
+    /// Bare terrain (IGN elevation grid, all grass) over a lat/lon box.
+    pub fn for_bbox(west: f64, south: f64, east: f64, north: f64) -> Result<Self> {
+        let kx = ((south + north) / 2.0).to_radians().cos() * 111_320.0;
+        let w = ((east - west) * kx / CELL_M).round() as usize;
+        let h = ((north - south) * 110_540.0 / CELL_M).round() as usize;
+        // ponytail: single WMS request, IGN accepts up to 4096 px a side; tile it for longer routes
+        if w > 4096 || h > 4096 { bail!("terrain {w}x{h} cells exceeds one IGN request (4096 max)") }
+        Ok(Self { w, h, west, south, east, north, heights: fetch_heights(west, south, east, north, w, h)?, cover: vec![GRASS; w * h] })
+    }
+
+    /// Ground elevation at a point, bilinear between cell centers, m.
+    pub fn ele_at(&self, lat: f64, lon: f64) -> f32 {
+        let (gx, gy) = self.grid(lat, lon);
+        let (x, y) = ((gx - 0.5).clamp(0.0, (self.w - 1) as f64), (gy - 0.5).clamp(0.0, (self.h - 1) as f64));
+        let (c, r) = ((x as usize).min(self.w.saturating_sub(2)), (y as usize).min(self.h.saturating_sub(2)));
+        let (tx, ty) = ((x - c as f64) as f32, (y - r as f64) as f32);
+        let at = |c: usize, r: usize| self.heights[r * self.w + c];
+        let top = at(c, r) + (at(c + 1, r) - at(c, r)) * tx;
+        let bottom = at(c, r + 1) + (at(c + 1, r + 1) - at(c, r + 1)) * tx;
+        top + (bottom - top) * ty
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -72,17 +91,18 @@ impl Terrain {
     }
 
     /// Fractional grid coordinates (column, row) of a point.
-    fn grid(&self, lat: f64, lon: f64) -> (f64, f64) {
+    pub(crate) fn grid(&self, lat: f64, lon: f64) -> (f64, f64) {
         ((lon - self.west) / (self.east - self.west) * self.w as f64, (self.north - lat) / (self.north - self.south) * self.h as f64)
     }
 
-    fn paint_land_cover(&mut self) -> Result<()> {
+    pub(crate) fn paint_land_cover(&mut self) -> Result<()> {
         let (s, w, n, e) = (self.south, self.west, self.north, self.east);
         let b = format!("({s},{w},{n},{e})");
         let query = format!(
             "[out:json][timeout:180];(\
              way[natural~\"^(wood|water|bare_rock|scree)$\"]{b};relation[natural~\"^(wood|water|bare_rock|scree)$\"]{b};\
              way[landuse~\"^(forest|reservoir)$\"]{b};relation[landuse~\"^(forest|reservoir)$\"]{b};\
+             way[leisure~\"^(park|garden)$\"]{b};way[landuse~\"^(grass|meadow|cemetery)$\"]{b};\
              way[building]{b};);out geom;"
         );
         let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &query)]))?;
@@ -92,6 +112,8 @@ impl Terrain {
             let code = match (tag("natural"), tag("landuse")) {
                 _ if !tag("building").is_empty() => BUILDING,
                 ("water", _) | (_, "reservoir") => WATER,
+                _ if !tag("leisure").is_empty() => GRASS,
+                (_, "grass" | "meadow" | "cemetery") => GRASS,
                 ("bare_rock" | "scree", _) => ROCK,
                 _ => FOREST,
             };
@@ -106,7 +128,7 @@ impl Terrain {
             features.push((code, rings));
         }
         // Paint order: later wins.
-        features.sort_by_key(|f| [FOREST, ROCK, WATER, BUILDING].iter().position(|&c| c == f.0));
+        features.sort_by_key(|f| [GRASS, FOREST, ROCK, WATER, BUILDING].iter().position(|&c| c == f.0));
         for (code, rings) in &features {
             fill_even_odd(rings, self.w, self.h, |c, r| self.cover[r * self.w + c] = *code);
         }
