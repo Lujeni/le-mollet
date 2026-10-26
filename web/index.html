@@ -56,6 +56,8 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:-3px
 #garage { flex:1; display:flex; justify-content:flex-end; padding:0 16px 16px; min-height:0 }
 .side { width:330px; overflow:auto; display:flex; flex-direction:column; gap:16px }
 .side .btn { align-self:flex-start }
+.garage-nav { align-self:flex-start; margin-right:auto; display:flex; flex-direction:column; gap:8px; padding:12px }
+.garage-nav .btn.on { background:var(--accent); color:#1b2a34 }
 #options { display:flex; flex-direction:column; gap:16px }
 .opt { border:0; padding:0; margin:0 }
 .opt legend { font-size:13px; margin-bottom:8px }
@@ -176,7 +178,9 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   #ride { padding:0 0 0 }
   #profileCanvas { height:120px }
   header { font-size:18px; padding:12px 16px }
-  #garage { align-items:flex-end; padding:0 }
+  #garage { flex-direction:column; justify-content:flex-end; padding:0 }
+  .garage-nav { flex-direction:row; align-self:stretch; margin:0; padding:8px 16px }
+  .garage-nav .btn { flex:1 }
   .side { width:100%; max-height:48vh; padding:16px }
 }
 </style>
@@ -261,6 +265,10 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   </main>
 
   <main id="garage" hidden>
+    <nav class="block panel garage-nav" aria-label="Garage">
+      <button class="btn" data-tab="bike">Vélo</button>
+      <button class="btn" data-tab="rider">Cycliste</button>
+    </nav>
     <aside class="block panel side">
       <button class="btn" id="back">‹ Accueil</button>
       <h2>Garage de <span id="who"></span></h2>
@@ -376,8 +384,8 @@ const FRAMES = {
   gravel:  { seat:[7, 12], ht:[23, 15], hb:[24, 10], fatTires:true },
   vintage: { seat:[7, 13], ht:[23, 13], hb:[24, 10], lugs:true, fenders:true },
 };
+// Garage options; tab:'rider' ones show under "Cycliste" in the left menu, the rest under "Vélo".
 const OPTIONS = [
-  { title:'Vélo' },
   { key:'style', label:'Style', choices:[['lego','Brique'], ['voxel','Cube']] },
   { key:'frameType', label:'Cadre', choices:[['road', 'Route'], ['aero', 'Aéro'], ['gravel', 'Gravel'], ['vintage', 'Vintage']] },
   { key:'frame', label:'Couleur du cadre', colors:true },
@@ -386,15 +394,14 @@ const OPTIONS = [
   { key:'rimDepth', label:'Profil des jantes', choices:[[1,'Basses'], [2,'Aéro'], [3,'Profondes']] },
   { key:'bars', label:'Cintre', choices:[['drop','Route'], ['flat','Plat'], ['aero','Chrono']] },
   { key:'saddle', label:'Selle', colors:true },
-  { title:'Cycliste' },
-  { key:'jersey', label:'Maillot', colors:true },
-  { key:'shorts', label:'Cuissard', colors:true },
-  { key:'shoes', label:'Chaussures', colors:true },
-  { key:'helmet', label:'Casque', choices:[['on', 'Oui'], ['off', 'Non']] },
-  { key:'helmetColor', label:'Couleur du casque', colors:true },
-  { key:'hair', label:'Coiffure', choices:[['short', 'Courte'], ['long', 'Longue'], ['ponytail', 'Queue'], ['bald', 'Rasé']] },
-  { key:'hairColor', label:'Cheveux', colors:{ Blond:'#e8c872', Châtain:'#8b5a2b', Brun:'#3b2416', Noir:'#1b1b1b', Roux:'#b5481d', Gris:'#b9b9b9' } },
-  { key:'skin', label:'Peau', colors:{ Porcelaine:'#f6d7b3', Clair:'#e8b98f', Doré:'#e0ac69', Mat:'#c68642', Brun:'#8d5524', Ébène:'#5c3a21', Brique:'#f2cd37' } },
+  { key:'jersey', tab:'rider', label:'Maillot', colors:true },
+  { key:'shorts', tab:'rider', label:'Cuissard', colors:true },
+  { key:'shoes', tab:'rider', label:'Chaussures', colors:true },
+  { key:'helmet', tab:'rider', label:'Casque', choices:[['on', 'Oui'], ['off', 'Non']] },
+  { key:'helmetColor', tab:'rider', label:'Couleur du casque', colors:true },
+  { key:'hair', tab:'rider', label:'Coiffure', choices:[['short', 'Courte'], ['long', 'Longue'], ['ponytail', 'Queue'], ['bald', 'Rasé']] },
+  { key:'hairColor', tab:'rider', label:'Cheveux', colors:{ Blond:'#e8c872', Châtain:'#8b5a2b', Brun:'#3b2416', Noir:'#1b1b1b', Roux:'#b5481d', Gris:'#b9b9b9' } },
+  { key:'skin', tab:'rider', label:'Peau', colors:{ Porcelaine:'#f6d7b3', Clair:'#e8b98f', Doré:'#e0ac69', Mat:'#c68642', Brun:'#8d5524', Ébène:'#5c3a21', Brique:'#f2cd37' } },
 ];
 
 // ponytail: profiles live in this browser only, move to the Rust backend when login lands
@@ -728,9 +735,11 @@ function resize() {
   renderer.setSize(W, H, false);
   camera.aspect = W / H;
   camera.zoom = Math.min(1, camera.aspect * 1.3) * ($('#ride').hidden || w3.group ? 1 : 0.6); // portrait / ride panels: zoom out so the bike fits
-  const side = $('#garage').hidden ? null : $('.side').getBoundingClientRect();
+  const [side, nav] = $('#garage').hidden ? [] : ['.side', '.garage-nav'].map(s => $(s).getBoundingClientRect());
   const narrow = W <= 700;
-  if (side) camera.setViewOffset(W, H, narrow ? 0 : side.width / 2, narrow ? side.height / 2 : 0, W, H);
+  // Center the bike between the left menu and the options panel (stacked at the bottom on narrow screens).
+  if (side && narrow) camera.zoom *= 0.6; // only the strip above the bottom sheet is left for the bike
+  if (side) camera.setViewOffset(W, H, narrow ? 0 : (side.width - nav.width) / 2, narrow ? (side.height + nav.height) / 2 : 0, W, H);
   else if (!$('#ride').hidden) {
     const [top, bottom] = [$('#stats'), $('.profile')].map(e => e.getBoundingClientRect().height);
     camera.setViewOffset(W, H, 0, (bottom - top) / 2, W, H);
@@ -900,9 +909,16 @@ function openGarage() {
   draw(current.bike);
 }
 
+let garageTab = 'bike';
+for (const btn of document.querySelectorAll('.garage-nav .btn')) btn.addEventListener('click', () => { garageTab = btn.dataset.tab; renderOptions() });
+
 function renderOptions() {
   const b = { ...DEFAULT_RIDER, jersey:current.bike.frame, ...current.bike };
-  $('#options').replaceChildren(...OPTIONS.map(o => o.title ? h('h2', {}, o.title) : h('fieldset', { class:'opt' },
+  for (const btn of document.querySelectorAll('.garage-nav .btn')) {
+    btn.classList.toggle('on', btn.dataset.tab === garageTab);
+    btn.setAttribute('aria-pressed', btn.dataset.tab === garageTab);
+  }
+  $('#options').replaceChildren(...OPTIONS.filter(o => (o.tab ?? 'bike') === garageTab).map(o => h('fieldset', { class:'opt' },
     h('legend', {}, o.label),
     o.colors
       ? h('div', { class:'swatches' }, ...Object.entries(o.colors === true ? PALETTE : o.colors).map(([name, hex]) => h('button', {
