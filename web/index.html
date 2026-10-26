@@ -4,16 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Le Mollet</title>
+<!-- Favicon from docs/logo.png: the mountain "O" of MOLLET and the orange stroke. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1220'/%3E%3Ccircle cx='32' cy='28' r='22' fill='%23f7f1e3'/%3E%3Cpath d='M12 39l12-15 6 7 8-12 14 20z' fill='%230b1220'/%3E%3Cpath d='M6 56l52-8-3 6-50 7z' fill='%23f97a1a'/%3E%3C/svg%3E">
+<script>
+// Before first paint, so there is no flash: saved choice, else the system setting.
+try { document.documentElement.dataset.theme = localStorage.getItem('lemollet.theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') } catch { document.documentElement.dataset.theme = 'dark' }
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root { --bg:#14171c; --panel:#1f242c; --panel-hi:#2b323d; --ink:#eef1f5; --muted:#9aa4b2; --accent:#f2cd37; --line:#0b0d10; }
+:root[data-theme=light] { --bg:#e9edf1; --panel:#f7f8fa; --panel-hi:#ffffff; --ink:#1b2a34; --muted:#5a6573; --accent:#f2cd37; --line:#1b2a34 }
 * { box-sizing:border-box }
 [hidden] { display:none !important }
 html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:15px/1.4 Inter, system-ui, sans-serif; overflow:hidden }
 #scene { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none }
 .ui { position:fixed; inset:0; pointer-events:none; display:flex; flex-direction:column }
-header { padding:16px; font-family:Silkscreen, monospace; font-size:22px; letter-spacing:1px; text-shadow:3px 3px 0 var(--line) }
+header { padding:16px; font-family:Silkscreen, monospace; font-size:22px; letter-spacing:1px; color:#eef1f5; text-shadow:3px 3px 0 #0b0d10; display:flex; align-items:center; justify-content:space-between }
+#theme { pointer-events:auto; font-size:12px; padding:6px 10px }
 header b { color:var(--accent) }
 .block { background:var(--panel); border:3px solid var(--line); box-shadow:inset -4px -4px 0 rgba(0,0,0,.35), inset 4px 4px 0 rgba(255,255,255,.08) }
 .panel { padding:20px; pointer-events:auto }
@@ -97,7 +105,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 .hello .avatar { width:56px; height:56px; font-size:28px }
 .hello h1 { margin:0 }
 .tiles { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px }
-.tile { display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding:18px; min-height:170px; text-align:left; cursor:pointer; color:var(--ink); font:inherit; border:3px solid var(--line); box-shadow:inset -5px -5px 0 rgba(0,0,0,.3), inset 5px 5px 0 rgba(255,255,255,.15) }
+.tile { display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding:18px; min-height:170px; text-align:left; cursor:pointer; color:#eef1f5; font:inherit; border:3px solid var(--line); box-shadow:inset -5px -5px 0 rgba(0,0,0,.3), inset 5px 5px 0 rgba(255,255,255,.15) }
 .tile:hover, .tile:focus-visible { outline:3px solid var(--ink); outline-offset:2px; transform:translateY(-2px) }
 .tile b { font-family:Silkscreen, monospace; font-size:22px }
 .tile small { opacity:.85 }
@@ -182,7 +190,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 <body>
 <canvas id="scene"></canvas>
 <div class="ui">
-  <header>LE <b>MOLLET</b></header>
+  <header><span>LE <b>MOLLET</b></span><button class="btn" id="theme" aria-label="Basculer thème clair ou sombre"></button></header>
 
   <main id="profiles">
     <div class="block panel">
@@ -935,7 +943,7 @@ function drawSteps(cv, steps, t, pad = { l:0, r:0, t:2, b:0 }) {
   }
   ctx.globalAlpha = 1;
   if (t != null) {
-    ctx.fillStyle = '#eef1f5';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink');
     ctx.fillRect(x(Math.min(t, total)) - 1, pad.t, 3, H - pad.t - pad.b);
   }
   return { x, total };
@@ -1728,6 +1736,19 @@ function mixAmbience() {
   maybe('woodpecker', forest > 0.4 && high < 0.5, 0.5, 15, 45);
   maybe('buzzard', w3.eagle?.visible, 0.35, 25, 60);
 }
+
+function renderTheme() {
+  const light = document.documentElement.dataset.theme === 'light';
+  $('#theme').textContent = light ? '☾ sombre' : '☀ clair';
+  $('#theme').setAttribute('aria-pressed', light);
+}
+$('#theme').addEventListener('click', () => {
+  const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('lemollet.theme', t) } catch {}
+  renderTheme();
+});
+renderTheme();
 
 function renderMute() {
   $('#mute').textContent = amb.muted ? '♪ off' : '♪ on';
