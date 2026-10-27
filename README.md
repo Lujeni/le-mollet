@@ -51,6 +51,8 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
   your way at each junction.
 - **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
   bike. Self-host it and invite your club on your LAN.
+- **Ride On!** Send a thumbs-up to the rider next to you, or a quick emote (keys 1 to 5): it pops up over your
+  rider, and pace partners wave back.
 - **Ride in a bunch.** Sit on a wheel and drafting saves up to 30 % of the air drag. Pace partners (2, 3 and 4
   W/kg) ride every course and world around the clock, so there is always a wheel to follow.
 - **Segments.** KOM climbs and sprints with arches on the road, a live banner, the time and rank at the line,
@@ -64,6 +66,8 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 ## Train
 
 - **Structured sessions** calibrated on your FTP: recovery, endurance, sweet spot, threshold, VO2max.
+- **Bring your own**: import Zwift workout files (.zwo), thousands are free online; they stay in your profile.
+- **FTP test**: 20 minutes all out after a warm-up, and your FTP updates itself (95 % of the 20-minute average).
 - **ERG mode**: the trainer holds each target power for you. In demo mode, follow the target or turn on autopilot.
 - **Interval chart** colored by training zone, with time left in the interval and in the session.
 - **Zombie Halloween**: a horde of voxel zombies chases you on a night-time loop, faster each minute. Win mini

@@ -135,6 +135,15 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px }
 .ride-head h1, .ride-head h2 { margin:0 }
 
+/* Imported workouts, emotes, toasts */
+.import-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 14px } .import-row .muted { margin:0; font-size:12px }
+.tag-imported { margin-left:8px; padding:2px 8px; border-radius:999px; background:var(--accent); color:#1b2a34; font:700 11px var(--font); vertical-align:middle }
+.ftp-result { display:flex; flex-direction:column; align-items:center; gap:10px; font-size:16px }
+.emotes { display:flex; gap:6px; flex-wrap:wrap }
+.emotes .btn { padding:5px 9px; font-size:16px } .emotes .rideon { font-size:14px; background:#ff6a13; color:#fff; border-color:transparent }
+.emotes .btn:disabled { opacity:.45; cursor:default }
+.ride-toast { position:absolute; left:50%; bottom:110px; transform:translateX(-50%); z-index:2; padding:9px 16px; border-radius:999px; background:rgba(17,21,28,.85); color:#fff; font:600 14px var(--font); pointer-events:none; animation:pop .25s ease-out }
+
 /* Devices: their own step after picking a profile, a status line on the home screen */
 #devicesScreen { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
 .devs { width:min(640px, 100%); max-height:100%; overflow:auto; padding:28px; display:flex; flex-direction:column; gap:14px }
@@ -566,6 +575,8 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <button class="btn" id="trainingBack">‹ Accueil</button>
       </div>
       <p class="muted" id="trainingHint"></p>
+      <div class="import-row"><label class="btn" for="zwoFile">Importer des séances .zwo</label><input type="file" id="zwoFile" accept=".zwo,application/xml,text/xml" multiple hidden>
+        <small class="muted">Le format de Zwift : des milliers de séances gratuites (whatsonzwift.com, zwiftworkouts…).</small></div>
       <div id="workoutList" class="list"></div>
     </div>
   </main>
@@ -584,6 +595,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         </span>
       </div>
       <div class="junction" id="junction" hidden aria-live="polite"></div>
+      <div class="emotes" id="emotes" aria-label="Encourager"></div>
     </div>
     <div class="block panel hud demo" id="demo" data-w="power" hidden>
       <button class="btn" data-dw="-25" aria-label="Moins 25 watts">−</button>
@@ -597,6 +609,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     <small class="attrib" id="attrib"></small>
     <div class="seg-banner" id="segBanner" hidden aria-live="polite"></div>
     <div class="seg-toast" id="segToast" hidden role="status"></div>
+    <div class="ride-toast" id="rideToast" hidden role="status"></div>
     <div class="block panel hud-edit" id="hudEdit" hidden role="dialog" aria-labelledby="hudEditTitle">
       <h2 id="hudEditTitle">Ton affichage</h2>
       <p class="muted">Glisse les panneaux où tu veux. Touche H pour tout masquer en roulant.</p>
@@ -1566,14 +1579,21 @@ function showTraining() {
   $('#trainingHint').textContent = ride.list?.trainer
     ? `Le home trainer tient la puissance (mode ERG). Cibles calculées sur ta FTP de ${current.ftp} W.`
     : `Mode démo : suis la cible au curseur, ou laisse le pilote auto. Cibles calculées sur ta FTP de ${current.ftp} W.`;
-  $('#workoutList').replaceChildren(...ride.workouts.map(({ w, duration }) => {
+  const mine = (current.workouts ?? []).map(w => ({ w, duration:w.steps.reduce((a, st) => a + st.secs, 0) }));
+  $('#workoutList').replaceChildren(...[...ride.workouts, ...mine].map(({ w, duration }) => {
     const cv = h('canvas', { 'aria-hidden':'true' });
     const card = h('div', {
         class:'workout-card block', role:'button', tabindex:0,
         onclick: () => openWorkout(w),
         onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openWorkout(w) } },
       },
-      h('div', { class:'row' }, h('strong', {}, w.name), h('small', {}, `${Math.round(duration / 60)} min`)),
+      h('div', { class:'row' }, h('strong', {}, w.name, w.imported ? h('span', { class:'tag-imported' }, '.zwo') : '', w.id === 'test-ftp' ? h('span', { class:'tag-imported' }, 'Test') : ''),
+        h('span', {}, h('small', {}, `${Math.round(duration / 60)} min`), w.imported ? h('button', { class:'del', title:'Retirer cette séance', 'aria-label':`Retirer ${w.name}`, onclick: e => {
+          e.stopPropagation();
+          current.workouts = current.workouts.filter(o => o.id !== w.id);
+          persist();
+          showTraining();
+        } }, '×') : '')),
       h('small', {}, w.description),
       cv);
     requestAnimationFrame(() => drawSteps(cv, w.steps, null));
@@ -1595,8 +1615,8 @@ function drawSteps(cv, steps, t, pad = { l:0, r:0, t:2, b:0 }) {
     for (let k = 0; k < n; k++) {
       const [a, b] = [at + s.secs * k / n, at + s.secs * (k + 1) / n], pct = s.from + (s.to - s.from) * (k + 0.5) / n;
       ctx.globalAlpha = t == null || a < t ? 1 : 0.45;
-      ctx.fillStyle = zoneColor(pct);
-      ctx.fillRect(x(a), y(pct), x(b) - x(a) + 0.5, H - pad.b - y(pct));
+      ctx.fillStyle = pct < 0 ? 'rgba(160,165,169,.75)' : zoneColor(pct); // a free block: gray, full height
+      ctx.fillRect(x(a), y(pct < 0 ? 100 : pct), x(b) - x(a) + 0.5, H - pad.b - y(pct < 0 ? 100 : pct));
     }
     at += s.secs;
   }
@@ -1616,6 +1636,7 @@ function openWorkout(w) {
   amb.ctx ??= new AudioContext();
   amb.ctx.resume();
   ride.mode = 'workout';
+  $('#emotes').hidden = true; // alone in a workout: nobody to cheer
   $('#leave').textContent = '‖ Pause';
   ride.workout = w;
   ride.course = null;
@@ -1631,12 +1652,13 @@ function openWorkout(w) {
   $('#profileCanvas').title = '';
   if (demo) setPower(Math.round(current.ftp * 0.5 / 5) * 5);
   renderStats();
-  ride.events = new EventSource(`/events?workout=${w.id}&ftp=${current.ftp}&mass=${current.weightKg + 8}&session=${ride.session}`);
+  const which = w.imported ? `workout=custom&steps=${stepsQuery(w.steps)}&wname=${encodeURIComponent(w.name)}` : `workout=${w.id}`;
+  ride.events = new EventSource(`/events?${which}&ftp=${current.ftp}&mass=${current.weightKg + 8}&session=${ride.session}`);
   ride.events.onmessage = e => {
     ride.state = JSON.parse(e.data);
     recordSample();
     recordFull();
-    if (ride.auto && ride.state.workout && Math.round(ride.state.workout.target) !== +$('#watts').value) setPower(ride.state.workout.target);
+    if (ride.auto && ride.state.workout?.target > 0 && Math.round(ride.state.workout.target) !== +$('#watts').value) setPower(ride.state.workout.target);
     renderStats(); drawProfile(); mixAmbience(); checkEnd();
   };
   startAmbience().catch(() => {});
@@ -1659,6 +1681,8 @@ async function openZombie() {
 // kind: 'course' (climb or loop), 'zombie' (chased on a loop) or 'city' (open city, the route grows as you ride).
 async function openRide(id, hasTerrain, kind = 'course', start = null) {
   ride.start = start; // open world: index of the picked start place
+  ride.rideOns = 0;
+  $('#emotes').hidden = false;
   $('.map').classList.toggle('round', kind === 'city'); // open worlds get the round minimap
   const zombie = kind === 'zombie';
   ride.ended = false;
@@ -1702,7 +1726,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); recordSample(); recordFull(); trackSegments(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -1893,7 +1917,7 @@ function renderStats() {
     const total = ride.workout.steps.reduce((a, st) => a + st.secs, 0);
     $('#stats').replaceChildren(
       stat('power', 'Puissance', Math.round(s.power), 'W'),
-      stat('target', 'Cible', Math.round(w.target), 'W'),
+      ride.workout.steps[w.step ?? 0]?.from < 0 ? stat('target', 'Cible', ride.workout.id === 'test-ftp' ? 'À fond !' : 'Libre', '') : stat('target', 'Cible', Math.round(w.target), 'W'),
       ...(s.hr ? [stat('hr', 'Cardio', Math.round(s.hr), 'bpm')] : []), ...(s.cadence != null ? [stat('cadence', 'Cadence', Math.round(s.cadence), 'rpm')] : []),
       stat('interval', 'Intervalle', mmss(w.step_left), ''),
       stat('session', 'Séance', mmss(Math.min(s.elapsed, total)), `/ ${mmss(total)}`),
@@ -4231,7 +4255,7 @@ function driveTrainer() {
   const t = bt.trainer, s = ride.state;
   if (!t?.ctrl || !s || $('#ride').hidden) return;
   const paused = !$('#menu').hidden || s.finished || s.zombie?.over;
-  const erg = ride.mode === 'workout' && s.workout;
+  const erg = ride.mode === 'workout' && s.workout?.target > 0; // a free block rides on a flat road
   const value = erg ? Math.round(s.workout.target) : paused ? 0 : Math.round(s.grade * (current.difficulty ?? 0.5) * 10) / 10;
   if (bt.sent && bt.sent.erg === !!erg && Math.abs(bt.sent.value - value) < (erg ? 1 : 0.2)) return;
   bt.sent = { erg:!!erg, value };
@@ -4407,6 +4431,129 @@ function downloadFit(samples, meta) {
 // History rides keep a light trace (every 5 s at most, no position): good enough for a later export.
 const traceSamples = r => (r.trace ?? []).map(([t, p, v, e]) => ({ t, ts:new Date(r.date).getTime() - (r.elapsed - t) * 1000, p, c:null, hr:null, v:v / 3.6, d:r.distance * t / (r.elapsed || 1), e, ll:null }));
 
+// ---------- imported workouts (.zwo, Zwift's format) and the FTP test ----------
+// A .zwo lists blocks with durations in seconds and powers as fractions of FTP; they become our steps in % of
+// FTP (-1 for a free block). Imported workouts live in the profile and travel to the server when started.
+const FREE = -1;
+function parseZwo(text, file) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror') || !doc.querySelector('workout')) throw new Error(`${file} : pas une séance .zwo`);
+  const num = (el, ...names) => { for (const n of names) { const v = parseFloat(el.getAttribute(n) ?? el.getAttribute(n.toLowerCase())); if (Number.isFinite(v)) return v } return null };
+  const pct = v => Math.round(v * 1000) / 10, steps = [];
+  for (const el of doc.querySelector('workout').children) {
+    const secs = Math.round(num(el, 'Duration') ?? 0), tag = el.tagName.toLowerCase();
+    if (tag === 'intervalst') {
+      const [on, off] = [num(el, 'OnDuration'), num(el, 'OffDuration')], [pOn, pOff] = [num(el, 'OnPower', 'PowerOnHigh', 'PowerOnLow'), num(el, 'OffPower', 'PowerOffLow', 'PowerOffHigh')];
+      for (let k = 0; k < (num(el, 'Repeat') ?? 1); k++) {
+        if (on) steps.push({ secs:Math.round(on), from:pct(pOn ?? 1), to:pct(pOn ?? 1) });
+        if (off) steps.push({ secs:Math.round(off), from:pct(pOff ?? 0.5), to:pct(pOff ?? 0.5) });
+      }
+    } else if (!secs) continue;
+    else if (tag === 'freeride' || tag === 'maxeffort') steps.push({ secs, from:FREE, to:FREE });
+    else if (tag === 'steadystate') { const p = pct(num(el, 'Power', 'PowerLow', 'PowerHigh') ?? 0.6); steps.push({ secs, from:p, to:p }) }
+    else { // warmup, cooldown, ramp: low to high (a cooldown written high to low keeps its order)
+      const [lo, hi] = [num(el, 'PowerLow', 'Power'), num(el, 'PowerHigh', 'Power')];
+      steps.push({ secs, from:pct(lo ?? 0.5), to:pct(hi ?? lo ?? 0.5) });
+    }
+  }
+  if (!steps.length) throw new Error(`${file} : aucun bloc reconnu`);
+  const text_ = sel => doc.querySelector(sel)?.textContent?.trim() ?? '';
+  return { id:`zwo-${newId().slice(0, 8)}`, name:text_('name') || file.replace(/\.zwo$/i, ''), description:text_('description').slice(0, 280) || `Importée de ${file}`, steps, imported:true };
+}
+async function importZwo(files) {
+  const added = [], failed = [];
+  for (const f of files) {
+    try { added.push(parseZwo(await f.text(), f.name)) } catch (e) { failed.push(e.message) }
+  }
+  current.workouts = [...(current.workouts ?? []), ...added];
+  persist();
+  showTraining();
+  if (failed.length) alert(failed.join('\n'));
+}
+// Steps as the server reads them: secs-from-to, joined by dots, x for a free block.
+const stepsQuery = steps => steps.map(s => s.from < 0 ? `${s.secs}-x-x` : `${s.secs}-${s.from}-${s.to}`).join('.');
+
+// FTP test: 95 % of the average power over its 20 min free block.
+function ftpTestResult() {
+  if (ride.workout?.id !== 'test-ftp') return null;
+  const start = ride.workout.steps.slice(0, 3).reduce((a, s) => a + s.secs, 0), end = start + ride.workout.steps[3].secs;
+  const block = (ride.full ?? []).filter(s => s.t >= start && s.t < end);
+  if (block.length < 15 * 60) return null; // stopped too early to say
+  const avg = block.reduce((a, s) => a + s.p, 0) / block.length;
+  return { avg:Math.round(avg), ftp:Math.round(avg * 0.95) };
+}
+function ftpLine(mode) {
+  const res = mode !== 'pause' && ftpTestResult();
+  if (!res) return;
+  const done = current.ftp === res.ftp;
+  $('#menuStats').append(h('div', { class:'finish ftp-result' },
+    `20 min à ${res.avg} W en moyenne : ta FTP est de ${res.ftp} W (avant ${current.ftp} W).`,
+    done ? '' : h('button', { class:'btn primary', onclick: e => { current.ftp = res.ftp; persist(); e.target.replaceWith('FTP mise à jour !') } }, `Passer ma FTP à ${res.ftp} W`)));
+}
+
+// ---------- Ride On and emotes ----------
+const EMOJI = { rideon:'👍', wave:'👋', fire:'🔥', laugh:'😂', party:'🎉' };
+// The rider to thank: the nearest one on screen.
+function nearestOther() {
+  const s = ride.state, me = w3.bike?.position;
+  let best = null, bd = Infinity;
+  for (const o of s?.others ?? []) {
+    const r = w3.others.get(o.id), d = r && me ? r.holder.position.distanceTo(me) : Math.abs(o.distance - (s.distance ?? 0));
+    if (d < bd) [best, bd] = [o, d];
+  }
+  return bd < 400 ? best : null;
+}
+function sendEmote(e) {
+  if (!ride.session || !ride.id || ride.mode === 'workout') return;
+  const to = e === 'rideon' ? nearestOther() : null;
+  if (e === 'rideon' && !to) return toast('Personne à encourager pour l\'instant.');
+  fetch(`/emote?session=${ride.session}&course=${encodeURIComponent(ride.id)}&e=${e}${to ? `&to=${to.id}` : ''}`).catch(() => {});
+  if (w3.bike) showBubble(w3.bike, e, 2.9 / BIKE_SCALE); // my own bubble, right away
+  if (to) toast(`👍 Ride On envoyé à ${to.name}`);
+}
+function renderEmotes() {
+  const to = nearestOther();
+  $('#emotes').replaceChildren(...Object.entries(EMOJI).map(([e, icon], k) => h('button', {
+    class:'btn emote' + (e === 'rideon' ? ' rideon' : ''), title:e === 'rideon' ? (to ? `Ride On à ${to.name} (touche 1)` : 'Personne à encourager') : `Emote (touche ${k + 1})`,
+    disabled:e === 'rideon' && !to, onclick: () => sendEmote(e),
+  }, e === 'rideon' ? `${icon} Ride On` : icon)));
+}
+// An emoji bubble above a rider, gone after a few seconds.
+const bubbleTex = {};
+function showBubble(obj, e, y = 3.2) {
+  bubbleTex[e] ??= (() => { const c = Object.assign(document.createElement('canvas'), { width:128, height:128 }), g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(64, 58, 52, 0, 7); g.fill(); g.beginPath(); g.moveTo(50, 104); g.lineTo(64, 124); g.lineTo(78, 104); g.fill();
+    g.font = '64px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(EMOJI[e], 64, 62); return new THREE.CanvasTexture(c) })();
+  let b = obj.userData.bubble;
+  if (!b) { b = obj.userData.bubble = new THREE.Sprite(new THREE.SpriteMaterial({ transparent:true, depthTest:false })); obj.add(b) }
+  b.material.map = bubbleTex[e]; b.material.needsUpdate = true;
+  const s = obj === w3.bike ? 1.3 / BIKE_SCALE : 1.3;
+  b.scale.set(s, s, 1); b.position.y = y; b.visible = true;
+  clearTimeout(b.userData.t); b.userData.t = setTimeout(() => { b.visible = false }, 3000);
+}
+// What a frame brings: Ride Ons for me, bubbles over the others.
+function trackEmotes() {
+  for (const n of ride.state?.inbox ?? []) { ride.rideOns = (ride.rideOns ?? 0) + 1; toast(`👍 ${n.from} t'envoie un Ride On !`) }
+  for (const o of ride.state?.others ?? []) {
+    const r = w3.others.get(o.id);
+    if (r && o.emote && r.emote !== o.emote) showBubble(r.holder, o.emote);
+    if (r) r.emote = o.emote;
+  }
+  renderEmotes();
+}
+function toast(text) {
+  const t = $('#rideToast');
+  t.textContent = text; t.hidden = false;
+  clearTimeout(t._t); t._t = setTimeout(() => { t.hidden = true }, 3000);
+}
+addEventListener('keydown', e => {
+  if ($('#ride').hidden || !$('#menu').hidden || e.target.matches?.('input, textarea') || e.repeat) return;
+  const k = +e.key;
+  if (k >= 1 && k <= 5) sendEmote(Object.keys(EMOJI)[k - 1]);
+});
+
+$('#zwoFile').addEventListener('change', e => { importZwo([...e.target.files]); e.target.value = '' });
+
 function summary(s = ride.state ?? {}) {
   const t = s.elapsed ?? 0, z = s.zombie;
   return {
@@ -4424,6 +4571,7 @@ function summary(s = ride.state ?? {}) {
     avgSpeed: t ? (s.ridden ?? 0) / t * 3.6 : 0,
     energyKj: s.energy_kj ?? 0,
     completed: ride.mode === 'workout' ? !!s.workout?.done : !!s.finished,
+    rideOns: ride.rideOns ?? 0,
     ...((ride.mode === 'course' || ride.mode === 'city') && { courseId:ride.id, looped:!!ride.course?.looped }),
     trace: thin(ride.samples ?? [], 240), // [elapsed s, W, km/h, m]
   };
@@ -4460,6 +4608,7 @@ function openMenu(mode) {
   $('#menuTitle').textContent = titles[mode];
   renderSummary(r);
   ghostLine(mode, r);
+  ftpLine(mode);
   renderBoards();
   $('#exportFit').hidden = !(ride.full?.length > 5);
   $('#resume').hidden = mode !== 'pause';

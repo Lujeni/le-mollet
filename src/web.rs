@@ -17,6 +17,7 @@
 //!   GET /events?course=<id>&mode=zombie&ftp=<W>&...           same, chased by a zombie horde
 //!   GET /power?session=<n>&w=<W>[&cad=&hr=&src=bt]  the rider's power: demo slider, or the browser's own trainer
 //!   GET /segments?id=<id>                      KOM and sprint leaderboards of a course or open world
+//!   GET /emote?session=<n>&course=<id>&e=<rideon|wave|fire|laugh|party>[&to=<rider id>]  a bubble over my rider; a Ride On to someone
 //!   GET /seek?session=<n>&d=<m>                demo mode: teleport the rider along the course
 //!   GET /pause?session=<n>&on=<0|1>            freeze or resume a ride (menu open)
 //!   GET /audio/<name>.mp3                      nature ambience loops (web/audio/CREDITS.md)
@@ -62,7 +63,15 @@ const MAX_WORLDS: usize = 12;
 /// A rider as other riders on the same course see them.
 #[derive(Debug, Clone, Serialize)]
 struct Presence {
+    /// Public id: what the others see. Never the session, which drives the ride (power, pause, turns).
     id: u64,
+    #[serde(skip)]
+    sid: u64,
+    /// Emote bubble over the rider, for a few seconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    emote: Option<&'static str>,
+    #[serde(skip)]
+    emote_at: Option<std::time::Instant>,
     name: String,
     color: String,
     frame: &'static str,
@@ -195,6 +204,8 @@ pub struct App {
     paused: Mutex<HashSet<u64>>,
     /// Open city: turn each session asked for at its next junction.
     turns: Mutex<HashMap<u64, Turn>>,
+    /// Ride Ons waiting for their recipient's next frame, by session.
+    inbox: Mutex<HashMap<u64, Vec<Notice>>>,
     /// Session allowed to drive the trainer grade: the most recent one.
     driver: AtomicU64,
 }
@@ -244,6 +255,7 @@ impl App {
             demo_seek: Mutex::new(HashMap::new()),
             paused: Mutex::new(HashSet::new()),
             turns: Mutex::new(HashMap::new()),
+            inbox: Mutex::new(HashMap::new()),
             driver: AtomicU64::new(0),
         })
     }
@@ -311,6 +323,23 @@ fn decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// What the others see of a session: a scrambled id, so nobody can steer someone else's ride.
+fn public_id(sid: u64) -> u64 {
+    (sid.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 12) | 1 << 40 // < 2^53 for the page, never a pace partner's small id
+}
+
+/// Emotes a rider can send.
+const EMOTES: [&str; 5] = ["rideon", "wave", "fire", "laugh", "party"];
+/// How long an emote bubble stays up.
+const EMOTE_SECS: u64 = 3;
+
+/// A Ride On received, shown to its recipient.
+#[derive(Serialize)]
+struct Notice {
+    from: String,
+    e: &'static str,
+}
+
 /// Who this session shows to the others, from untrusted query values.
 fn presence(query: &str, sid: u64) -> Presence {
     let name: String = param(query, "name").map(decode).unwrap_or_default().chars().filter(|c| !c.is_control()).take(24).collect();
@@ -318,7 +347,10 @@ fn presence(query: &str, sid: u64) -> Presence {
     let frame = ["road", "aero", "gravel", "vintage"].into_iter().find(|f| param(query, "frame") == Some(*f)).unwrap_or("road");
     let country = param(query, "country").filter(|c| c.len() == 2 && c.bytes().all(|b| b.is_ascii_uppercase())).map(str::to_owned);
     Presence {
-        id: sid,
+        id: public_id(sid),
+        sid,
+        emote: None,
+        emote_at: None,
         name: if name.trim().is_empty() { "Cycliste".into() } else { name.trim().to_owned() },
         color: color.unwrap_or_else(|| "#c91a09".into()),
         frame,
@@ -333,7 +365,7 @@ fn presence(query: &str, sid: u64) -> Presence {
 }
 
 async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
-    let mut buf = [0u8; 4096];
+    let mut buf = [0u8; 16384]; // an imported workout travels in the query
     let n = sock.read(&mut buf).await?;
     let req = String::from_utf8_lossy(&buf[..n]);
     let target = req.split_whitespace().nth(1).unwrap_or("/");
@@ -348,6 +380,23 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         },
         ("/workouts", _) => reply(&mut sock, "200 OK", "application/json", app.workouts_json.as_bytes()).await,
         ("/courses", _) => reply(&mut sock, "200 OK", "application/json", app.list_json.as_bytes()).await,
+        ("/emote", Some(t)) => {
+            let e = param(query, "e").and_then(|e| EMOTES.iter().find(|x| **x == e).copied());
+            let to = param(query, "to").and_then(|v| v.parse::<u64>().ok());
+            let sent = session.zip(e).is_some_and(|(sid, e)| {
+                let mut riders = t.riders.lock().unwrap();
+                let now = std::time::Instant::now();
+                let Some(me) = riders.get_mut(&sid) else { return false };
+                (me.emote, me.emote_at) = (Some(e), Some(now));
+                let from = me.name.clone();
+                if e == "rideon" && let Some(o) = to.and_then(|to| riders.values_mut().find(|p| p.id == to)) {
+                    if o.bot { (o.emote, o.emote_at) = (Some("wave"), Some(now)) } // pace partners wave back
+                    else { app.inbox.lock().unwrap().entry(o.sid).or_default().push(Notice { from, e }) }
+                }
+                true
+            });
+            if sent { reply(&mut sock, "204 No Content", "text/plain", b"").await } else { reply(&mut sock, "400 Bad Request", "text/plain", b"need session (riding this course) and e").await }
+        }
         ("/segments", Some(t)) => {
             let defs: Vec<(String, Kind)> = match &t.city {
                 Some(c) => c.segments.iter().map(|s| (s.name.clone(), s.kind)).collect(),
@@ -436,7 +485,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and on=0|1").await,
         },
         ("/events", track) => {
-            let workout = param(query, "workout").and_then(|id| app.workouts.iter().find(|w| w.id == id));
+            // A built-in workout, or one the page sends step by step (an imported .zwo).
+            let custom = param(query, "steps").and_then(|s| Workout::from_query(&param(query, "wname").map(decode).unwrap_or_default(), s));
+            let workout = param(query, "workout").and_then(|id| app.workouts.iter().find(|w| w.id == id)).or(custom.as_ref());
             let ftp = param(query, "ftp").and_then(|f| f.parse::<f32>().ok()).filter(|f| (30.0..=1000.0).contains(f));
             if track.is_none() && (workout.is_none() || ftp.is_none()) {
                 return reply(&mut sock, "400 Bad Request", "text/plain", b"need course=<id>, or workout=<id>&ftp=<W>").await;
@@ -458,6 +509,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             app.sensors.lock().unwrap().remove(&sid);
             app.paused.lock().unwrap().remove(&sid);
             app.turns.lock().unwrap().remove(&sid);
+            app.inbox.lock().unwrap().remove(&sid);
             res
         }
         _ => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
@@ -482,7 +534,11 @@ fn nearest<'a>(riders: impl Iterator<Item = &'a Presence>, distance: f32, pos: O
         v.select_nth_unstable_by(max, |a, b| a.0.total_cmp(&b.0));
         v.truncate(max);
     }
-    v.into_iter().map(|(_, p)| p.clone()).collect()
+    v.into_iter().map(|(_, p)| {
+        let mut c = p.clone();
+        if c.emote_at.is_none_or(|t| t.elapsed().as_secs() >= EMOTE_SECS) { c.emote = None }
+        c
+    }).collect()
 }
 
 /// One SSE frame: the ride, plus the workout progress when training or the zombie game, plus the other riders.
@@ -509,6 +565,9 @@ struct Frame<'a> {
     segment: Option<SegLive>,
     #[serde(skip_serializing_if = "Option::is_none")]
     result: Option<SegResult>,
+    /// Ride Ons received since the last frame.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    inbox: Vec<Notice>,
 }
 
 #[derive(Serialize)]
@@ -602,9 +661,9 @@ async fn pacer(t: Arc<Track>, id: u64, k: usize) {
         if n % 3 == 0 {
             let pos = route.as_ref().map(|r| (r.course.latlon_at(ride.distance), r.course.latlon_at(ride.distance + 5.0)));
             let mut riders = t.riders.lock().unwrap();
-            ride.draft = draft_behind(riders.values().filter(|p| p.id != id), ride.distance, pos, t.course.looped.then(|| t.course.length()));
+            ride.draft = draft_behind(riders.values().filter(|p| p.sid != id), ride.distance, pos, t.course.looped.then(|| t.course.length()));
             let p = riders.entry(id).or_insert_with(|| Presence {
-                id, name: format!("{name} · {wkg:.1} W/kg").replace('.', ","), color: color.into(), frame: "road", country: None,
+                id, sid: id, emote: None, emote_at: None, name: format!("{name} · {wkg:.1} W/kg").replace('.', ","), color: color.into(), frame: "road", country: None,
                 distance: 0.0, speed_kmh: 0.0, power: 0.0, pos: None, bot: true, pid: String::new(),
             });
             (p.distance, p.speed_kmh, p.power, p.pos) = (ride.distance, ride.speed_kmh, ride.power, pos.map(|x| x.0));
@@ -707,8 +766,8 @@ async fn ride_session(
                 });
                 let lap = t.course.looped.then(|| t.course.length());
                 // Drafting: the rider just ahead cuts the wind for the next ticks.
-                ride.draft = draft_behind(riders.values().filter(|p| p.id != sid), ride.distance, me.map(|a| (a, course.latlon_at(ride.distance + 5.0))), lap);
-                nearest(riders.values().filter(|p| p.id != sid), ride.distance, me, lap, OTHERS_MAX)
+                ride.draft = draft_behind(riders.values().filter(|p| p.sid != sid), ride.distance, me.map(|a| (a, course.latlon_at(ride.distance + 5.0))), lap);
+                nearest(riders.values().filter(|p| p.sid != sid), ride.distance, me, lap, OTHERS_MAX)
             });
             let fresh = route.as_ref().map_or(vec![], |r| r.course.points[sent_pts..].to_vec());
             sent_pts += fresh.len();
@@ -723,7 +782,7 @@ async fn ride_session(
             });
             let new_windows = windows[sent_windows..].to_vec();
             sent_windows = windows.len();
-            let frame = Frame { ride: &ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take() };
+            let frame = Frame { ride: &ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take(), inbox: app.inbox.lock().unwrap().remove(&sid).unwrap_or_default() };
             let json = serde_json::to_string(&frame).expect("frame serializes");
             sock.write_all(format!("data: {json}\n\n").as_bytes()).await?;
         }
@@ -736,7 +795,8 @@ async fn ride_session(
             && app.driver.load(Ordering::Relaxed) == sid
         {
             let (value, erg) = match progress {
-                Some(p) => (p.target, true),
+                Some(p) if p.target > 0.0 => (p.target, true),
+                Some(_) => (0.0, false), // a free block: flat road, the legs choose
                 None if ride.finished || caught => (0.0, false),
                 None => ((ride.grade * app.difficulty * 10.0).round() / 10.0, false),
             };
@@ -772,7 +832,16 @@ mod tests {
     }
 
     fn rider(id: u64, distance: f32) -> Presence {
-        Presence { id, name: String::new(), color: String::new(), frame: "road", country: None, distance, speed_kmh: 0.0, power: 0.0, pos: None, bot: false, pid: String::new() }
+        Presence { id, sid: id, emote: None, emote_at: None, name: String::new(), color: String::new(), frame: "road", country: None, distance, speed_kmh: 0.0, power: 0.0, pos: None, bot: false, pid: String::new() }
+    }
+
+    #[test]
+    fn public_ids_hide_sessions() {
+        for sid in [1u64, 42, 1 << 51, u64::MAX] {
+            let id = public_id(sid);
+            assert!(id != sid && id < 1 << 53 && id > 1000, "{sid} -> {id}");
+        }
+        assert_ne!(public_id(7), public_id(8));
     }
 
     #[test]
