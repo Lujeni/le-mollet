@@ -11,6 +11,29 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 - **Just a browser.** No heavy client to install: the UI runs in any modern web browser. An optional, experimental
   native 3D client is in the works for more realistic rendering.
 
+<p align="center"><img src="docs/screenshots/alpe.jpg" alt="Climbing the last hairpins of Alpe d'Huez, minifig fans cheering"></p>
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/home.jpg" alt="Home screen: menu bricks and the Lego rider on the trainer"><br><sub><b>Home.</b> Your rider on the trainer, everything one brick away.</sub></td>
+<td width="50%"><img src="docs/screenshots/destinations.jpg" alt="Where to ride: climbs, the Lego island, Paris, the daily loop"><br><sub><b>Where to ride.</b> Real climbs, a hand-made Lego island, Paris, the daily loop.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/island.jpg" alt="Riding the pirate port of the Île des Briques, round minimap"><br><sub><b>Île des Briques.</b> The pirate port, its cars and walkers, the round Lego minimap.</sub></td>
+<td><img src="docs/screenshots/start-picker.jpg" alt="Start picker: the island as a Lego mosaic with numbered pins"><br><sub><b>Pick a start.</b> The island as a Lego mosaic, a pin per place.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/climbs.jpg" alt="Climbs as fridge magnets"><br><sub><b>Climbs.</b> Legendary climbs as fridge magnets.</sub></td>
+<td><img src="docs/screenshots/garage.jpg" alt="Garage: the Lego minifig rider and its options"><br><sub><b>Garage.</b> Your minifig: jersey and pattern, helmet, glasses, face.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/history.jpg" alt="Ride history: totals, weekly bricks, records, ride details"><br><sub><b>History.</b> Totals, weekly bricks, records, curves and FIT export.</sub></td>
+<td><img src="docs/screenshots/equipment.jpg" alt="Equipment step: connect the trainer and heart rate strap"><br><sub><b>Equipment.</b> Connect your trainer and heart rate strap from the browser.</sub></td>
+</tr>
+</table>
+
 ## Ride
 
 - **Real climbs, in real relief.** Legendary climbs rebuilt from OpenStreetMap roads and IGN elevation data,
