@@ -67,6 +67,15 @@
     { "pts": [[900, 1420], [850, 1700], [800, 2050], [760, 2400], [560, 2700], [330, 2850]], "width": 22, "depth": 4 }
   ],
 
+  "segments": [
+    { "name": "KOM du Magmor", "kind": "kom", "street": "Route du Volcan" },
+    { "name": "KOM du Château", "kind": "kom", "street": "Montée du Château" },
+    { "name": "KOM des Gorges", "kind": "kom", "street": "Gorges de Sablor" },
+    { "name": "Sprint du Port", "kind": "sprint", "street": "Quai des Pirates" },
+    { "name": "Sprint des Cocotiers", "kind": "sprint", "street": "Corniche des Cocotiers" },
+    { "name": "Sprint de la Jungle", "kind": "sprint", "street": "Chemin de la Jungle" }
+  ],
+
   "nodes": {
     "phare": [700, 3150],
     "port_o": [2050, 3060],

@@ -44,6 +44,18 @@ have 3D: they are generated on the fly.
 
 ## Ride with a smart trainer
 
+### From the browser (recommended)
+
+Start the server without `--trainer`, open the page in **Chrome or Edge**, and on the home screen click
+**Home trainer** (FTMS trainers such as the KICKR CORE, or older KICKRs) and **Cardio** (any Bluetooth heart rate
+strap). Each rider connects their own devices, so everyone on a shared server rides their own trainer. The page
+sends the road grade (times the **difficulty** slider, 50 % by default) or the workout target in ERG mode.
+
+Web Bluetooth needs a secure page: `http://localhost` works; on the LAN, serve over https, or in Chrome on the
+rider's machine allow the address in `chrome://flags/#unsafely-treat-insecure-origin-as-secure`.
+
+### From the server
+
 ```sh
 cargo run -- serve --trainer kickr           # name substring of the trainer, case-insensitive
 cargo run -- serve --trainer kickr --difficulty 0.7   # share of the real grade sent to the trainer (default 0.5)
@@ -54,7 +66,8 @@ cargo run -- serve --trainer kickr --difficulty 0.7   # share of the real grade 
 3. Start the server. It scans for 20 s, connects, then serves the UI.
 
 The trainer drives power. On a course, the server sends it the road grade once per second; in a workout, it
-holds each target in ERG mode.
+holds each target in ERG mode. One trainer per server: a rider who connects their own trainer in the browser
+rides with theirs instead.
 
 ### Check the trainer alone
 

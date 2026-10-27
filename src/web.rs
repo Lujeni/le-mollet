@@ -15,18 +15,21 @@
 //!                                              same course see each other ("others" in each frame)
 //!   GET /events?workout=<id>&ftp=<W>&mass=<kg>&session=<n>   same, workout on a flat road
 //!   GET /events?course=<id>&mode=zombie&ftp=<W>&...           same, chased by a zombie horde
-//!   GET /power?session=<n>&w=<W>               demo mode: set the rider's power
+//!   GET /power?session=<n>&w=<W>[&cad=&hr=&src=bt]  the rider's power: demo slider, or the browser's own trainer
+//!   GET /segments?id=<id>                      KOM and sprint leaderboards of a course or open world
 //!   GET /seek?session=<n>&d=<m>                demo mode: teleport the rider along the course
 //!   GET /pause?session=<n>&on=<0|1>            freeze or resume a ride (menu open)
 //!   GET /audio/<name>.mp3                      nature ambience loops (web/audio/CREDITS.md)
 //!
-//! With a trainer, power comes from it and the latest ride drives its grade.
-//! Without, each browser tab rides on its own with the power slider (demo mode).
+//! Power, per ride: the browser's own trainer (Web Bluetooth, `src=bt`), else the server's trainer (whose grade the
+//! latest ride drives), else the demo slider. Pace partners ride every course and open world around the clock.
 
 use le_mollet::Trainer;
 use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
+use le_mollet::physics;
 use le_mollet::ride::Ride;
+use le_mollet::segment::{self, Boards, Entry, Kind, Rank, Window};
 use le_mollet::workout::{self, Progress, Workout};
 use le_mollet::world::{self, Relief};
 use le_mollet::zombie::Game;
@@ -70,6 +73,12 @@ struct Presence {
     /// `[lat, lon]` in an open city, where `distance` along each rider's own route means nothing to others.
     #[serde(skip_serializing_if = "Option::is_none")]
     pos: Option<[f64; 2]>,
+    /// A pace partner, not a person.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    bot: bool,
+    /// Profile id, for the leaderboards; never sent to the others.
+    #[serde(skip)]
+    pid: String,
 }
 
 /// A rideable road: a real climb loaded from disk or a generated open world.
@@ -145,7 +154,7 @@ impl Track {
         json!({
             "id": self.id, "name": c.name, "length": c.length(), "gain": c.elevation_gain().round(), "profile": profile,
             "terrain": self.terrain.is_some(), "looped": c.looped,
-            "relief": self.relief.map(Relief::label), "riders": self.riders.lock().unwrap().len(),
+            "relief": self.relief.map(Relief::label), "riders": self.riders.lock().unwrap().values().filter(|p| !p.bot).count(),
             "city": self.city.as_ref().map(|c| c.streets.len()), "buildings": self.buildings.is_some(), "district": !self.district.is_empty(), "ortho": !self.ortho.is_empty(),
             "island": self.city.as_ref().is_some_and(|c| c.island), "props": self.city.as_ref().map(|c| &c.props), "starts": self.city.as_ref().map(|c| &c.starts), "bbox": self.bbox(),
             "preview": self.city.as_ref().map(|c| &c.preview), "preview_w": self.city.as_ref().map(|c| c.preview_w),
@@ -158,6 +167,16 @@ fn world_track(seed: u64, length_km: u32, relief: Relief, name: String) -> anyho
     Track::new(format!("world-{seed:x}"), w.course, Some(w.terrain.to_bytes()), Some(relief))
 }
 
+/// What one ride reports to the server.
+#[derive(Debug, Default, Clone, Copy)]
+struct Sensors {
+    w: f32,
+    cadence: Option<f32>,
+    hr: Option<f32>,
+    /// From the browser's own trainer: wins over the server's.
+    live: bool,
+}
+
 pub struct App {
     tracks: RwLock<Vec<Arc<Track>>>,
     list_json: String,
@@ -168,7 +187,10 @@ pub struct App {
     /// Latest (power, cadence) from the trainer.
     pub trainer_sample: Mutex<(f32, Option<f32>)>,
     difficulty: f32,
-    demo_power: Mutex<HashMap<u64, f32>>,
+    /// What each ride reports: demo slider watts, or its own trainer and heart rate strap.
+    sensors: Mutex<HashMap<u64, Sensors>>,
+    boards: Mutex<Boards>,
+    boards_path: String,
     demo_seek: Mutex<HashMap<u64, f32>>,
     paused: Mutex<HashSet<u64>>,
     /// Open city: turn each session asked for at its next junction.
@@ -216,7 +238,9 @@ impl App {
             trainer,
             trainer_sample: Mutex::new((0.0, None)),
             difficulty,
-            demo_power: Mutex::new(HashMap::new()),
+            sensors: Mutex::new(HashMap::new()),
+            boards: Mutex::new(Boards::load(&format!("{dir}/leaderboards.json"))),
+            boards_path: format!("{dir}/leaderboards.json"),
             demo_seek: Mutex::new(HashMap::new()),
             paused: Mutex::new(HashSet::new()),
             turns: Mutex::new(HashMap::new()),
@@ -242,7 +266,7 @@ impl App {
         tracks.push(Arc::new(track));
         while tracks.iter().filter(|t| t.relief.is_some()).count() > MAX_WORLDS {
             // Worlds are kept in creation order after the climbs: drop the oldest empty one.
-            match tracks.iter().position(|t| t.relief.is_some() && t.riders.lock().unwrap().is_empty()) {
+            match tracks.iter().position(|t| t.relief.is_some() && t.riders.lock().unwrap().values().all(|p| p.bot)) {
                 Some(i) => drop(tracks.remove(i)),
                 None => break,
             }
@@ -253,6 +277,7 @@ impl App {
 
 pub async fn serve(addr: &str, app: Arc<App>) -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await?;
+    spawn_pacers(&app);
     eprintln!("web UI on http://{addr}");
     loop {
         let (sock, _) = listener.accept().await?;
@@ -302,6 +327,8 @@ fn presence(query: &str, sid: u64) -> Presence {
         speed_kmh: 0.0,
         power: 0.0,
         pos: None,
+        bot: false,
+        pid: param(query, "pid").filter(|p| p.len() <= 40 && p.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')).unwrap_or_default().to_owned(),
     }
 }
 
@@ -321,6 +348,21 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         },
         ("/workouts", _) => reply(&mut sock, "200 OK", "application/json", app.workouts_json.as_bytes()).await,
         ("/courses", _) => reply(&mut sock, "200 OK", "application/json", app.list_json.as_bytes()).await,
+        ("/segments", Some(t)) => {
+            let defs: Vec<(String, Kind)> = match &t.city {
+                Some(c) => c.segments.iter().map(|s| (s.name.clone(), s.kind)).collect(),
+                None => segment::course_windows(&t.course).into_iter().map(|w| (w.name, w.kind)).collect(),
+            };
+            let body = { // the lock must be gone before the await below
+                let (now, boards) = (unix_now(), app.boards.lock().unwrap());
+                let list: Vec<_> = defs.iter().map(|(name, kind)| {
+                    let (all, today) = boards.top(&format!("{}:{name}", t.id), 10, now);
+                    json!({ "name": name, "kind": kind, "all": all, "today": today })
+                }).collect();
+                serde_json::to_string(&list).unwrap_or_default()
+            };
+            reply(&mut sock, "200 OK", "application/json", body.as_bytes()).await
+        }
         ("/worlds", _) => reply(&mut sock, "200 OK", "application/json", app.worlds_json().as_bytes()).await,
         ("/worlds/new", _) => {
             let length = param(query, "length").and_then(|l| l.parse::<u32>().ok()).filter(|l| [5, 10, 20].contains(l));
@@ -359,7 +401,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let w = param(query, "w").and_then(|w| w.parse::<f32>().ok()).filter(|w| (0.0..=2000.0).contains(w));
             match (session, w) {
                 (Some(s), Some(w)) => {
-                    app.demo_power.lock().unwrap().insert(s, w);
+                    let num = |k: &str, max: f32| param(query, k).and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=max).contains(v));
+                    let sensors = Sensors { w, cadence: num("cad", 250.0), hr: num("hr", 250.0), live: param(query, "src") == Some("bt") };
+                    app.sensors.lock().unwrap().insert(s, sensors);
                     reply(&mut sock, "204 No Content", "text/plain", b"").await
                 }
                 _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and w in 0..=2000").await,
@@ -411,7 +455,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             if let Some(t) = &track {
                 t.riders.lock().unwrap().remove(&sid);
             }
-            app.demo_power.lock().unwrap().remove(&sid);
+            app.sensors.lock().unwrap().remove(&sid);
             app.paused.lock().unwrap().remove(&sid);
             app.turns.lock().unwrap().remove(&sid);
             res
@@ -457,6 +501,115 @@ struct Frame<'a> {
     route: Vec<Point>,
     #[serde(skip_serializing_if = "Option::is_none")]
     junction: Option<Junction>,
+    /// Segments along this rider's road, sent once each (all of a course's in the first frame).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    windows: Vec<Window>,
+    /// The segment being ridden, and the one just finished.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    segment: Option<SegLive>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<SegResult>,
+}
+
+#[derive(Serialize)]
+struct SegLive {
+    name: String,
+    kind: Kind,
+    done: f32,
+    len: f32,
+    time: f32,
+    best: Option<f32>,
+}
+
+#[derive(Serialize)]
+struct SegResult {
+    name: String,
+    kind: Kind,
+    time: f32,
+    rank: Rank,
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
+/// Drag saved behind the closest rider ahead: along the course (wrapping on a loop of `lap` m), or, in an open
+/// world where `pos` is (me, a point 5 m ahead of me), within 2 m of my line.
+fn draft_behind<'a>(others: impl Iterator<Item = &'a Presence>, distance: f32, pos: Option<([f64; 2], [f64; 2])>, lap: Option<f32>) -> f32 {
+    let gap = |p: &Presence| match (pos, p.pos) {
+        (Some((a, h)), Some(b)) => {
+            let k = a[0].to_radians().cos();
+            let (hx, hz) = ((h[1] - a[1]) * k, a[0] - h[0]);
+            let n = hx.hypot(hz).max(1e-12);
+            let (dx, dz) = ((b[1] - a[1]) * k, a[0] - b[0]);
+            let side = ((dx * hz - dz * hx) / n * 110_540.0).abs();
+            if side < 2.0 { ((dx * hx + dz * hz) / n * 110_540.0) as f32 } else { -1.0 }
+        }
+        _ => {
+            let g = p.distance - distance;
+            lap.map_or(g, |l| if g > l / 2.0 { g - l } else if g < -l / 2.0 { g + l } else { g })
+        }
+    };
+    physics::draft(others.map(gap).filter(|g| *g > 0.0).fold(f32::MAX, f32::min))
+}
+
+/// Pace partners: riders that never stop, each at a steady W/kg, so no road is ever empty and there is
+/// always a wheel to follow.
+const PACERS: [(&str, f32, &str); 3] = [("Coco", 2.0, "#fc97ac"), ("Gaston", 3.0, "#36aebf"), ("Mamie Turbo", 4.0, "#a5ca18")];
+
+pub fn spawn_pacers(app: &App) {
+    let tracks = app.tracks.read().unwrap().clone();
+    let mut id = 1;
+    for t in tracks {
+        let n = if t.city.is_some() || t.relief.is_some() { 3 } else { 2 };
+        for k in 0..n {
+            tokio::spawn(pacer(t.clone(), id, k));
+            id += 1;
+        }
+    }
+}
+
+async fn pacer(t: Arc<Track>, id: u64, k: usize) {
+    let (name, wkg, color) = PACERS[k];
+    let mut rng = id.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+    let mut rand = move || { rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17; (rng >> 11) as f32 / (1u64 << 53) as f32 };
+    let city = t.city.as_ref();
+    let start = |c: &City| c.starts.get(k % c.starts.len().max(1)).map_or(c.start, |s| s.at);
+    let mut route = city.map(|c| Route::start_at(c, start(c)));
+    let mut ride = Ride::new(83.0);
+    ride.distance = if route.is_none() { t.course.length() * k as f32 / 3.0 } else { 0.0 }; // spread out on a course
+    let (mut tick, mut n, mut rest) = (tokio::time::interval(Duration::from_secs_f32(DT)), 0u32, 0.0);
+    loop {
+        tick.tick().await;
+        n += 1;
+        if let (Some(c), Some(r)) = (city, route.as_mut()) {
+            if r.next == Turn::Straight && rand() < 0.004 { r.next = if rand() < 0.5 { Turn::Left } else { Turn::Right } }
+            r.extend(c, ride.distance);
+            // The route only grows: start a fresh one from here every 50 km so it never weighs much.
+            if ride.distance > 50_000.0 {
+                let here = r.course.latlon_at(ride.distance);
+                *r = Route::start_at(c, here);
+                (ride.distance, ride.ridden) = (0.0, 0.0);
+            }
+        }
+        let course = route.as_ref().map_or(&t.course, |r| &r.course);
+        ride.power = wkg * 75.0 * (1.0 + 0.04 * (n as f32 * 0.013 + k as f32).sin());
+        if ride.finished {
+            rest += DT;
+            if rest > 20.0 { (ride, rest) = (Ride::new(83.0), 0.0) } // at the top of a climb: back down to the start
+        }
+        ride.tick(course, DT);
+        if n % 3 == 0 {
+            let pos = route.as_ref().map(|r| (r.course.latlon_at(ride.distance), r.course.latlon_at(ride.distance + 5.0)));
+            let mut riders = t.riders.lock().unwrap();
+            ride.draft = draft_behind(riders.values().filter(|p| p.id != id), ride.distance, pos, t.course.looped.then(|| t.course.length()));
+            let p = riders.entry(id).or_insert_with(|| Presence {
+                id, name: format!("{name} · {wkg:.1} W/kg").replace('.', ","), color: color.into(), frame: "road", country: None,
+                distance: 0.0, speed_kmh: 0.0, power: 0.0, pos: None, bot: true, pid: String::new(),
+            });
+            (p.distance, p.speed_kmh, p.power, p.pos) = (ride.distance, ride.speed_kmh, ride.power, pos.map(|x| x.0));
+        }
+    }
 }
 
 /// Open city: the next junction, how far it is and the ways out, left to right.
@@ -482,6 +635,10 @@ async fn ride_session(
     // Open city: start from the place the rider picked, else the city's own start.
     let route = city.map(|c| Route::start_at(c, start.and_then(|i| c.starts.get(i)).map_or(c.start, |s| s.at)));
     let (mut route, mut sent_pts) = (route, 0);
+    // Segments: fixed windows on a course; in an open world, timed streets as the route takes them.
+    let mut windows: Vec<Window> = if city.is_some() || track.is_none() { vec![] } else { segment::course_windows(base) };
+    let (mut sent_windows, mut legs_seen, mut timer, mut result) = (0, 0, segment::Timer::default(), None::<SegResult>);
+    let key = |w: &Window| format!("{}:{}", track.map_or("", |t| t.id.as_str()), w.name);
     let mut ride = Ride::new(mass);
     let mut tick = tokio::time::interval(Duration::from_secs_f32(DT));
     let (mut n, mut sent) = (0u32, None::<f32>);
@@ -494,9 +651,13 @@ async fn ride_session(
             r.extend(c, ride.distance);
         }
         let course = route.as_ref().map_or(base, |r| &r.course);
-        (ride.power, ride.cadence) = match app.trainer {
-            Some(_) => *app.trainer_sample.lock().unwrap(),
-            None => (app.demo_power.lock().unwrap().get(&sid).copied().unwrap_or(0.0), None),
+        let sensors = app.sensors.lock().unwrap().get(&sid).copied().unwrap_or_default();
+        (ride.power, ride.cadence, ride.hr) = match app.trainer {
+            Some(_) if !sensors.live => {
+                let (w, cadence) = *app.trainer_sample.lock().unwrap();
+                (w, cadence, sensors.hr)
+            }
+            _ => (sensors.w, sensors.cadence, sensors.hr),
         };
         if let Some(d) = app.demo_seek.lock().unwrap().remove(&sid) {
             ride.distance = d.min(course.length());
@@ -513,6 +674,25 @@ async fn ride_session(
                 g.tick(&ride, DT);
             }
         }
+        if let (Some(c), Some(r)) = (city, route.as_ref()) {
+            for &(street, forward, d0, d1) in &r.legs[legs_seen..] {
+                let name = &c.streets[street].name;
+                if let Some(s) = c.segments.iter().find(|s| &s.street == name && (forward || s.kind == Kind::Sprint)) {
+                    windows.push(Window { name: s.name.clone(), kind: s.kind, d0, d1 });
+                }
+            }
+            legs_seen = r.legs.len();
+        }
+        if !paused && let Some((i, time)) = timer.update(&windows, ride.distance, ride.elapsed)
+            && let Some(me) = track.and_then(|t| t.riders.lock().unwrap().get(&sid).cloned())
+        {
+            let w = &windows[i];
+            let who = if me.pid.is_empty() { sid.to_string() } else { me.pid };
+            let mut boards = app.boards.lock().unwrap();
+            let rank = boards.record(&key(w), Entry { who, name: me.name, color: me.color, time, date: unix_now() });
+            if let Err(e) = boards.save(&app.boards_path) { eprintln!("leaderboards: {e}") }
+            result = Some(SegResult { name: w.name.clone(), kind: w.kind, time, rank });
+        }
         // Workout clock = riding time, so it starts with the first pedal stroke.
         let progress = plan.map(|(w, ftp)| w.progress(ride.elapsed, ftp));
         n += 1;
@@ -525,7 +705,10 @@ async fn ride_session(
                     me.pos = city.map(|_| course.latlon_at(ride.distance));
                     me.pos
                 });
-                nearest(riders.values().filter(|p| p.id != sid), ride.distance, me, t.course.looped.then(|| t.course.length()), OTHERS_MAX)
+                let lap = t.course.looped.then(|| t.course.length());
+                // Drafting: the rider just ahead cuts the wind for the next ticks.
+                ride.draft = draft_behind(riders.values().filter(|p| p.id != sid), ride.distance, me.map(|a| (a, course.latlon_at(ride.distance + 5.0))), lap);
+                nearest(riders.values().filter(|p| p.id != sid), ride.distance, me, lap, OTHERS_MAX)
             });
             let fresh = route.as_ref().map_or(vec![], |r| r.course.points[sent_pts..].to_vec());
             sent_pts += fresh.len();
@@ -533,7 +716,14 @@ async fn ride_session(
                 let (in_m, exits) = r.upcoming(c, ride.distance);
                 Junction { in_m, exits, next: r.next }
             });
-            let frame = Frame { ride: &ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction };
+            let segment = timer.running().map(|(i, t0)| {
+                let w = &windows[i];
+                let best = app.boards.lock().unwrap().0.get(&key(w)).and_then(|l| l.first()).map(|e| e.time);
+                SegLive { name: w.name.clone(), kind: w.kind, done: ride.distance - w.d0, len: w.d1 - w.d0, time: ride.elapsed - t0, best }
+            });
+            let new_windows = windows[sent_windows..].to_vec();
+            sent_windows = windows.len();
+            let frame = Frame { ride: &ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take() };
             let json = serde_json::to_string(&frame).expect("frame serializes");
             sock.write_all(format!("data: {json}\n\n").as_bytes()).await?;
         }
@@ -541,6 +731,7 @@ async fn ride_session(
         // ponytail: 1 W / 0.2 % deadbands at 1 Hz keep BLE writes low, tune if it feels steppy
         if let Some(t) = &app.trainer
             && !paused
+            && !sensors.live
             && n % 10 == 0
             && app.driver.load(Ordering::Relaxed) == sid
         {
@@ -581,7 +772,7 @@ mod tests {
     }
 
     fn rider(id: u64, distance: f32) -> Presence {
-        Presence { id, name: String::new(), color: String::new(), frame: "road", country: None, distance, speed_kmh: 0.0, power: 0.0, pos: None }
+        Presence { id, name: String::new(), color: String::new(), frame: "road", country: None, distance, speed_kmh: 0.0, power: 0.0, pos: None, bot: false, pid: String::new() }
     }
 
     #[test]

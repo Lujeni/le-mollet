@@ -135,6 +135,33 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px }
 .ride-head h1, .ride-head h2 { margin:0 }
 
+/* Devices on the home screen */
+.devices { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:-8px 0 20px }
+.dev { display:flex; flex-direction:column; align-items:flex-start; gap:4px; padding:10px 14px; text-align:left; cursor:pointer; color:var(--ink); font:inherit; background:var(--glass-hi); border:1px solid var(--edge); border-radius:14px }
+.dev:hover:not(:disabled) { background:var(--glass-hi2) } .dev:disabled { opacity:.5; cursor:not-allowed }
+.dev b { font:600 15px var(--font) }
+.dev-state { font-size:12.5px; color:var(--muted) } .dev-state::before { content:''; display:inline-block; width:8px; height:8px; border-radius:50%; background:#8a93a0; margin-right:6px }
+.dev-state.on { color:var(--ink) } .dev-state.on::before { background:#4bd06a; box-shadow:0 0 6px #4bd06a }
+.dev-diff { grid-column:1 / -1; flex-direction:row; align-items:center; justify-content:space-between; gap:12px; font-size:13px }
+.dev-diff span { display:flex; align-items:center; gap:10px; flex:1; max-width:340px } .dev-diff output { font:700 14px var(--font); color:var(--ink); min-width:44px }
+.devices .muted { grid-column:1 / -1; margin:0; font-size:12px }
+/* Segments: the live banner, the result, the leaderboards */
+.seg-banner { position:absolute; left:50%; top:96px; transform:translateX(-50%); z-index:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 18px 10px; border-radius:16px; color:#fff; pointer-events:none; box-shadow:0 10px 26px rgba(0,0,0,.35); min-width:260px }
+.seg-banner.kom { background:radial-gradient(circle, #c91a09 3px, transparent 3.5px) 0 0 / 14px 14px, #f4f4f4; color:#1b2a34 } .seg-banner.sprint { background:#2d8a48 }
+.seg-banner b { font:700 16px var(--font) } .seg-banner small { font:600 12.5px var(--font) }
+.seg-bar { width:100%; height:6px; border-radius:3px; background:rgba(0,0,0,.18); overflow:hidden } .seg-bar i { display:block; height:100%; background:var(--accent) }
+.seg-toast { position:absolute; left:50%; top:40%; transform:translate(-50%, -50%); z-index:2; display:flex; flex-direction:column; align-items:center; gap:4px; padding:16px 24px; border-radius:18px; background:var(--accent); color:#1b2a34; box-shadow:0 6px 0 var(--accent-deep), 0 18px 40px rgba(0,0,0,.4); pointer-events:none; animation:pop .35s cubic-bezier(.3,.7,.4,1.5) }
+.seg-toast b { font:700 22px var(--font) } .seg-toast span { font:600 14px var(--font) }
+@keyframes pop { from { transform:translate(-50%, -50%) scale(.6); opacity:0 } }
+.boards { display:flex; flex-direction:column; gap:8px; margin:-6px 0 16px }
+.boards h3 { margin:0; font:700 12px var(--font); letter-spacing:1.5px; text-transform:uppercase; color:var(--accent-ink) }
+.board { padding:10px 12px; border-radius:14px; background:var(--glass-hi); display:flex; flex-direction:column; gap:3px }
+.board strong { font:600 14px var(--font) } .board strong small { color:var(--muted); font-weight:500 }
+.board-row { display:grid; grid-template-columns:22px 10px 1fr auto; align-items:center; gap:8px; font-size:13px }
+.board-row.me { font-weight:700 } .board-row i { width:10px; height:10px; border-radius:3px } .board-row b { font:700 13px var(--font); font-variant-numeric:tabular-nums }
+.jersey { display:grid; place-items:center; width:20px; height:20px; border-radius:6px; background:var(--glass-hi2); font:700 11px var(--font) }
+.jersey.kom { background:radial-gradient(circle, #c91a09 2px, transparent 2.5px) 0 0 / 7px 7px, #fff; color:#1b2a34 } .jersey.sprint { background:#2d8a48; color:#fff }
+
 /* History page */
 #historyScreen { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
 .hist { width:min(1120px, 100%); max-height:100%; overflow:auto; padding:28px }
@@ -297,6 +324,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   .map.round { width:170px; height:170px }
   .pick-body { grid-template-columns:1fr } #pickMap { height:38vh } .pick { padding:20px }
   .tiles { grid-template-columns:1fr }
+  .devices { grid-template-columns:1fr } .seg-banner { top:150px; min-width:0 }
   .tiles .tile.me { grid-column:auto }
   .kpis { grid-template-columns:repeat(3, 1fr) } .hist-top, .hist-body { grid-template-columns:1fr } .hist { padding:20px } .hist-list { max-height:none }
   .tiles .tile.ride { grid-row:auto; min-height:150px }
@@ -351,6 +379,12 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   <main id="home" hidden>
     <div class="block panel">
       <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1 id="homeHello"></h1><div class="chips" id="homeStats"></div></div></div>
+      <div class="devices">
+        <button class="dev" id="devTrainer"></button>
+        <button class="dev" id="devHr"></button>
+        <label class="dev-diff">Difficulté des pentes<span><input type="range" id="difficulty" min="0" max="100" step="5"><output id="difficultyOut"></output></span></label>
+        <small class="muted" id="devHint"></small>
+      </div>
       <div class="tiles">
         <button class="tile ride" id="goRide">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M0 11h12v1H0zM1 10h10v1H1zM2 9h3V8h1V6h1v1h1v1h1v1h1v1H2zM5 5h2v1H5zM6 4h1v1H6z"/></svg>
@@ -539,6 +573,8 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     <div class="block panel hud map" data-w="map"><canvas id="profileCanvas"></canvas></div>
     <div id="mirror" class="hud" data-w="mirror" hidden aria-hidden="true"><small>Rétro</small></div>
     <small class="attrib" id="attrib"></small>
+    <div class="seg-banner" id="segBanner" hidden aria-live="polite"></div>
+    <div class="seg-toast" id="segToast" hidden role="status"></div>
     <div class="block panel hud-edit" id="hudEdit" hidden role="dialog" aria-labelledby="hudEditTitle">
       <h2 id="hudEditTitle">Ton affichage</h2>
       <p class="muted">Glisse les panneaux où tu veux. Touche H pour tout masquer en roulant.</p>
@@ -555,11 +591,13 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     <div class="block panel">
       <h2 id="menuTitle"></h2>
       <div class="summary" id="menuStats"></div>
+      <div class="boards" id="menuBoards"></div>
       <div class="menu-actions">
         <button class="btn primary" id="resume">Reprendre</button>
         <button class="btn" id="saveQuit">Terminer et enregistrer</button>
         <button class="btn danger" id="quitNoSave">Quitter sans enregistrer</button>
         <button class="btn primary" id="toHome" hidden>Retour à l'accueil</button>
+        <button class="btn" id="exportFit">Exporter en .fit (Strava, Garmin)</button>
       </div>
     </div>
   </div>
@@ -1194,6 +1232,7 @@ function showHome(p = current) {
   $('#goRideSub').textContent = `${n} col${n > 1 ? 's' : ''} mythique${n > 1 ? 's' : ''} et le monde ouvert`;
   $('#goTrainSub').textContent = `${ride.workouts?.length ?? 0} séances calées sur ta FTP`;
   renderHistory();
+  renderSensors();
   const rides = p.history?.length ?? 0;
   $('#goHistorySub').textContent = rides ? `${rides} sortie${rides > 1 ? 's' : ''}, tes records` : 'Ton historique et tes records';
   $('#homeMode').textContent = !ride.list ? '' : ride.list.trainer
@@ -1550,6 +1589,8 @@ function drawSteps(cv, steps, t, pad = { l:0, r:0, t:2, b:0 }) {
 function openWorkout(w) {
   ride.ended = false;
   ride.samples = [];
+  ride.full = []; // one sample a second, for the FIT export
+  ride.windows = [];
   amb.ctx ??= new AudioContext();
   amb.ctx.resume();
   ride.mode = 'workout';
@@ -1561,7 +1602,7 @@ function openWorkout(w) {
   $('#attrib').textContent = `Cibles en % de ta FTP (${current.ftp} W). Sons : Wikimedia Commons et Freesound (domaine public, CC0).`;
   ride.state = null;
   ride.session = Math.floor(Math.random() * 2 ** 52);
-  const demo = !ride.list?.trainer;
+  const demo = demoRide();
   $('#demo').hidden = !demo;
   $('#autoBtn').hidden = !demo;
   $('#profileCanvas').classList.remove('seekable');
@@ -1572,6 +1613,7 @@ function openWorkout(w) {
   ride.events.onmessage = e => {
     ride.state = JSON.parse(e.data);
     recordSample();
+    recordFull();
     if (ride.auto && ride.state.workout && Math.round(ride.state.workout.target) !== +$('#watts').value) setPower(ride.state.workout.target);
     renderStats(); drawProfile(); mixAmbience(); checkEnd();
   };
@@ -1599,6 +1641,8 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
   const zombie = kind === 'zombie';
   ride.ended = false;
   ride.samples = [];
+  ride.full = []; // one sample a second, for the FIT export
+  ride.windows = [];
   ride.routed = false;
   amb.ctx ??= new AudioContext(); // created inside the click so autoplay policies allow sound
   amb.ctx.resume();
@@ -1615,7 +1659,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
   ride.state = null;
   renderStats();
   ride.session = Math.floor(Math.random() * 2 ** 52);
-  const demo = !ride.list.trainer;
+  const demo = demoRide();
   $('#demo').hidden = !demo;
   $('#autoBtn').hidden = true;
   const seek = demo && kind === 'course'; // no teleporting away from the horde, nor along a city route that does not exist yet
@@ -1625,7 +1669,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
     setPower(Math.round(current.ftp * 0.75 / 5) * 5); // start at endurance pace
   }
   // ponytail: 8 kg bike until the garage has weights
-  const me = `&name=${encodeURIComponent(current.name)}&color=${encodeURIComponent(current.bike.frame)}&frame=${current.bike.frameType ?? 'road'}&country=${current.country ?? ''}`;
+  const me = `&pid=${current.id}&name=${encodeURIComponent(current.name)}&color=${encodeURIComponent(current.bike.frame)}&frame=${current.bike.frameType ?? 'road'}&country=${current.country ?? ''}`;
   const game = zombie ? `&mode=zombie&ftp=${current.ftp}` : '';
   ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}${me}${game}${start != null ? `&start=${start}` : ''}`);
   if (hasTerrain) {
@@ -1636,7 +1680,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); recordSample(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); recordSample(); recordFull(); trackSegments(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -1828,6 +1872,7 @@ function renderStats() {
     $('#stats').replaceChildren(
       stat('power', 'Puissance', Math.round(s.power), 'W'),
       stat('target', 'Cible', Math.round(w.target), 'W'),
+      ...(s.hr ? [stat('hr', 'Cardio', Math.round(s.hr), 'bpm')] : []), ...(s.cadence != null ? [stat('cadence', 'Cadence', Math.round(s.cadence), 'rpm')] : []),
       stat('interval', 'Intervalle', mmss(w.step_left), ''),
       stat('session', 'Séance', mmss(Math.min(s.elapsed, total)), `/ ${mmss(total)}`),
       stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
@@ -1857,8 +1902,10 @@ function renderStats() {
   const total = ride.course.points.at(-1).d;
   $('#stats').replaceChildren(
     stat('power', 'Puissance', Math.round(s.power), 'W'),
+    ...(s.hr ? [stat('hr', 'Cardio', Math.round(s.hr), 'bpm')] : []), ...(s.cadence != null ? [stat('cadence', 'Cadence', Math.round(s.cadence), 'rpm')] : []),
     stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
     stat('grade', 'Pente', s.grade.toFixed(1), '%'),
+    stat('draft', 'Aspiration', Math.round((s.draft ?? 0) * 100), '%'),
     ride.mode === 'city'
       ? stat('distance', 'Distance', (s.ridden / 1000).toFixed(2), 'km')
       :     ride.course.looped
@@ -1881,10 +1928,10 @@ const HUD_PRESETS = {
 };
 const HUD_WIDGETS = { stats:'Chiffres', controls:'Commandes', power:'Puissance (démo)', map:'Profil / carte', mirror:'Rétro (zombies)' };
 const STAT_KEYS = {
-  workout:['power', 'target', 'interval', 'session', 'speed', 'distance'], zombie:['power', 'speed', 'gap', 'wave', 'time', 'sprints'],
-  ride:['power', 'speed', 'grade', 'distance', 'ele', 'time', 'ghost'],
+  workout:['power', 'target', 'hr', 'cadence', 'interval', 'session', 'speed', 'distance'], zombie:['power', 'speed', 'gap', 'wave', 'time', 'sprints'],
+  ride:['power', 'hr', 'cadence', 'speed', 'grade', 'draft', 'distance', 'ele', 'time', 'ghost'],
 };
-const STAT_NAMES = { power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints', ghost:'Fantôme' };
+const STAT_NAMES = { power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints', ghost:'Fantôme', hr:'Cardio', cadence:'Cadence', draft:'Aspiration' };
 const defaultHud = () => structuredClone(HUD_PRESETS[innerWidth <= 700 ? 'phone' : 'cockpit']);
 const hud = () => current?.hud ?? defaultHud();
 
@@ -3277,13 +3324,13 @@ function riderModel(bike, rider) {
   return g;
 }
 
-function nameTag(text) {
+function nameTag(text, bot = false) { // pace partners wear a yellow tag
   const c = document.createElement('canvas');
   [c.width, c.height] = [256, 56];
   const g = c.getContext('2d');
-  g.fillStyle = 'rgba(11,13,16,.75)';
+  g.fillStyle = bot ? 'rgba(242,205,55,.92)' : 'rgba(11,13,16,.75)';
   g.fillRect(0, 0, 256, 56);
-  g.fillStyle = '#eef1f5';
+  g.fillStyle = bot ? '#1b2a34' : '#eef1f5';
   g.font = 'bold 26px Silkscreen, monospace';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
@@ -3302,7 +3349,7 @@ function updateOthers(dt) {
     let r = w3.others.get(o.id);
     if (!r) {
       const holder = new THREE.Group(), bike = riderModel({ ...DEFAULT_BIKE, frame:o.color, frameType:o.frame }, { ...DEFAULT_RIDER, jersey:o.color });
-      holder.add(bike, nameTag(`${o.name}${o.country ? ' ' + flag(o.country) : ''}`));
+      holder.add(bike, nameTag(`${o.name}${o.country ? ' ' + flag(o.country) : ''}`, o.bot));
       w3.group.add(holder);
       r = { holder, bike, dist:o.distance, lane:(hash(o.id % 100000, 1, 9) - 0.5) * 3 };
       w3.others.set(o.id, r);
@@ -3531,6 +3578,7 @@ function enter3d(buf) {
   if (ride.mode === 'zombie') halloween();
   if (climb() && ride.ghost) w3.group.add(w3.ghost = ghostModel());
   if (ride.island) enterIsland();
+  placeArches(ride.windows ?? []);
   [w3.crowd, w3.cars, w3.pigeons, w3.clouds] = [makeCrowd(), [], [], makeClouds()];
   w3.group.add(w3.clouds);
   // Lego light: filmic tone curve, studio reflections on the plastic, sun shadows that follow the rider.
@@ -4044,7 +4092,8 @@ function renderDetail(r) {
       r.kind === 'zombie' ? stat('Vague', r.wave, `· ${r.sprintsWon}/${r.sprints} sprints`) : stat('Sorties ici', Math.max(1, same.length), same.length > 1 ? `· record ${hms(best)}` : '')),
     r.trace?.length > 1 ? cv : h('p', { class:'muted' }, 'Les courbes d\'altitude et de puissance s\'enregistrent à partir de tes prochaines sorties.'),
     h('div', { class:'form-actions' },
-      canRide ? h('button', { class:'btn primary', onclick: () => rideAgain(r) }, 'Rouler à nouveau') : h('span'),
+      h('span', { class:'seg' }, canRide ? h('button', { class:'btn primary', onclick: () => rideAgain(r) }, 'Rouler à nouveau') : '',
+        r.trace?.length > 1 ? h('button', { class:'btn', onclick: () => downloadFit(traceSamples(r), r) }, 'Exporter .fit') : ''),
       h('button', { class:'btn danger', onclick: () => {
         if (!confirm(`Supprimer la sortie « ${r.name} » ?`)) return;
         current.history = current.history.filter(o => o !== r);
@@ -4076,6 +4125,248 @@ function rideAgain(r) {
   if (c) openRide(c.id, c.terrain);
 }
 $('#histBack').addEventListener('click', () => showHome());
+
+// ---------- your own trainer and heart rate strap, from the browser (Web Bluetooth) ----------
+// Each rider connects their own devices: the page reads power and cadence (FTMS, or Cycling Power with the
+// Wahoo control point on older KICKRs) and heart rate, sends them to the server, and drives the trainer:
+// the road grade (times the difficulty) on a ride, the target watts (ERG) in a workout.
+const BT = { FTMS:0x1826, BIKE_DATA:0x2ad2, CONTROL:0x2ad9, CPS:0x1818, CPS_MEAS:0x2a63, HRS:0x180d, HR_MEAS:0x2a37, WAHOO:'a026e005-0a7d-4ab3-97fa-f1500f9feb8b' };
+const bt = { trainer:null, hr:null, q:Promise.resolve(), sent:null };
+
+// Writes queued one after the other: a GATT write while another is in flight fails.
+const btWrite = bytes => { const t = bt.trainer; if (t?.ctrl) bt.q = bt.q.then(() => t.ctrl.writeValue(new Uint8Array(bytes))).catch(() => {}) };
+
+async function connectTrainer() {
+  const device = await navigator.bluetooth.requestDevice({ filters:[{ services:[BT.FTMS] }, { services:[BT.CPS] }], optionalServices:[BT.FTMS, BT.CPS] });
+  const server = await device.gatt.connect();
+  const t = { device, name:device.name ?? 'Home trainer', power:0, cadence:null, kind:null, ctrl:null, crank:null };
+  try { // FTMS first: newer trainers, KICKR CORE
+    const s = await server.getPrimaryService(BT.FTMS);
+    const data = await s.getCharacteristic(BT.BIKE_DATA);
+    data.addEventListener('characteristicvaluechanged', e => Object.assign(t, parseBikeData(e.target.value)));
+    await data.startNotifications();
+    t.ctrl = await s.getCharacteristic(BT.CONTROL);
+    await t.ctrl.startNotifications().catch(() => {}); // indications must be on before the trainer answers
+    t.kind = 'ftms';
+    bt.trainer = t;
+    btWrite([0x00]); btWrite([0x07]); // request control, start
+  } catch {
+    const s = await server.getPrimaryService(BT.CPS); // older KICKR: Cycling Power + the Wahoo control point
+    const meas = await s.getCharacteristic(BT.CPS_MEAS);
+    meas.addEventListener('characteristicvaluechanged', e => Object.assign(t, parseCps(e.target.value, t)));
+    await meas.startNotifications();
+    t.ctrl = await s.getCharacteristic(BT.WAHOO).catch(() => null);
+    t.kind = 'wahoo';
+    bt.trainer = t;
+    if (t.ctrl) { btWrite([0x20, 0xee, 0xfc]); btWrite(wahooSim(current?.weightKg + 8 || 83)) } // unlock, then rider weight for grades
+  }
+  device.addEventListener('gattserverdisconnected', () => { if (bt.trainer === t) bt.trainer = null; renderSensors() });
+  bt.sent = null;
+  renderSensors();
+}
+
+async function connectHr() {
+  const device = await navigator.bluetooth.requestDevice({ filters:[{ services:[BT.HRS] }] });
+  const ch = await (await (await device.gatt.connect()).getPrimaryService(BT.HRS)).getCharacteristic(BT.HR_MEAS);
+  const h = { device, name:device.name ?? 'Cardio', bpm:null };
+  ch.addEventListener('characteristicvaluechanged', e => { const v = e.target.value; h.bpm = v.getUint8(0) & 1 ? v.getUint16(1, true) : v.getUint8(1) });
+  await ch.startNotifications();
+  device.addEventListener('gattserverdisconnected', () => { if (bt.hr === h) bt.hr = null; renderSensors() });
+  bt.hr = h;
+  renderSensors();
+}
+
+// FTMS Indoor Bike Data: flags, then optional fields in order (bit 0 inverted: speed present when clear).
+function parseBikeData(v) {
+  const f = v.getUint16(0, true), out = {};
+  let i = 2;
+  if (!(f & 1)) i += 2; // speed
+  if (f & 2) i += 2; // average speed
+  if (f & 4) { out.cadence = v.getUint16(i, true) / 2; i += 2 }
+  if (f & 8) i += 2; // average cadence
+  if (f & 16) i += 3; // total distance
+  if (f & 32) i += 2; // resistance
+  if (f & 64) out.power = Math.max(0, v.getInt16(i, true));
+  return out;
+}
+// Cycling Power Measurement: power, and cadence from the crank revolution counter.
+function parseCps(v, t) {
+  const f = v.getUint16(0, true), out = { power:Math.max(0, v.getInt16(2, true)) };
+  let i = 4;
+  if (f & 1) i += 1; if (f & 4) i += 2; if (f & 16) i += 6;
+  if (f & 32) {
+    const [revs, time] = [v.getUint16(i, true), v.getUint16(i + 2, true)];
+    if (t.crank) { const [dr, dt] = [(revs - t.crank[0] + 65536) % 65536, ((time - t.crank[1] + 65536) % 65536) / 1024]; if (dt > 0) out.cadence = dr / dt * 60 }
+    t.crank = [revs, time];
+  }
+  return out;
+}
+const le16 = n => [n & 0xff, (n >> 8) & 0xff];
+const wahooSim = kg => [0x43, ...le16(Math.round(kg * 100)), ...le16(40), ...le16(510)]; // weight, crr 0.004, cw 0.51
+
+// Once a second during a ride: the grade or the target watts, only when it changed enough.
+function driveTrainer() {
+  const t = bt.trainer, s = ride.state;
+  if (!t?.ctrl || !s || $('#ride').hidden) return;
+  const paused = !$('#menu').hidden || s.finished || s.zombie?.over;
+  const erg = ride.mode === 'workout' && s.workout;
+  const value = erg ? Math.round(s.workout.target) : paused ? 0 : Math.round(s.grade * (current.difficulty ?? 0.5) * 10) / 10;
+  if (bt.sent && bt.sent.erg === !!erg && Math.abs(bt.sent.value - value) < (erg ? 1 : 0.2)) return;
+  bt.sent = { erg:!!erg, value };
+  if (t.kind === 'ftms') btWrite(erg ? [0x05, ...le16(value)] : [0x11, 0, 0, ...le16(Math.round(value * 100) & 0xffff), 40, 51]);
+  else btWrite(erg ? [0x42, ...le16(value)] : [0x46, ...le16(Math.round((Math.max(-1, Math.min(1, value / 100)) + 1) * 32768) & 0xffff)]);
+}
+// Twice a second: what the sensors say goes to the server (the trainer's watts win over the demo slider).
+function pushSensors() {
+  if ($('#ride').hidden || !ride.session || (!bt.trainer && !bt.hr)) return;
+  const hr = bt.hr?.bpm ? `&hr=${bt.hr.bpm}` : '';
+  const q = bt.trainer ? `w=${Math.round(bt.trainer.power)}${bt.trainer.cadence != null ? `&cad=${Math.round(bt.trainer.cadence)}` : ''}&src=bt` : `w=${+$('#watts').value}`;
+  fetch(`/power?session=${ride.session}&${q}${hr}`).catch(() => {});
+}
+setInterval(pushSensors, 500);
+setInterval(driveTrainer, 1000);
+
+// Home: the devices panel.
+function renderSensors() {
+  const ok = !!navigator.bluetooth, chip = (on, label) => h('span', { class:'dev-state' + (on ? ' on' : '') }, label);
+  $('#devTrainer').replaceChildren(h('b', {}, 'Home trainer'), chip(bt.trainer, bt.trainer ? `${bt.trainer.name} · ${Math.round(bt.trainer.power)} W` : 'non connecté'));
+  $('#devHr').replaceChildren(h('b', {}, 'Cardio'), chip(bt.hr, bt.hr ? `${bt.hr.name} · ${bt.hr.bpm ?? '…'} bpm` : 'non connecté'));
+  for (const id of ['#devTrainer', '#devHr']) $(id).disabled = !ok;
+  $('#devHint').textContent = ok ? (ride.list?.trainer ? `Le serveur pilote aussi « ${ride.list.trainer} » : ton trainer à toi passe en priorité.` : 'Chrome ou Edge : connecte ton home trainer (FTMS, KICKR) et ta ceinture cardio, sans rien installer.')
+    : 'Bluetooth indisponible ici : utilise Chrome ou Edge, sur localhost ou en https.';
+  $('#difficulty').value = Math.round((current?.difficulty ?? 0.5) * 100);
+  $('#difficultyOut').textContent = `${$('#difficulty').value} %`;
+}
+const btTry = fn => () => fn().catch(e => { if (e.name !== 'NotFoundError') alert(`Bluetooth : ${e.message}`) }); // NotFoundError: the picker was closed
+$('#devTrainer').addEventListener('click', btTry(connectTrainer));
+$('#devHr').addEventListener('click', btTry(connectHr));
+$('#difficulty').addEventListener('input', e => { current.difficulty = +e.target.value / 100; persist(); bt.sent = null; renderSensors() });
+setInterval(() => { if (!$('#home').hidden && (bt.trainer || bt.hr)) renderSensors() }, 1000);
+const demoRide = () => !ride.list?.trainer && !bt.trainer;
+
+// ---------- segments: arches on the road, the live banner, the result, the leaderboards ----------
+// Lego arch over the road: two pillars and a banner, polka dots for a KOM, green for a sprint; `v` 1 = finish.
+MODELS.arch = (k, v) => {
+  const kom = v < 2, finish = v % 2 === 1, banner = kom ? LC.white : LC.grn;
+  for (const z of [-17, 15]) { k.b(-1, z, 0, 2, 2, 60, kom ? LC.red : LC.white, false); k.b(-1.5, z - 0.5, 0, 3, 3, 3, LC.dgray, false) }
+  k.b(-0.6, -17, 54, 1.2, 34, 9, banner, false);
+  if (kom) for (let z = -15; z < 16; z += 3) for (const y of [56, 60]) k.box(0.6, y + (z % 2), z, 0.75, y + 1.6 + (z % 2), z + 1.2, LC.red);
+  else for (let z = -15; z < 16; z += 4) k.box(0.6, 57, z, 0.75, 60, z + 2, LC.white);
+  if (finish) for (let z = -17; z < 17; z += 2) k.box(-0.65, 63, z, 0.65, 64, z + 1, (z / 2) % 2 ? LC.black : LC.white); // checkered top
+};
+// An arch at the start and at the end of each window, across the road.
+function placeArches(windows) {
+  if (!w3.group) return;
+  for (const w of windows) for (const [d, end] of [[w.d0, 0], [w.d1, 1]]) {
+    if (!ride.course.looped && d < 1) continue; // no arch on the start line of a climb
+    const p = pointAt(d), dir = pointAt(d + 3).sub(pointAt(d - 3));
+    const m = new THREE.Mesh(propGeometry('arch', (w.kind === 'kom' ? 0 : 2) + end), LEGO.smooth);
+    m.position.copy(p).setY(p.y - 0.2);
+    m.rotation.y = Math.atan2(-dir.z, dir.x);
+    m.castShadow = true;
+    w3.group.add(m);
+  }
+}
+function trackSegments() {
+  const s = ride.state;
+  if (s?.windows) { ride.windows = [...(ride.windows ?? []), ...s.windows]; placeArches(s.windows) }
+  const g = s?.segment, b = $('#segBanner');
+  b.hidden = !g || $('#ride').hidden;
+  if (g) {
+    b.className = `seg-banner ${g.kind}`;
+    b.replaceChildren(h('b', {}, g.kind === 'kom' ? '⛰ ' + g.name : '⚡ ' + g.name),
+      h('span', { class:'seg-bar' }, h('i', { style:`width:${Math.min(100, g.done / g.len * 100).toFixed(1)}%` })),
+      h('small', {}, `${hms(g.time)} · ${(Math.max(0, g.len - g.done) / 1000).toFixed(2)} km${g.best ? ` · record ${hms(g.best)}` : ''}`));
+  }
+  if (s?.result) {
+    const r = s.result, t = $('#segToast');
+    t.replaceChildren(h('b', {}, `${r.kind === 'kom' ? '⛰' : '⚡'} ${r.name} : ${hms(r.time)}`),
+      h('span', {}, `${r.rank.today === 1 ? '1er du jour !' : `${r.rank.today}e du jour sur ${r.rank.of_today}`} · ${r.rank.rank === 1 ? '1er' : `${r.rank.rank}e`} au général sur ${r.rank.of}`));
+    t.hidden = false;
+    clearTimeout(ride.toastTimer);
+    ride.toastTimer = setTimeout(() => { t.hidden = true }, 7000);
+    (current.segments ??= {})[r.name] = Math.min(current.segments[r.name] ?? Infinity, r.time);
+    persist();
+  }
+}
+// In the pause menu: today's and all-time leaders of this road's segments, the leader in the jersey.
+async function renderBoards() {
+  const box = $('#menuBoards');
+  box.replaceChildren();
+  if (!ride.id || ride.mode === 'workout') return;
+  const list = await fetch(`/segments?id=${encodeURIComponent(ride.id)}`).then(r => r.json()).catch(() => []);
+  if (!list.length) return;
+  const mine = current.id;
+  box.replaceChildren(h('h3', {}, 'Classements'), ...list.map(sg => {
+    const rows = (sg.today.length ? sg.today : sg.all).slice(0, 5);
+    return h('div', { class:'board' }, h('strong', {}, `${sg.kind === 'kom' ? '⛰' : '⚡'} ${sg.name}`, h('small', {}, sg.today.length ? ' · du jour' : ' · général')),
+      ...(rows.length ? rows.map((e, i) => h('div', { class:'board-row' + (e.who === mine ? ' me' : '') },
+        h('span', { class:'jersey ' + (i === 0 ? sg.kind : '') }, String(i + 1)), h('i', { style:`background:${e.color}` }), h('span', {}, e.name), h('b', {}, hms(e.time))))
+        : [h('small', { class:'muted' }, 'Personne encore : à toi de jouer !')]));
+  }));
+}
+
+// ---------- FIT export: the ride as a Garmin FIT activity, for Strava and friends ----------
+// One sample a second: what a FIT record holds.
+function recordFull() {
+  const s = ride.state, last = ride.full?.at(-1);
+  if (!s || !ride.full || (last && Math.floor(s.elapsed) <= last.t)) return;
+  const ll = ride.course?.points ? latlonAt(s.distance) : null;
+  ride.full.push({ t:Math.floor(s.elapsed), ts:Date.now(), p:Math.round(s.power), c:s.cadence, hr:s.hr, v:s.speed_kmh / 3.6, d:s.ridden ?? s.distance, e:s.ele ?? 0, ll });
+}
+function latlonAt(d) {
+  const p = ride.course.points, len = p.at(-1).d;
+  d = ride.course.looped ? ((d % len) + len) % len : Math.max(0, Math.min(len, d));
+  let i = Math.min(p.length - 2, Math.floor(d / 10));
+  while (i > 0 && p[i].d > d) i--;
+  while (i < p.length - 2 && p[i + 1].d < d) i++;
+  const t = (d - p[i].d) / ((p[i + 1].d - p[i].d) || 1);
+  return [p[i].lat + (p[i + 1].lat - p[i].lat) * t, p[i].lon + (p[i + 1].lon - p[i].lon) * t];
+}
+// Minimal FIT file: file id, start, one record per sample, stop, a lap, the session, the activity.
+function fitFile(samples, meta) {
+  const out = [], u8 = v => out.push(v & 0xff), u16 = v => { u8(v); u8(v >> 8) }, u32 = v => { u16(v & 0xffff); u16(v >>> 16) };
+  const T0 = 631065600, ts = ms => Math.round(ms / 1000) - T0, semi = deg => Math.round(deg * 2 ** 31 / 180);
+  const types = { enum:[0x00, 1], u8:[0x02, 1], u16:[0x84, 2], s32:[0x85, 4], u32:[0x86, 4], u32z:[0x8c, 4] };
+  const write = { enum:u8, u8, u16, s32:u32, u32, u32z:u32 }, invalid = { enum:0xff, u8:0xff, u16:0xffff, s32:0x7fffffff, u32:0xffffffff, u32z:0 };
+  const defs = {};
+  const message = (local, global, fields, values) => { // fields: [[number, type], ...]
+    if (defs[local] !== global) {
+      u8(0x40 | local); u8(0); u8(0); u16(global); u8(fields.length);
+      for (const [n, t] of fields) { u8(n); u8(types[t][1]); u8(types[t][0]) }
+      defs[local] = global;
+    }
+    u8(local);
+    fields.forEach(([, t], i) => write[t](values[i] ?? invalid[t]));
+  };
+  const first = samples[0], last = samples.at(-1), start = ts(first.ts), end = ts(last.ts), secs = Math.max(1, last.t - first.t);
+  const avg = k => Math.round(samples.reduce((a, s) => a + (s[k] ?? 0), 0) / samples.length), max = k => Math.round(Math.max(...samples.map(s => s[k] ?? 0)));
+  message(0, 0, [[0, 'enum'], [1, 'u16'], [2, 'u16'], [3, 'u32z'], [4, 'u32']], [4, 255, 0, 1, start]); // file id: activity, development
+  message(1, 21, [[253, 'u32'], [0, 'enum'], [1, 'enum']], [start, 0, 0]); // timer start
+  const rec = [[253, 'u32'], [0, 's32'], [1, 's32'], [2, 'u16'], [3, 'u8'], [4, 'u8'], [5, 'u32'], [6, 'u16'], [7, 'u16']];
+  for (const s of samples) message(2, 20, rec, [ts(s.ts), s.ll ? semi(s.ll[0]) : undefined, s.ll ? semi(s.ll[1]) : undefined, Math.round((s.e + 500) * 5),
+    s.hr ?? undefined, s.c != null ? Math.round(s.c) : undefined, Math.round(s.d * 100), Math.round(s.v * 1000), s.p]);
+  message(1, 21, [[253, 'u32'], [0, 'enum'], [1, 'enum']], [end, 0, 4]); // timer stop all
+  const totals = [end, start, secs * 1000, secs * 1000, Math.round(last.d * 100), avg('p'), max('p'), Math.round(meta.climbed ?? 0)];
+  message(3, 19, [[253, 'u32'], [2, 'u32'], [7, 'u32'], [8, 'u32'], [9, 'u32'], [19, 'u16'], [20, 'u16'], [21, 'u16'], [25, 'enum'], [0, 'enum'], [1, 'enum']], [...totals, 2, 9, 1]); // lap
+  message(4, 18, [[253, 'u32'], [2, 'u32'], [7, 'u32'], [8, 'u32'], [9, 'u32'], [20, 'u16'], [21, 'u16'], [22, 'u16'], [5, 'enum'], [6, 'enum'], [25, 'u16'], [26, 'u16'], [0, 'enum'], [1, 'enum']],
+    [...totals, 2, 58, 0, 1, 8, 1]); // session: cycling, virtual activity
+  message(5, 34, [[253, 'u32'], [0, 'u32'], [1, 'u16'], [2, 'enum'], [3, 'enum'], [4, 'enum']], [end, secs * 1000, 1, 0, 26, 1]); // activity
+  const crc = bytes => { const tb = [0x0000, 0xcc01, 0xd801, 0x1400, 0xf001, 0x3c00, 0x2800, 0xe401, 0xa001, 0x6c00, 0x7800, 0xb401, 0x5000, 0x9c01, 0x8801, 0x4400]; let c = 0;
+    for (const b of bytes) { let t = tb[c & 0xf]; c = (c >> 4) & 0x0fff; c ^= t ^ tb[b & 0xf]; t = tb[c & 0xf]; c = (c >> 4) & 0x0fff; c ^= t ^ tb[(b >> 4) & 0xf] } return c };
+  const head = [14, 0x20, ...le16(2132), out.length & 0xff, (out.length >> 8) & 0xff, (out.length >> 16) & 0xff, (out.length >>> 24) & 0xff, 0x2e, 0x46, 0x49, 0x54];
+  const all = [...head, ...le16(crc(head)), ...out];
+  return new Uint8Array([...all, ...le16(crc(all))]);
+}
+function downloadFit(samples, meta) {
+  if (!samples?.length) return alert('Rien à exporter : pédale un peu avant.');
+  const url = URL.createObjectURL(new Blob([fitFile(samples, meta)], { type:'application/octet-stream' }));
+  const day = new Date(samples[0].ts).toISOString().slice(0, 10);
+  Object.assign(document.createElement('a'), { href:url, download:`le-mollet-${day}-${meta.name.replace(/[^\p{L}\p{N}]+/gu, '-').toLowerCase()}.fit` }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+// History rides keep a light trace (every 5 s at most, no position): good enough for a later export.
+const traceSamples = r => (r.trace ?? []).map(([t, p, v, e]) => ({ t, ts:new Date(r.date).getTime() - (r.elapsed - t) * 1000, p, c:null, hr:null, v:v / 3.6, d:r.distance * t / (r.elapsed || 1), e, ll:null }));
 
 function summary(s = ride.state ?? {}) {
   const t = s.elapsed ?? 0, z = s.zombie;
@@ -4130,6 +4421,8 @@ function openMenu(mode) {
   $('#menuTitle').textContent = titles[mode];
   renderSummary(r);
   ghostLine(mode, r);
+  renderBoards();
+  $('#exportFit').hidden = !(ride.full?.length > 5);
   $('#resume').hidden = mode !== 'pause';
   $('#saveQuit').hidden = $('#quitNoSave').hidden = mode === 'saved';
   $('#saveQuit').disabled = r.elapsed < 1;
@@ -4190,6 +4483,7 @@ function renderHistory() {
 }
 
 $('#resume').addEventListener('click', resumeRide);
+$('#exportFit').addEventListener('click', () => { const r = summary(); downloadFit(ride.full, r) });
 $('#saveQuit').addEventListener('click', saveRide);
 $('#quitNoSave').addEventListener('click', () => { if (confirm('Quitter sans enregistrer cette sortie ?')) showHome() });
 $('#toHome').addEventListener('click', () => showHome());

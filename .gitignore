@@ -9,3 +9,5 @@ courses/*.district/
 courses/*.ortho/
 # built by `le-mollet island courses/<id>.map.json`
 courses/ile-des-briques.city.json
+# KOM and sprint times, written by the server as riders finish segments
+courses/leaderboards.json

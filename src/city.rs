@@ -15,6 +15,9 @@ pub struct City {
     pub attribution: String,
     /// `[lat, lon]` riders start from, snapped to the nearest junction.
     pub start: [f64; 2],
+    /// Streets timed as segments (hand-made island: KOMs, sprints).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<crate::segment::Def>,
     /// Named places a rider can pick to start from, each snapped to its nearest junction.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub starts: Vec<Start>,
@@ -107,7 +110,7 @@ impl City {
     }
 
     pub fn island(name: String, attribution: String, start: [f64; 2], starts: Vec<Start>, streets: Vec<Street>, props: Vec<Prop>) -> Self {
-        let mut c = Self { name, attribution, start, streets, island: true, starts, props, preview: String::new(), preview_w: 0, links: vec![] };
+        let mut c = Self { name, attribution, start, streets, island: true, starts, segments: vec![], props, preview: String::new(), preview_w: 0, links: vec![] };
         c.link();
         c
     }
@@ -198,6 +201,8 @@ pub struct Route {
     at: (usize, bool),
     /// Turn to take at the next junction; back to straight once used.
     pub next: Turn,
+    /// Streets appended so far: (street, walked a -> b, distance at its start, at its end).
+    pub legs: Vec<(usize, bool, f32, f32)>,
 }
 
 impl Route {
@@ -213,18 +218,21 @@ impl Route {
             course: Course { name: city.name.clone(), attribution: city.attribution.clone(), waypoints: vec![], roads: vec![], looped: false, points: vec![] },
             at: (first.street, first.forward),
             next: Turn::Straight,
+            legs: vec![],
         };
-        r.append(city.walk(first.street, first.forward));
+        r.append(city, first.street, first.forward);
         r
     }
 
-    fn append(&mut self, pts: Vec<[f64; 3]>) {
+    fn append(&mut self, city: &City, street: usize, forward: bool) {
+        let d0 = self.course.length();
         let p = &mut self.course.points;
-        for q in pts {
+        for q in city.walk(street, forward) {
             let d = p.last().map_or(0.0, |l| l.d + haversine_m([l.lat, l.lon], [q[0], q[1]]) as f32);
             if p.last().is_some_and(|l| d - l.d < 0.5) { continue } // the shared junction point
             p.push(Point { d, lat: q[0], lon: q[1], ele: q[2] as f32 });
         }
+        self.legs.push((street, forward, d0, self.course.length()));
     }
 
     /// Keep the route `LOOKAHEAD_M` past `distance`, taking `next` at each junction.
@@ -236,7 +244,7 @@ impl Route {
             let e = choose(&exits, self.next);
             self.at = (e.street, e.forward);
             self.next = Turn::Straight;
-            self.append(city.walk(e.street, e.forward));
+            self.append(city, e.street, e.forward);
         }
         (self.course.points.len() > first).then_some(first)
     }
@@ -363,6 +371,7 @@ pub fn build(name: &str, relation: u64, start: [f64; 2]) -> Result<(City, Terrai
         attribution: "Streets and buildings © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).".into(),
         start,
         starts: vec![],
+        segments: vec![],
         streets,
         island: false,
         props: vec![],
@@ -413,6 +422,7 @@ mod tests {
             attribution: String::new(),
             start: [48.85, 2.35 - 0.0015],
             starts: vec![],
+            segments: vec![],
             streets: vec![arm(1, 0.0, 0.0015), arm(2, 0.001, 0.0), arm(3, 0.0, -0.0015), arm(4, -0.001, 0.0)],
             island: false,
             props: vec![],

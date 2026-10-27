@@ -25,6 +25,13 @@ pub fn air_density(alt_m: f32) -> f32 {
     1.225 * (1.0 - 2.25577e-5 * alt_m).powf(4.2559)
 }
 
+/// Share of air drag saved riding `gap_m` behind another rider: ~30 % on the wheel, nothing past 12 m.
+/// ponytail: straight line from 1 m to 12 m, a curve from wind-tunnel data if it ever matters
+pub fn draft(gap_m: f32) -> f32 {
+    if !(0.0..12.0).contains(&gap_m) { return 0.0 }
+    0.3 * (1.0 - (gap_m - 1.0).max(0.0) / 11.0)
+}
+
 /// Advance speed `v` (m/s) by `dt` seconds given rider power and road grade (%).
 pub fn step(v: f32, power_w: f32, grade_pct: f32, alt_m: f32, r: &Rider, dt: f32) -> f32 {
     let theta = (grade_pct / 100.0).atan();
@@ -56,6 +63,15 @@ mod tests {
         assert!((12.0..13.5).contains(&climb), "8% 250 W = {climb} km/h");
         assert_eq!(steady(0.0, 5.0), 0.0); // no power uphill: stays still
         assert!(steady(0.0, -6.0) > 50.0); // freewheel downhill
+    }
+
+    #[test]
+    fn drafting_saves_watts() {
+        assert_eq!(draft(-1.0), 0.0); // behind me: no help
+        assert!((draft(0.8) - 0.3).abs() < 1e-6 && draft(6.0) > 0.1 && draft(12.5) == 0.0);
+        let alone = Rider::default();
+        let tucked = Rider { cda: alone.cda * (1.0 - draft(1.0)), ..alone };
+        assert!(step(10.0, 200.0, 0.0, 0.0, &tucked, 1.0) > step(10.0, 200.0, 0.0, 0.0, &alone, 1.0));
     }
 
     #[test]

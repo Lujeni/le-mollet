@@ -8,6 +8,11 @@ use serde::Serialize;
 pub struct Ride {
     pub power: f32,
     pub cadence: Option<f32>,
+    /// Heart rate from a strap, bpm.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hr: Option<f32>,
+    /// Share of air drag saved by the rider ahead (0 alone, 0.3 on a wheel).
+    pub draft: f32,
     pub speed_kmh: f32,
     pub distance: f32,
     pub elapsed: f32,
@@ -38,7 +43,8 @@ impl Ride {
         }
         self.grade = course.grade_at(self.distance);
         self.ele = course.ele_at(self.distance);
-        let rider = Rider { mass_kg: self.mass, ..Default::default() };
+        let base = Rider::default();
+        let rider = Rider { mass_kg: self.mass, cda: base.cda * (1.0 - self.draft), ..base };
         let v = physics::step(self.speed_kmh / 3.6, self.power, self.grade, self.ele, &rider, dt);
         let len = course.length();
         let step = if course.looped { v * dt } else { (self.distance + v * dt).min(len) - self.distance };

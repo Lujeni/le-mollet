@@ -37,6 +37,9 @@ struct Map {
     /// Places offered as starts: a name and its node.
     #[serde(default)]
     starts: Vec<MapStart>,
+    /// Roads timed as KOMs or sprints, by name.
+    #[serde(default)]
+    segments: Vec<crate::segment::Def>,
     coast: Vec<Xz>,
     #[serde(default)]
     areas: Vec<Area>,
@@ -355,6 +358,10 @@ pub fn build(path: &str) -> Result<Island> {
     let starts = map.starts.iter().map(|s| Ok(Start { name: s.name.clone(), at: geo(*map.nodes.get(&s.node).with_context(|| format!("start {}: no node {}", s.name, s.node))?) })).collect::<Result<Vec<_>>>()?;
     let mut city = City::island(map.name, "Île dessinée à la main pour le-mollet.".into(), geo(*start), starts, streets, props);
     (city.preview, city.preview_w) = preview(&terrain.cover, w, h, 20);
+    for d in &map.segments {
+        if !city.streets.iter().any(|s| s.name == d.street) { bail!("segment {}: no road {}", d.name, d.street) }
+    }
+    city.segments = map.segments;
     Ok(Island { city, terrain })
 }
 

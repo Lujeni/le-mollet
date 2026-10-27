@@ -9,6 +9,7 @@ pub mod ortho;
 pub mod physics;
 pub mod protocol;
 pub mod ride;
+pub mod segment;
 pub mod terrain;
 pub mod workout;
 pub mod world;
