@@ -69,7 +69,7 @@ h1 { font-size:32px; line-height:1.1 } h2 { font-size:21px }
   background:linear-gradient(100deg, #2a1236, #6b2a72 45%, #e9781a); overflow:hidden }
 .tile.zombie::after { content:'ÉVÉNEMENT'; position:absolute; top:12px; right:-34px; transform:rotate(35deg); padding:3px 40px; background:#bbe90b; color:#1b2a34; font:700 11px var(--font); letter-spacing:1.5px }
 
-#profiles, #home, #profileEdit, #rideMenu, #free, #training, #courses { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
+#profiles, #home, #profileEdit, #rideMenu, #free, #training, #courses, #clubScreen { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
 #profiles .panel, #profileEdit .panel { width:min(540px, 100%); max-height:100%; overflow:auto }
 
 /* Profiles */
@@ -107,6 +107,7 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .tiles { display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:22px 16px }
 .tiles .tile.me, .tiles .hist-tile { min-height:118px }
 .tile.hist-tile { --c:#e9781a }
+.tile.club-tile { --c:#0b7a75 } .tiles .tile.zombie { grid-column:2 / -1 }
 .tiles .tile.ride { grid-row:span 2; justify-content:flex-end; min-height:230px; background:linear-gradient(160deg, #ff5a3c, #d0230f 50%, #8f1406) }
 .tiles .tile.ride b { font-size:38px }
 .tiles .tile.ride svg { width:72px; height:72px; position:absolute; top:22px; right:22px; opacity:.9 }
@@ -168,6 +169,19 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .tag-imported { margin-left:8px; padding:2px 8px; border-radius:999px; background:var(--accent); color:#1b2a34; font:700 11px var(--font); vertical-align:middle }
 .ftp-result { display:flex; flex-direction:column; align-items:center; gap:10px; font-size:16px }
 .emotes { display:flex; gap:6px; flex-wrap:wrap }
+.btn.powerup { position:relative; overflow:hidden; margin-top:8px; width:100%; justify-content:center; background:linear-gradient(90deg, #0055bf, #36aebf); color:#fff; border-color:transparent }
+.btn.powerup i { position:absolute; left:0; bottom:0; height:4px; background:#f2cd37 }
+#clubScreen .panel { width:min(680px, 100%); max-height:100%; overflow:auto }
+.club-forms { display:grid; grid-template-columns:1fr 1fr; gap:16px }
+.club-forms form { display:grid; gap:10px; align-content:start; padding:16px; border-radius:14px; background:var(--glass-hi2) }
+.club-forms h2, .club-head h2 { margin:0 }
+.club-tag { display:inline-block; padding:2px 8px; border-radius:6px; color:#fff; font:800 13px var(--font); letter-spacing:1px; margin-right:8px; vertical-align:middle }
+.club-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px }
+.club-code { font:700 18px ui-monospace, monospace; letter-spacing:3px }
+.club-board { list-style:none; margin:0 0 16px; padding:0; display:grid; gap:6px }
+.club-board li { display:grid; grid-template-columns:2em 1fr auto; gap:10px; align-items:center; padding:8px 12px; border-radius:10px; background:var(--glass-hi2) }
+.club-board li.me { outline:2px solid var(--accent) }
+.club-error { color:#ff8a7a; min-height:1.2em; margin:0 }
 .emotes .btn { padding:5px 9px; font-size:16px } .emotes .rideon { font-size:14px; background:#ff6a13; color:#fff; border-color:transparent }
 .emotes .btn:disabled { opacity:.45; cursor:default }
 .ride-toast { position:absolute; left:50%; bottom:110px; transform:translateX(-50%); z-index:2; padding:9px 16px; border-radius:999px; background:rgba(17,21,28,.85); color:#fff; font:600 14px var(--font); pointer-events:none; animation:pop .25s ease-out }
@@ -372,7 +386,8 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   .pick-body { grid-template-columns:1fr } #pickMap { height:38vh } .pick { padding:20px }
   .tiles { grid-template-columns:1fr }
   .devices { grid-template-columns:1fr } .seg-banner { top:150px; min-width:0 }
-  .tiles .tile.me { grid-column:auto }
+  .tiles .tile.me, .tiles .tile.zombie { grid-column:auto }
+  .club-forms { grid-template-columns:1fr }
   .kpis { grid-template-columns:repeat(3, 1fr) } .hist-top, .hist-body { grid-template-columns:1fr } .hist { padding:20px } .hist-list { max-height:none }
   .tiles .tile.ride { grid-row:auto; min-height:150px }
   .tiles .tile.ride b { font-size:30px }
@@ -471,6 +486,10 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <button class="tile hist-tile" id="goHistory">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M1 1h10v1H1zM1 3h1v8H1zM10 3h1v8h-1zM2 10h8v1H2zM3 7h1v2H3zM5 5h1v4H5zM7 6h1v3H7zM8 4h1v5H8z"/></svg>
           <b>Sorties</b><small id="goHistorySub">Ton historique et tes records</small>
+        </button>
+        <button class="tile club-tile" id="goClub">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M1 1h10v5h-1v2H9v1H8v1H7v1H5v-1H4V9H3V8H2V6H1zM4 3v1h4V3zM5 5v1h2V5z"/></svg>
+          <b>Club</b><small id="goClubSub">Crée ou rejoins ta bande</small>
         </button>
         <button class="tile zombie" id="goZombie">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#bbe90b" d="M3 1h6v1h1v4H9v1H3V6H2V2h1zM4 3v2h1V3zM7 3v2h1V3zM4 8h4v1h4v1H8v2H7v-2H5v2H4v-2H0V9h4z"/></svg>
@@ -623,6 +642,16 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     </div>
   </main>
 
+  <main id="clubScreen" hidden>
+    <div class="block panel">
+      <div class="ride-head">
+        <h1>Club</h1>
+        <button class="btn" id="clubBack">‹ Accueil</button>
+      </div>
+      <div id="clubBody"></div>
+    </div>
+  </main>
+
   <main id="ride" hidden>
     <!-- HUD widgets: each one placed by the rider (⚙), see placeHud -->
     <div class="block panel stats hud" id="stats" data-w="stats"></div>
@@ -631,13 +660,15 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <h2 id="courseName"></h2>
         <span>
           <button class="btn" id="hudBtn" aria-label="Personnaliser l'affichage" title="Personnaliser l'affichage">⚙</button>
-          <button class="btn" id="night" aria-label="Rouler de jour ou de nuit" hidden></button>
+          <span class="chip" id="weatherChip" hidden></span>
+          <button class="btn" id="night" aria-label="Moment de la journée : suit l'heure, ou fixé" hidden></button>
           <button class="btn" id="mute" aria-label="Couper ou remettre le son"></button>
           <button class="btn" id="leave">‹ Circuits</button>
         </span>
       </div>
       <div class="junction" id="junction" hidden aria-live="polite"></div>
       <div class="emotes" id="emotes" aria-label="Encourager"></div>
+      <button class="btn powerup" id="powerup" hidden></button>
     </div>
     <div class="block panel hud demo" id="demo" data-w="power" hidden>
       <button class="btn" data-dw="-25" aria-label="Moins 25 watts">−</button>
@@ -782,6 +813,7 @@ scene.add(sun);
 const SKY = {
   day: { bg:'#8ec5ee', fog:'#8ec5ee', hemi:['#ffffff', '#3d5a2a', 1.6], sun:['#fff4dd', 2.4] },
   night: { bg:'#070b1f', fog:'#0b1233', hemi:['#6f86c9', '#0b0f1a', 0.6], sun:['#9fb4ff', 0.7] },
+  dusk: { bg:'#f3a46f', fog:'#f0a878', hemi:['#ffd9b5', '#4a3842', 1.1], sun:['#ff9a4a', 1.9] },
 };
 function setSky(k, near, far) {
   const s = SKY[k];
@@ -806,6 +838,7 @@ scene.add(menuBg);
 const MENU = {
   day: { top:'#2f7fd0', horizon:'#d3ecf8', near:'#4f7a52', far:'#8fb0c4', ground:'#b3cf8f' },
   night: { top:'#02040f', horizon:'#26306a', near:'#1c2a3a', far:'#2c3a5e', ground:'#24304f' },
+  dusk: { top:'#3a4a92', horizon:'#f7a66c', near:'#5a4a52', far:'#9a7a88', ground:'#b39477' },
 };
 const skyTex = {};
 function gradient(k) { // vertical sky gradient as a 2x256 texture
@@ -1230,7 +1263,7 @@ function h(tag, props = {}, ...kids) {
 }
 
 // One screen at a time. Leaving the ride stops its stream, sound and 3D world.
-const SCREENS = ['#devicesScreen', '#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
+const SCREENS = ['#clubScreen', '#devicesScreen', '#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
 function show(id) {
   if (id !== '#ride') {
     $('#ride').classList.remove('editing', 'bare');
@@ -1317,6 +1350,7 @@ function showHome(p = current) {
   $('#homeLevel').replaceChildren(xpBar(L));
   const rides = p.history?.length ?? 0;
   $('#goHistorySub').textContent = rides ? `${rides} sortie${rides > 1 ? 's' : ''}, tes records` : 'Ton historique et tes records';
+  refreshClub();
   $('#homeMode').textContent = !ride.list ? '' : ride.list.trainer
     ? `Home trainer connecté : ${ride.list.trainer}`
     : 'Mode démo : pas de home trainer, tu règles les watts avec un curseur.';
@@ -1767,7 +1801,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
     setPower(Math.round(current.ftp * 0.75 / 5) * 5); // start at endurance pace
   }
   // ponytail: 8 kg bike until the garage has weights
-  const me = `&pid=${current.id}&name=${encodeURIComponent(current.name)}&color=${encodeURIComponent(current.bike.frame)}&frame=${current.bike.frameType ?? 'road'}&country=${current.country ?? ''}`;
+  const me = `&pid=${current.id}&name=${encodeURIComponent(clubName())}&color=${encodeURIComponent(current.bike.frame)}&frame=${current.bike.frameType ?? 'road'}&country=${current.country ?? ''}`;
   const game = zombie ? `&mode=zombie&ftp=${current.ftp}` : '';
   ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}${me}${game}${start != null ? `&start=${start}` : ''}`);
   if (hasTerrain) {
@@ -1778,7 +1812,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -3677,6 +3711,7 @@ function enter3d(buf) {
   if (climb() && ride.ghost) w3.group.add(w3.ghost = ghostModel());
   if (ride.island) enterIsland();
   placeArches(ride.windows ?? []);
+  placePowerArches();
   [w3.crowd, w3.cars, w3.pigeons, w3.clouds] = [makeCrowd(), [], [], makeClouds()];
   w3.group.add(w3.clouds);
   // Lego light: filmic tone curve, studio reflections on the plastic, sun shadows that follow the rider.
@@ -3706,7 +3741,7 @@ function exit3d() {
   sun.target.position.set(0, 0, 0);
   sun.target.updateMatrixWorld();
   renderer.toneMapping = THREE.NoToneMapping;
-  Object.assign(w3, { far:null, road:null, arrows:null, bld:null, group:null, T:null, bike:null, eagle:null, horde:null, bonus:null, mirror:null, sky:null, lamp:null, crowd:null, cars:null, pigeons:null, clouds:null, ghost:null, gt:0, landmarks:null, propCells:null });
+  Object.assign(w3, { far:null, road:null, arrows:null, bld:null, group:null, T:null, bike:null, eagle:null, horde:null, bonus:null, mirror:null, sky:null, lamp:null, crowd:null, cars:null, pigeons:null, clouds:null, rain:null, weather:null, ghost:null, gt:0, landmarks:null, propCells:null });
   $('#mirror').hidden = true;
   renderNight();
   w3.chunks.clear();
@@ -3723,8 +3758,13 @@ function exit3d() {
   resize();
 }
 
-// ---------- Night ride: stars and moon around the camera, moonlight, a headlamp on the bike ----------
-let night = (() => { try { return localStorage.getItem('lemollet.night') === '1' } catch { return false } })();
+// ---------- Time of day: follows the clock (dawn and dusk golden, night with stars, moon and a headlamp), or held ----------
+const SKY_MODES = { auto:'🕒 auto', day:'☀ jour', dusk:'🌇 couchant', night:'☾ nuit' };
+let skyMode = (() => { try { return localStorage.getItem('lemollet.sky') ?? 'auto' } catch { return 'auto' } })();
+let night = false;
+const clockSky = (hr = new Date().getHours()) => hr >= 21 || hr < 6 ? 'night' : hr < 8 || hr >= 19 ? 'dusk' : 'day';
+const skyNow = () => skyMode === 'auto' ? clockSky() : skyMode;
+setInterval(() => { if (w3.group) setNight() }, 60_000); // the clock moves on, and so does the weather
 
 function nightSky() {
   w3.sky = new THREE.Group();
@@ -3743,30 +3783,95 @@ function nightSky() {
 
 function setNight() {
   if (!w3.sky) return renderNight();
+  const k = skyNow();
+  night = k === 'night';
   w3.sky.visible = w3.lamp.visible = night && ride.mode !== 'zombie';
   if (ride.mode === 'zombie') return renderNight();
-  const k = night ? 'night' : 'day';
   if (night) setSky(k, 60, 1500);
-  else setSky(k, 900, 5000);
+  else setSky(k, k === 'dusk' ? 600 : 900, k === 'dusk' ? 4000 : 5000);
   scene.background = gradient(k); // the menu sky, so the ride looks like the box art
   scene.fog.color.set(MENU[k].horizon);
   scene.environmentIntensity = night ? 0.08 : 0.5; // studio sheen on the plastic
-  if (!night) [hemi.intensity, sun.intensity] = [1.0, 2.6];
-  w3.clouds?.children[0]?.material.color.set(night ? '#3a4470' : '#ffffff');
-  bldMats.facade.emissiveIntensity = night ? 1 : 0; // lit windows
+  if (k === 'day') [hemi.intensity, sun.intensity] = [1.0, 2.6];
+  w3.clouds?.children[0]?.material.color.set({ night:'#3a4470', dusk:'#ffc9a8', day:'#ffffff' }[k]);
+  bldMats.facade.emissiveIntensity = { night:1, dusk:0.5, day:0 }[k]; // lit windows
+  applyWeather();
   renderNight();
 }
 
 function renderNight() {
   $('#night').hidden = !w3.sky || ride.mode === 'zombie';
-  $('#night').textContent = night ? '☀ jour' : '☾ nuit';
-  $('#night').setAttribute('aria-pressed', night);
+  $('#night').textContent = SKY_MODES[skyMode];
+  $('#night').title = skyMode === 'auto' ? 'Suit l\'heure : jour, couchant, nuit. Clic pour fixer.' : 'Clic pour changer';
 }
 $('#night').addEventListener('click', () => {
-  night = !night;
-  try { localStorage.setItem('lemollet.night', night ? '1' : '0') } catch {}
+  const modes = Object.keys(SKY_MODES);
+  skyMode = modes[(modes.indexOf(skyMode) + 1) % modes.length];
+  try { localStorage.setItem('lemollet.sky', skyMode) } catch {}
   setNight();
 });
+
+// ---------- Weather: the same for everyone on a world, from its id and the clock (20 min spells), no server needed ----------
+const WEATHER = {
+  clear:{ icon:'☀', name:'Beau temps' }, cloudy:{ icon:'☁', name:'Nuageux' }, rain:{ icon:'🌧', name:'Pluie' },
+  fog:{ icon:'🌫', name:'Brouillard' }, snow:{ icon:'❄', name:'Neige' },
+};
+const SPELLS = ['clear', 'clear', 'cloudy', 'clear', 'rain', 'cloudy', 'fog', 'clear', 'rain', 'clear'];
+function weatherNow() {
+  const id = ride.id ?? '', slot = Math.floor(Date.now() / 12e5);
+  let x = 2166136261;
+  for (const c of `${id}:${slot}`) x = Math.imul(x ^ c.charCodeAt(0), 16777619) >>> 0;
+  const w = SPELLS[x % SPELLS.length];
+  return w === 'rain' && Math.max(...ride.course.points.map(p => p.ele)) > 2000 ? 'snow' : w; // rain falls as snow on the high passes
+}
+// Rain streaks or square snowflakes (Lego 1x1 plates) in a box that follows the camera.
+const FALL_H = 30;
+function precipitation(kind) {
+  const snow = kind === 'snow', n = snow ? 3000 : 5000, pos = new Float32Array(n * (snow ? 3 : 6));
+  for (let i = 0; i < n; i++) {
+    const [x, y, z] = [Math.random() * 70 - 35, Math.random() * FALL_H, Math.random() * 70 - 35];
+    pos.set(snow ? [x, y, z] : [x, y, z, x + 0.04, y - 1.1, z], i * (snow ? 3 : 6));
+  }
+  const g = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = snow ? new THREE.Points(g, new THREE.PointsMaterial({ color:'#ffffff', size:0.18 }))
+    : new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color:'#c4d6ea', transparent:true, opacity:0.6 }));
+  m.frustumCulled = false;
+  return Object.assign(m, { userData:{ kind, speed:snow ? 2.2 : 22, stride:snow ? 3 : 6 } });
+}
+function applyWeather() {
+  const w = ride.mode === 'zombie' ? null : weatherNow();
+  w3.weather = w;
+  $('#weatherChip').hidden = !w;
+  if (w) $('#weatherChip').textContent = `${WEATHER[w].icon} ${WEATHER[w].name}`;
+  const falls = w === 'rain' || w === 'snow' ? w : null;
+  if (w3.rain?.userData.kind !== falls) {
+    if (w3.rain) { w3.group.remove(w3.rain); w3.rain.geometry.dispose(); w3.rain.material.dispose() }
+    w3.rain = falls && precipitation(falls);
+    if (w3.rain) w3.group.add(w3.rain);
+  }
+  if (!w || w === 'clear') return;
+  // Grey skies: less sun, closer fog, darker clouds.
+  const k = skyNow();
+  sun.intensity *= w === 'cloudy' ? 0.55 : 0.4;
+  hemi.intensity *= 0.8;
+  if (k !== 'night') scene.background = new THREE.Color(w === 'snow' ? '#c9d3dc' : w === 'fog' ? '#c3c9cc' : '#8e9aa6');
+  scene.fog.color.set(k === 'night' ? '#141a2c' : w === 'snow' ? '#dfe5ea' : w === 'fog' ? '#cfd4d6' : '#9aa5ae');
+  [scene.fog.near, scene.fog.far] = w === 'fog' ? [15, 220] : w === 'cloudy' ? [scene.fog.near, scene.fog.far] : [80, 900];
+  w3.clouds?.children[0]?.material.color.set(k === 'night' ? '#2a3050' : '#9aa3ad');
+}
+function updateWeather(dt) {
+  const r = w3.rain;
+  if (!r) return;
+  r.position.set(camera.position.x, camera.position.y - 12, camera.position.z);
+  const a = r.geometry.attributes.position, p = a.array, { speed, stride } = r.userData, fall = speed * dt;
+  const drift = stride === 3 ? Math.sin(clock.elapsedTime * 0.7) * 0.5 * dt : 0;
+  for (let i = 0; i < p.length; i += stride) {
+    p[i + 1] -= fall; p[i] += drift;
+    if (stride === 6) { p[i + 4] -= fall; p[i + 3] += drift }
+    if (p[i + 1] < 0) { p[i + 1] += FALL_H; if (stride === 6) p[i + 4] += FALL_H }
+  }
+  a.needsUpdate = true;
+}
 
 // ---------- Zombie Halloween in 3D: dusk, pumpkins along the road, the horde, the next bonus ----------
 const ZOMBIE_MAX = 30;
@@ -3916,6 +4021,7 @@ function update3d(dt) {
   updateCars(dt);
   updatePigeons(dt);
   updateClouds();
+  updateWeather(dt);
   LEGO.water.normalMap.offset.set(clock.elapsedTime * 0.012, clock.elapsedTime * 0.007); // ripples drift
 
   // Voxel chunks around the rider: build nearest first (one per frame), drop far ones.
@@ -4364,6 +4470,12 @@ const demoRide = () => !ride.list?.trainer && !bt.trainer;
 // ---------- segments: arches on the road, the live banner, the result, the leaderboards ----------
 // Lego arch over the road: two pillars and a banner, polka dots for a KOM, green for a sprint; `v` 1 = finish.
 MODELS.arch = (k, v) => {
+  if (v === 4) { // road bonus: blue pillars, a yellow banner of question-mark bricks
+    for (const z of [-17, 15]) { k.b(-1, z, 0, 2, 2, 60, LC.blue, false); k.b(-1.5, z - 0.5, 0, 3, 3, 3, LC.dgray, false) }
+    k.b(-0.6, -17, 54, 1.2, 34, 9, LC.yel, false);
+    for (let z = -14; z < 14; z += 7) { k.box(0.6, 56, z, 0.75, 62, z + 4, LC.org); k.box(0.7, 57.5, z + 1.5, 0.8, 60.5, z + 2.5, LC.white) }
+    return;
+  }
   const kom = v < 2, finish = v % 2 === 1, banner = kom ? LC.white : LC.grn;
   for (const z of [-17, 15]) { k.b(-1, z, 0, 2, 2, 60, kom ? LC.red : LC.white, false); k.b(-1.5, z - 0.5, 0, 3, 3, 3, LC.dgray, false) }
   k.b(-0.6, -17, 54, 1.2, 34, 9, banner, false);
@@ -4371,6 +4483,34 @@ MODELS.arch = (k, v) => {
   else for (let z = -15; z < 16; z += 4) k.box(0.6, 57, z, 0.75, 60, z + 2, LC.white);
   if (finish) for (let z = -17; z < 17; z += 2) k.box(-0.65, 63, z, 0.65, 64, z + 1, (z / 2) % 2 ? LC.black : LC.white); // checkered top
 };
+// ---------- road bonuses: an arch every km (the server hands one out there), used with B or the button ----------
+const POWERUPS = { feather:{ icon:'🪶', name:'Plume', what:'8 kg de moins' }, aero:{ icon:'🚀', name:'Aéro', what:'un quart de traînée en moins' }, draft:{ icon:'🌀', name:'Aspiration', what:'50 % d\'aspiration en plus' } };
+function placePowerArches() {
+  if (ride.mode === 'zombie' || ride.mode === 'city') return; // open worlds grow their road as they go
+  const len = ride.course.points.at(-1).d;
+  for (let d = 1000; d < len - 1; d += 1000) {
+    const p = pointAt(d), dir = pointAt(d + 3).sub(pointAt(d - 3));
+    const m = new THREE.Mesh(propGeometry('arch', 4), LEGO.smooth);
+    m.position.copy(p).setY(p.y - 0.2);
+    m.rotation.y = Math.atan2(-dir.z, dir.x);
+    m.castShadow = true;
+    w3.group.add(m);
+  }
+}
+function trackPowerup() {
+  const s = ride.state, b = $('#powerup'), [on, left] = s?.active ?? [];
+  if (s?.held && s.held !== ride.held) toast(`${POWERUPS[s.held].icon} Bonus ${POWERUPS[s.held].name} ! Touche B pour l'utiliser`);
+  ride.held = s?.held;
+  b.hidden = !s?.held && !on;
+  if (on) b.replaceChildren(`${POWERUPS[on].icon} ${POWERUPS[on].name} : ${POWERUPS[on].what}`, h('i', { style:`width:${(left / (on === 'draft' ? 30 : 15) * 100).toFixed(1)}%` }));
+  else if (s?.held) b.replaceChildren(`${POWERUPS[s.held].icon} ${POWERUPS[s.held].name} · B`);
+  b.disabled = !!on;
+}
+const usePowerup = () => { if (ride.session && ride.held) fetch(`/powerup?session=${ride.session}`).catch(() => {}) };
+$('#powerup').addEventListener('click', usePowerup);
+addEventListener('keydown', e => {
+  if (e.key.toLowerCase() === 'b' && !$('#ride').hidden && $('#menu').hidden && !e.target.matches?.('input, textarea')) usePowerup();
+});
 // An arch at the start and at the end of each window, across the road.
 function placeArches(windows) {
   if (!w3.group) return;
@@ -4610,6 +4750,57 @@ addEventListener('keydown', e => {
 });
 
 $('#zwoFile').addEventListener('change', e => { importZwo([...e.target.files]); e.target.value = '' });
+
+// ---------- clubs: a name and a tag before members' names, kilometres of the week (kept by the server) ----------
+// The profile keeps its club's tag to show it on the road; the server is the reference (see src/club.rs).
+const clubName = () => current.club ? `[${current.club.tag}] ${current.name}` : current.name;
+const clubApi = (path, args = {}) => fetch(`/club${path}?${new URLSearchParams({ pid:current.id, me:current.name, ...args })}`)
+  .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.json() });
+function keepClub(c) {
+  const was = JSON.stringify(current.club ?? null);
+  current.club = c && { tag:c.tag, color:c.color, name:c.name, code:c.code };
+  if (JSON.stringify(current.club ?? null) !== was) persist();
+  $('#goClubSub').textContent = c ? `[${c.tag}] ${c.name} · ${c.members.length} membre${c.members.length > 1 ? 's' : ''}` : 'Crée ou rejoins ta bande';
+  return c;
+}
+const refreshClub = () => clubApi('').then(keepClub).catch(() => {});
+const CLUB_ERRORS = { 'tag taken':'Ce tag est déjà pris.', 'no club with this code':'Aucun club avec ce code.', 'tag: 2 to 4 capitals or digits':'Tag : 2 à 4 lettres ou chiffres.', 'name: 1 to 30 characters':'Nom : 1 à 30 caractères.' };
+async function showClub() {
+  show('#clubScreen');
+  const body = $('#clubBody');
+  const c = await clubApi('').then(keepClub).catch(() => null);
+  if (!c) {
+    const err = h('p', { class:'club-error', role:'alert' });
+    const submit = (path, form) => async e => {
+      e.preventDefault();
+      try { keepClub(await clubApi(path, Object.fromEntries(new FormData(form)))); showClub() } catch (x) { err.textContent = CLUB_ERRORS[x.message] ?? x.message }
+    };
+    const create = h('form', {}, h('h2', {}, 'Créer un club'),
+      h('label', {}, 'Nom', h('input', { name:'name', maxlength:30, required:'', placeholder:'Les Mollets d\'Acier' })),
+      h('label', {}, 'Tag (2 à 4 lettres)', h('input', { name:'tag', maxlength:4, minlength:2, required:'', pattern:'[A-Za-z0-9]{2,4}', placeholder:'LMA', style:'text-transform:uppercase' })),
+      h('label', {}, 'Couleur', h('input', { name:'color', type:'color', value:current.bike.frame })),
+      h('button', { class:'btn primary' }, 'Créer'));
+    const join = h('form', {}, h('h2', {}, 'Rejoindre'),
+      h('label', {}, 'Code d\'invitation', h('input', { name:'code', maxlength:6, required:'', placeholder:'A1B2C3', style:'text-transform:uppercase' })),
+      h('button', { class:'btn primary' }, 'Rejoindre'));
+    create.addEventListener('submit', submit('/create', create));
+    join.addEventListener('submit', submit('/join', join));
+    return body.replaceChildren(h('p', { class:'muted' }, 'Un club, c\'est ton tag devant ton nom sur la route et un classement des kilomètres de la semaine. Un club par profil.'),
+      h('div', { class:'club-forms' }, create, join), err);
+  }
+  const copy = h('button', { class:'btn', onclick: () => navigator.clipboard?.writeText(c.code).then(() => { copy.textContent = 'Copié !' }) }, 'Copier');
+  const total = c.members.reduce((a, m) => a + m.km, 0);
+  body.replaceChildren(
+    h('div', { class:'club-head' }, h('h2', {}, h('span', { class:'club-tag', style:`background:${c.color}` }, c.tag), c.name),
+      h('span', {}, h('small', { class:'muted' }, 'Code d\'invitation '), h('span', { class:'club-code' }, c.code), ' ', copy)),
+    h('h3', {}, `Cette semaine · ${total.toFixed(1)} km ensemble`),
+    h('ol', { class:'club-board' }, ...c.members.map((m, i) => h('li', { class:m.pid === current.id ? 'me' : '' },
+      h('b', {}, `${i + 1}`), h('span', {}, m.name, i === 0 && m.km > 0 ? ' 👑' : ''), h('span', {}, `${m.km.toFixed(1)} km`)))),
+    h('p', { class:'muted' }, 'Les kilomètres comptent sur les cols, les boucles et les mondes ouverts de ce serveur, remis à zéro chaque lundi.'),
+    h('button', { class:'btn danger', onclick: async () => { if (confirm(`Quitter ${c.name} ?`)) { await clubApi('/leave').catch(() => {}); keepClub(null); showClub() } } }, 'Quitter le club'));
+}
+$('#goClub').addEventListener('click', showClub);
+$('#clubBack').addEventListener('click', () => showHome());
 
 // ---------- account and access (RBAC), see docs/rbac.md ----------
 // Riding needs no account. Signing in with Strava (a cookie the server sets) gives an identity, and the

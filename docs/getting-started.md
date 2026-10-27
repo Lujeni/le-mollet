@@ -144,7 +144,7 @@ Layout:
 |---|---|
 | `src/protocol.rs` | BLE trainer payloads (FTMS, Wahoo), pure and tested |
 | `src/lib.rs` | trainer connection (btleplug) |
-| `src/physics.rs`, `src/ride.rs` | power to speed, ride totals and laps |
+| `src/physics.rs`, `src/ride.rs` | power to speed, ride totals and laps, road bonuses |
 | `src/course.rs`, `src/terrain.rs` | real courses and their voxel terrain |
 | `src/world.rs` | procedural open-world loops |
 | `src/workout.rs` | structured training sessions |
@@ -156,6 +156,7 @@ Layout:
 | `docs/courses.md` | how real roads become courses |
 | `src/city.rs`, `docs/city.md` | open city: street graph, turns, growing route |
 | `src/auth.rs`, `src/strava.rs`, `docs/rbac.md` | roles and permissions, sign in with Strava |
+| `src/club.rs` | clubs: members by profile, kilometres of the week (`courses/clubs.json`) |
 | `src/island.rs`, `docs/island.md` | hand-made Lego island: map file to roads, terrain and decor |
 
 ## Troubleshooting

@@ -24,6 +24,9 @@
 //!   GET /emote?session=<n>&course=<id>&e=<rideon|wave|fire|laugh|party>[&to=<rider id>]  a bubble over my rider; a Ride On to someone
 //!   GET /seek?session=<n>&d=<m>                demo mode: teleport the rider along the course
 //!   GET /pause?session=<n>&on=<0|1>            freeze or resume a ride (menu open)
+//!   GET /powerup?session=<n>                   use the road bonus the rider holds
+//!   GET /club?pid=<profile>                    the profile's club, members ranked by km this week (or null)
+//!   GET /club/create?pid=&me=&name=&tag=&color=   found a club;  /club/join?pid=&me=&code=;  /club/leave?pid=
 //!   GET /audio/<name>.mp3                      nature ambience loops (web/audio/CREDITS.md)
 //!
 //! Access (docs/rbac.md): in `Local` mode, whoever sits at the server's PC is admin without an account and LAN
@@ -35,6 +38,7 @@
 
 use le_mollet::Trainer;
 use le_mollet::auth::{Identity, Perm, Role, Roles};
+use le_mollet::club::{self, Clubs};
 use le_mollet::strava::{self, Strava};
 use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
@@ -210,6 +214,8 @@ pub struct App {
     sensors: Mutex<HashMap<u64, Sensors>>,
     boards: Mutex<Boards>,
     boards_path: String,
+    clubs: Mutex<Clubs>,
+    clubs_path: String,
     roles_path: String,
     mode: Mode,
     /// The server's Strava app, when configured (LE_MOLLET_STRAVA_CLIENT_ID / _SECRET).
@@ -224,6 +230,8 @@ pub struct App {
     paused: Mutex<HashSet<u64>>,
     /// Open city: turn each session asked for at its next junction.
     turns: Mutex<HashMap<u64, Turn>>,
+    /// Sessions that asked to use their road bonus, applied at their next tick.
+    powerup: Mutex<HashSet<u64>>,
     /// Ride Ons waiting for their recipient's next frame, by session.
     inbox: Mutex<HashMap<u64, Vec<Notice>>>,
     /// Session allowed to drive the trainer grade: the most recent one.
@@ -247,7 +255,7 @@ impl App {
         let strava = Strava::from_env()?;
         anyhow::ensure!(mode == Mode::Local || strava.is_some(), "cloud mode needs a Strava app: set LE_MOLLET_STRAVA_CLIENT_ID and _SECRET (docs/rbac.md)");
         let mut paths: Vec<_> = std::fs::read_dir(dir)
-            .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json") && !p.to_string_lossy().ends_with(".map.json")).collect())
+            .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json") && !p.to_string_lossy().ends_with(".map.json") && !p.ends_with("leaderboards.json") && !p.ends_with("clubs.json")).collect())
             .unwrap_or_default();
         paths.sort();
         let mut tracks = vec![];
@@ -285,6 +293,8 @@ impl App {
             sensors: Mutex::new(HashMap::new()),
             boards: Mutex::new(Boards::load(&format!("{dir}/leaderboards.json"))),
             boards_path: format!("{dir}/leaderboards.json"),
+            clubs: Mutex::new(Clubs::load(&format!("{dir}/clubs.json"))),
+            clubs_path: format!("{dir}/clubs.json"),
             roles_path: roles.to_owned(),
             mode,
             strava,
@@ -294,6 +304,7 @@ impl App {
             demo_seek: Mutex::new(HashMap::new()),
             paused: Mutex::new(HashSet::new()),
             turns: Mutex::new(HashMap::new()),
+            powerup: Mutex::new(HashSet::new()),
             inbox: Mutex::new(HashMap::new()),
             driver: AtomicU64::new(0),
         })
@@ -409,6 +420,11 @@ struct Notice {
 }
 
 /// Who this session shows to the others, from untrusted query values.
+/// A profile id, as the page makes them (a uuid).
+fn valid_pid(p: &str) -> bool {
+    !p.is_empty() && p.len() <= 40 && p.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
+}
+
 fn presence(query: &str, sid: u64) -> Presence {
     let name: String = param(query, "name").map(decode).unwrap_or_default().chars().filter(|c| !c.is_control()).take(24).collect();
     let color = param(query, "color").map(decode).filter(|c| c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|h| h.is_ascii_hexdigit()));
@@ -428,7 +444,7 @@ fn presence(query: &str, sid: u64) -> Presence {
         power: 0.0,
         pos: None,
         bot: false,
-        pid: param(query, "pid").filter(|p| p.len() <= 40 && p.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')).unwrap_or_default().to_owned(),
+        pid: param(query, "pid").filter(|p| valid_pid(p)).unwrap_or_default().to_owned(),
     }
 }
 
@@ -610,6 +626,47 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             }
             _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and dir=left|straight|right").await,
         },
+        ("/powerup", _) => match session {
+            Some(s) => {
+                app.powerup.lock().unwrap().insert(s);
+                reply(&mut sock, "204 No Content", "text/plain", b"").await
+            }
+            None => reply(&mut sock, "400 Bad Request", "text/plain", b"need session").await,
+        },
+        (p, _) if p == "/club" || p.starts_with("/club/") => {
+            let Some(pid) = param(query, "pid").filter(|p| valid_pid(p)) else {
+                return reply(&mut sock, "400 Bad Request", "text/plain", b"need pid").await;
+            };
+            let text = |k| param(query, k).map(decode).unwrap_or_default().chars().filter(|c| !c.is_control()).take(30).collect::<String>();
+            let me = text("me");
+            let res = {
+                let mut clubs = app.clubs.lock().unwrap();
+                let res = match p {
+                    "/club" => Ok(clubs.of(pid).cloned()),
+                    "/club/create" => {
+                        let color = Some(text("color")).filter(|c| c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|h| h.is_ascii_hexdigit())).unwrap_or_else(|| "#0055bf".into());
+                        let code = uuid::Uuid::new_v4().simple().to_string()[..6].to_uppercase();
+                        clubs.create(pid, &me, &text("name"), &text("tag").to_uppercase(), &color, code).map(|c| Some(c.clone()))
+                    }
+                    "/club/join" => clubs.join(&text("code"), pid, &me).cloned().map(Some).ok_or("no club with this code"),
+                    "/club/leave" => { clubs.leave(pid); Ok(None) }
+                    _ => Err("not found"),
+                };
+                if res.is_ok() && p != "/club" && let Err(e) = clubs.save(&app.clubs_path) { eprintln!("clubs: {e}") }
+                res
+            };
+            match res {
+                Ok(mut c) => {
+                    let wk = club::week(unix_now());
+                    if let Some(c) = c.as_mut() {
+                        for m in &mut c.members { if m.week != wk { m.km = 0.0 } } // last week's count
+                        c.members.sort_by(|a, b| b.km.total_cmp(&a.km));
+                    }
+                    reply(&mut sock, "200 OK", "application/json", json!(c).to_string().as_bytes()).await
+                }
+                Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
+            }
+        }
         ("/pause", _) => match (session, param(query, "on")) {
             (Some(s), Some(on)) => {
                 {
@@ -638,14 +695,18 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 t.riders.lock().unwrap().insert(sid, presence(query, sid));
             }
             let start = param(query, "start").and_then(|s| s.parse::<usize>().ok());
-            let res = ride_session(&mut sock, &app, track.as_deref(), plan, game, (sid, start), mass.unwrap_or(83.0)).await;
-            if let Some(t) = &track {
-                t.riders.lock().unwrap().remove(&sid);
+            // Road bonuses on courses and open worlds, not in workouts nor against the zombies.
+            let mut ride = Ride { powerups: plan.is_none() && game.is_none(), ..Ride::new(mass.unwrap_or(83.0)) };
+            let res = ride_session(&mut sock, &app, track.as_deref(), plan, game, (sid, start), &mut ride).await;
+            if let Some(me) = track.as_ref().and_then(|t| t.riders.lock().unwrap().remove(&sid)).filter(|p| !p.pid.is_empty() && ride.ridden >= 100.0) {
+                let mut clubs = app.clubs.lock().unwrap();
+                if clubs.add_km(&me.pid, &me.name, ride.ridden / 1000.0, club::week(unix_now())) && let Err(e) = clubs.save(&app.clubs_path) { eprintln!("clubs: {e}") }
             }
             app.sensors.lock().unwrap().remove(&sid);
             app.paused.lock().unwrap().remove(&sid);
             app.turns.lock().unwrap().remove(&sid);
             app.inbox.lock().unwrap().remove(&sid);
+            app.powerup.lock().unwrap().remove(&sid);
             res
         }
         _ => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
@@ -822,7 +883,7 @@ async fn ride_session(
     plan: Option<(&Workout, f32)>,
     mut game: Option<Game>,
     (sid, start): (u64, Option<usize>),
-    mass: f32,
+    ride: &mut Ride,
 ) -> std::io::Result<()> {
     let base = track.map_or(&app.flat, |t| &t.course);
     // Open city: this rider's own route, grown street by street; `sent` route points already streamed.
@@ -834,16 +895,16 @@ async fn ride_session(
     let mut windows: Vec<Window> = if city.is_some() || track.is_none() { vec![] } else { segment::course_windows(base) };
     let (mut sent_windows, mut legs_seen, mut timer, mut result) = (0, 0, segment::Timer::default(), None::<SegResult>);
     let key = |w: &Window| format!("{}:{}", track.map_or("", |t| t.id.as_str()), w.name);
-    let mut ride = Ride::new(mass);
     let mut tick = tokio::time::interval(Duration::from_secs_f32(DT));
     let (mut n, mut sent) = (0u32, None::<f32>);
     loop {
         tick.tick().await;
+        let seek = app.demo_seek.lock().unwrap().remove(&sid);
         if let (Some(c), Some(r)) = (city, route.as_mut()) {
             if let Some(t) = app.turns.lock().unwrap().remove(&sid) {
                 r.next = t;
             }
-            r.extend(c, ride.distance);
+            r.extend(c, seek.unwrap_or(0.0).max(ride.distance)); // a demo jump ahead: grow the road there first
         }
         let course = route.as_ref().map_or(base, |r| &r.course);
         let sensors = app.sensors.lock().unwrap().get(&sid).copied().unwrap_or_default();
@@ -854,7 +915,7 @@ async fn ride_session(
             }
             _ => (sensors.w, sensors.cadence, sensors.hr),
         };
-        if let Some(d) = app.demo_seek.lock().unwrap().remove(&sid) {
+        if let Some(d) = seek {
             ride.distance = d.min(course.length());
             ride.finished = false;
         }
@@ -862,11 +923,12 @@ async fn ride_session(
         // Caught by the zombies: the ride freezes like a finish line.
         let caught = game.as_ref().is_some_and(|g| g.over);
         let paused = app.paused.lock().unwrap().contains(&sid);
+        if app.powerup.lock().unwrap().remove(&sid) { ride.use_powerup() }
         if !paused && !caught {
             ride.tick(course, DT);
             // The horde waits for the first pedal stroke, like the ride clock.
             if let Some(g) = game.as_mut().filter(|_| ride.elapsed > 0.0) {
-                g.tick(&ride, DT);
+                g.tick(ride, DT);
             }
         }
         if let (Some(c), Some(r)) = (city, route.as_ref()) {
@@ -918,7 +980,7 @@ async fn ride_session(
             });
             let new_windows = windows[sent_windows..].to_vec();
             sent_windows = windows.len();
-            let frame = Frame { ride: &ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take(), inbox: app.inbox.lock().unwrap().remove(&sid).unwrap_or_default() };
+            let frame = Frame { ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take(), inbox: app.inbox.lock().unwrap().remove(&sid).unwrap_or_default() };
             let json = serde_json::to_string(&frame).expect("frame serializes");
             sock.write_all(format!("data: {json}\n\n").as_bytes()).await?;
         }

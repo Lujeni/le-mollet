@@ -38,6 +38,18 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 <td><img src="docs/screenshots/badges.jpg" alt="Badge wall: 27 badges, earned ones lit"><br><sub><b>Badges.</b> 27 to earn, levels unlock garage pieces.</sub></td>
 <td><img src="docs/screenshots/training.jpg" alt="Training: structured sessions and .zwo import"><br><sub><b>Training.</b> Sessions on your FTP, import Zwift .zwo files, FTP test.</sub></td>
 </tr>
+<tr>
+<td><img src="docs/screenshots/rain-night.jpg" alt="Riding Alpe d'Huez at night in the rain, lit windows, headlamp"><br><sub><b>Night and rain.</b> The sky follows your clock, the weather turns every 20 minutes.</sub></td>
+<td><img src="docs/screenshots/snow.jpg" alt="Snow falling on the Galibier road"><br><sub><b>Snow.</b> On the high passes, rain falls as Lego snowflakes.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/bonus-arch.jpg" alt="A blue and yellow bonus arch over the road at sunset"><br><sub><b>Bonus arches.</b> One every kilometre, here at sunset.</sub></td>
+<td><img src="docs/screenshots/bonus.jpg" alt="Draft bonus in use, its time bar in the ride panel"><br><sub><b>Road bonuses.</b> Feather, Aero or Draft: press B when it counts.</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/club.jpg" alt="Club page: tag, invite code, members ranked by kilometres this week"><br><sub><b>Clubs.</b> Your tag on the road, the week's kilometres, an invite code.</sub></td>
+<td><img src="docs/screenshots/fog.jpg" alt="Alpe d'Huez in thick fog"><br><sub><b>Fog.</b> Some spells you only see the next hairpin.</sub></td>
+</tr>
 </table>
 
 ## Ride
@@ -57,6 +69,13 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
   your way at each junction.
 - **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
   bike. Self-host it and invite your club on your LAN (`serve --lan`).
+- **A living world.** The sky follows your clock: golden dawn, day, sunset, then night with stars, lit windows
+  and a headlamp (or pick one). The weather turns every 20 minutes, the same for everyone on a road: sun,
+  clouds, rain, fog, and snow on the high passes.
+- **Road bonuses.** An arch every kilometre hands out a bonus to use when you want (key B): Feather (8 kg
+  lighter for 15 s), Aero (a quarter less drag) or Draft (50 % more on a wheel for 30 s).
+- **Clubs.** Found a club or join one with its code: your tag rides before your name, and the club ranks its
+  members by kilometres this week.
 - **Ride On!** Send a thumbs-up to the rider next to you, or a quick emote (keys 1 to 5): it pops up over your
   rider, and pace partners wave back.
 - **Ride in a bunch.** Sit on a wheel and drafting saves up to 30 % of the air drag. Pace partners (2, 3 and 4

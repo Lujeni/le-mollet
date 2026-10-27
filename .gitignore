@@ -11,6 +11,7 @@ courses/*.ortho/
 courses/ile-des-briques.city.json
 # KOM and sprint times, written by the server as riders finish segments
 courses/leaderboards.json
+courses/clubs.json
 # roles by Strava athlete, and their Strava tokens: see docs/rbac.md
 roles.json
 strava-tokens.json
