@@ -1,7 +1,21 @@
 # Accounts and roles
 
-Riding never needs an account: anyone who opens the page rides as a **Rider**, with their profiles kept in their
-browser. A server can add sign-in with **Strava** and give some athletes more rights.
+## Modes
+
+| | `serve` (local, default) | `serve --lan` | `serve --mode cloud` |
+|---|---|---|---|
+| Listens on | this PC only | the whole network | `--addr` |
+| Account | none | none (Strava optional) | **required** |
+| Admin | the browser on this PC | the browser on this PC | athletes given `admin` in `roles.json` |
+| Others | | LAN guests ride as Riders | signed-in athletes ride as Riders |
+
+In local mode, profiles, history and progression stay in the browser; the server keeps leaderboards and roles
+next to it. "This PC" means requests from loopback: cloud mode never trusts that, since behind a reverse proxy
+every request comes from loopback.
+
+Cloud mode refuses to start without a sign-in provider, and answers `401` to everything but the page,
+`/whoami` and `/auth/*` until the rider signs in; the page then shows only the sign-in. Strava is the only
+provider for now.
 
 ## Roles and permissions
 

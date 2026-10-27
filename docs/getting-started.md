@@ -21,6 +21,16 @@ cargo run -- serve
 Open http://127.0.0.1:8080, create a profile and ride. Without `--trainer`, the server runs in **demo mode**:
 a power slider replaces the trainer.
 
+This is **local mode**: no account, everything stays on this PC (profiles in the browser), and the browser on
+the server's own PC is admin. To ride with friends on the same network:
+
+```sh
+cargo run -- serve --lan     # listens on the whole network and prints the address to share
+```
+
+LAN guests ride as Riders. A public server runs in **cloud mode** instead (`--mode cloud`, sign-in required):
+see [accounts and roles](rbac.md).
+
 The page and sounds are embedded in the binary at build time. After editing `web/index.html`, restart
 `cargo run -- serve`.
 

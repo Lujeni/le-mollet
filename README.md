@@ -5,8 +5,9 @@
 A multiplayer, online indoor cycling training program. Open source, core in Rust.
 
 - **Free forever.** No subscription, no paywall, ever.
-- **No account required.** Want to just ride? Open it and train, no sign-up. Optionally sign in with Strava, and give
-  organizers and admins their rights ([accounts and roles](docs/rbac.md)).
+- **No account required.** Run it on your PC and ride: no sign-up, everything stays local, you are admin. Open it to
+  your LAN with `serve --lan`. A public server (`--mode cloud`) asks riders to sign in with Strava
+  ([accounts and roles](docs/rbac.md)).
 - **Self-hostable.** Run the whole thing at home, on your own machine or LAN.
 - **Highly modular.** Trainers, courses, terrain and UI are independent pieces you can swap or extend.
 - **Just a browser.** No heavy client to install: the UI runs in any modern web browser. An optional, experimental
@@ -55,7 +56,7 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
   with a windmill, a castle on its hill, thousands of Lego pieces. Pick a start place on its mosaic map, then
   your way at each junction.
 - **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
-  bike. Self-host it and invite your club on your LAN.
+  bike. Self-host it and invite your club on your LAN (`serve --lan`).
 - **Ride On!** Send a thumbs-up to the rider next to you, or a quick emote (keys 1 to 5): it pops up over your
   rider, and pace partners wave back.
 - **Ride in a bunch.** Sit on a wheel and drafting saves up to 30 % of the air drag. Pace partners (2, 3 and 4

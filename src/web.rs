@@ -21,18 +21,20 @@
 //!   GET /auth/strava, /auth/strava/callback    sign in with Strava (OAuth 2); /auth/logout signs out
 //!   GET /admin/segments/reset?id=<id>&name=<segment>  wipe a leaderboard (moderate)
 //!
-//! Access: anyone rides without an account (Rider). Signing in with Strava sets an `lm_session` cookie; the
-//! athlete's role comes from roles.json. Endpoints check `Perm`s, never roles.
 //!   GET /emote?session=<n>&course=<id>&e=<rideon|wave|fire|laugh|party>[&to=<rider id>]  a bubble over my rider; a Ride On to someone
 //!   GET /seek?session=<n>&d=<m>                demo mode: teleport the rider along the course
 //!   GET /pause?session=<n>&on=<0|1>            freeze or resume a ride (menu open)
 //!   GET /audio/<name>.mp3                      nature ambience loops (web/audio/CREDITS.md)
 //!
+//! Access (docs/rbac.md): in `Local` mode, whoever sits at the server's PC is admin without an account and LAN
+//! guests ride as Riders; in `Cloud` mode, everything but the page and the sign-in needs a Strava sign-in.
+//! Signing in sets an `lm_session` cookie; the athlete's role comes from roles.json. Endpoints check `Perm`s.
+//!
 //! Power, per ride: the browser's own trainer (Web Bluetooth, `src=bt`), else the server's trainer (whose grade the
 //! latest ride drives), else the demo slider. Pace partners ride every course and open world around the clock.
 
 use le_mollet::Trainer;
-use le_mollet::auth::{Identity, Perm, Roles};
+use le_mollet::auth::{Identity, Perm, Role, Roles};
 use le_mollet::strava::{self, Strava};
 use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
@@ -209,6 +211,7 @@ pub struct App {
     boards: Mutex<Boards>,
     boards_path: String,
     roles_path: String,
+    mode: Mode,
     /// The server's Strava app, when configured (LE_MOLLET_STRAVA_CLIENT_ID / _SECRET).
     strava: Option<Strava>,
     /// Signed-in browsers: session cookie -> who.
@@ -227,10 +230,22 @@ pub struct App {
     driver: AtomicU64,
 }
 
+/// Where the server runs, which sets who must sign in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    /// One person's PC (maybe open to the LAN): no account, the PC's own browser is admin.
+    Local,
+    /// A public server: Strava sign-in required to ride.
+    Cloud,
+}
+
 impl App {
     /// Load every `*.json` course in `dir` (the id is the file stem) and open today's world.
-    pub fn new(dir: &str, trainer: Option<Trainer>, difficulty: f32, roles: &str) -> anyhow::Result<Self> {
+    pub fn new(dir: &str, trainer: Option<Trainer>, difficulty: f32, roles: &str, mode: Mode) -> anyhow::Result<Self> {
         Roles::load(roles)?; // a broken roles file stops the server now, not at the first admin call
+        let strava = Strava::from_env()?;
+        anyhow::ensure!(mode == Mode::Local || strava.is_some(), "cloud mode needs a Strava app: set LE_MOLLET_STRAVA_CLIENT_ID and _SECRET (docs/rbac.md)");
         let mut paths: Vec<_> = std::fs::read_dir(dir)
             .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json") && !p.to_string_lossy().ends_with(".map.json")).collect())
             .unwrap_or_default();
@@ -271,7 +286,8 @@ impl App {
             boards: Mutex::new(Boards::load(&format!("{dir}/leaderboards.json"))),
             boards_path: format!("{dir}/leaderboards.json"),
             roles_path: roles.to_owned(),
-            strava: Strava::from_env()?,
+            mode,
+            strava,
             sessions: Mutex::new(HashMap::new()),
             oauth_states: Mutex::new(HashMap::new()),
             strava_tokens_path: std::path::Path::new(roles).with_file_name("strava-tokens.json").to_string_lossy().into_owned(),
@@ -291,15 +307,18 @@ impl App {
         self.tracks.read().unwrap().iter().find(|t| t.id == id).cloned()
     }
 
-    /// Who sent a request, from its session cookie. Only signed-in requests read the roles file, so
-    /// `le-mollet role` takes effect at once without a restart.
+    /// Who sent a request, from its session cookie and, in local mode, where from: the server's own PC is admin.
+    /// Only signed-in requests read the roles file, so `le-mollet role` takes effect at once without a restart.
+    /// Never trusted in cloud mode: behind a reverse proxy every request comes from loopback.
     /// ponytail: one small file read per signed-in request; cache by mtime if it ever shows up in a profile
-    fn identify(&self, cookie: Option<&str>) -> Identity {
-        let Some(s) = cookie.and_then(|c| self.sessions.lock().unwrap().get(c).filter(|s| s.expires > std::time::SystemTime::now()).cloned()) else {
-            return Identity::ANONYMOUS;
+    fn identify(&self, cookie: Option<&str>, peer: Option<std::net::IpAddr>) -> Identity {
+        let owner = self.mode == Mode::Local && peer.is_some_and(|ip| ip.is_loopback());
+        let mut who = match cookie.and_then(|c| self.sessions.lock().unwrap().get(c).filter(|s| s.expires > std::time::SystemTime::now()).cloned()) {
+            Some(s) => Identity { role: Roles::load(&self.roles_path).map_or(Role::Rider, |r| r.role_of(s.athlete)), name: Some(s.name), athlete: Some(s.athlete) },
+            None => Identity::ANONYMOUS,
         };
-        let role = Roles::load(&self.roles_path).map_or(le_mollet::auth::Role::Rider, |r| r.role_of(s.athlete));
-        Identity { role, name: Some(s.name), athlete: Some(s.athlete) }
+        if owner { who.role = Role::Admin }
+        who
     }
 
     /// A fresh OAuth state; old unused ones are dropped after 10 minutes.
@@ -421,7 +440,12 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
     let track = param(query, "id").or(param(query, "course")).and_then(|id| app.track(id));
     let session: Option<u64> = param(query, "session").and_then(|s| s.parse().ok());
-    let who = app.identify(cookie(&req, SESSION_COOKIE));
+    let who = app.identify(cookie(&req, SESSION_COOKIE), sock.peer_addr().ok().map(|a| a.ip()));
+    // Cloud: only the page and the way to sign in are open to strangers.
+    let open = matches!(path, "/" | "/whoami") || path.starts_with("/auth/") || path.starts_with("/audio/");
+    if app.mode == Mode::Cloud && who.athlete.is_none() && !open {
+        return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in with Strava first").await;
+    }
     // The one gate: a permission per endpoint that is not plain riding.
     let needs = match path {
         "/worlds/new" => Some(Perm::CreateWorld),
@@ -440,7 +464,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/workouts", _) => reply(&mut sock, "200 OK", "application/json", app.workouts_json.as_bytes()).await,
         ("/courses", _) => reply(&mut sock, "200 OK", "application/json", app.list_json.as_bytes()).await,
         ("/whoami", _) => {
-            let body = json!({ "role": who.role, "name": who.name, "athlete": who.athlete, "perms": who.role.perms(), "strava": app.strava.is_some() }).to_string();
+            let body = json!({ "role": who.role, "name": who.name, "athlete": who.athlete, "perms": who.role.perms(), "strava": app.strava.is_some(), "mode": app.mode }).to_string();
             reply(&mut sock, "200 OK", "application/json", body.as_bytes()).await
         }
         ("/auth/strava", _) => match &app.strava {

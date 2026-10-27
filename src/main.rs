@@ -46,9 +46,15 @@ enum Cmd {
         /// Directory of course JSON files
         #[arg(long, default_value = "courses")]
         courses: String,
-        /// Access tokens and their roles (see `le-mollet token`, docs/rbac.md); missing = everyone rides, nobody administers
+        /// Roles of Strava athletes (see `le-mollet role`, docs/rbac.md)
         #[arg(long, default_value = "roles.json")]
         roles: String,
+        /// local: no account, this PC's browser is admin. cloud: Strava sign-in required (docs/rbac.md)
+        #[arg(long, value_enum, default_value_t = web::Mode::Local)]
+        mode: web::Mode,
+        /// Local mode: open the server to the local network (listen on 0.0.0.0, same port); guests ride as Riders
+        #[arg(long)]
+        lan: bool,
     },
     /// Give roles to Strava athletes: set <athlete id> admin|organizer|rider [--note Julien], remove <id>, list
     Role {
@@ -126,7 +132,10 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::Terrain { course } => tokio::task::spawn_blocking(move || build_terrain(&course)).await?,
-        Cmd::Serve { addr, trainer, difficulty, courses, roles } => serve(&addr, trainer, difficulty, &courses, &roles).await,
+        Cmd::Serve { addr, trainer, difficulty, courses, roles, mode, lan } => {
+            let addr = if lan { format!("0.0.0.0:{}", addr.rsplit(':').next().unwrap_or("8080")) } else { addr };
+            serve(&addr, trainer, difficulty, &courses, &roles, mode).await
+        }
         Cmd::Role { action, athlete, role, note, roles } => {
             use le_mollet::auth::{Grant, Role, Roles};
             let mut r = Roles::load(&roles)?;
@@ -236,7 +245,7 @@ async fn trainer_console(filter: Option<String>) -> anyhow::Result<()> {
     trainer.disconnect().await
 }
 
-async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &str, roles: &str) -> anyhow::Result<()> {
+async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &str, roles: &str, mode: web::Mode) -> anyhow::Result<()> {
     let trainer = match filter {
         Some(f) => {
             eprintln!("scanning...");
@@ -246,7 +255,12 @@ async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &st
         }
         None => None,
     };
-    let app = Arc::new(web::App::new(courses, trainer, difficulty, roles)?);
+    let app = Arc::new(web::App::new(courses, trainer, difficulty, roles, mode)?);
+    if mode == web::Mode::Local && addr.starts_with("0.0.0.0:") {
+        // The address other PCs on the network use; connecting a UDP socket sends nothing.
+        let ip = std::net::UdpSocket::bind("0.0.0.0:0").and_then(|u| u.connect("192.0.2.1:9").and(u.local_addr()));
+        if let Ok(ip) = ip { eprintln!("LAN: other riders open http://{}:{}", ip.ip(), addr.rsplit(':').next().unwrap_or("8080")) }
+    }
     eprintln!("{} course(s) from {courses}/, {}", app.course_count(), if app.trainer.is_some() { "trainer mode" } else { "demo mode" });
     if let Some(t) = &app.trainer {
         let mut samples = t.samples().await?;

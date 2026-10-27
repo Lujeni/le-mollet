@@ -138,6 +138,7 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 /* Access token (RBAC) */
 .account { display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin-top:18px; padding-top:14px; border-top:1px solid var(--edge) }
 .account h2 { margin:0; font-size:17px } .account .muted { margin:0 }
+#signinGate .gate { max-width:420px; margin:18vh auto 0; text-align:center; display:grid; gap:18px; justify-items:center }
 .btn.strava { background:#fc4c02; color:#fff; border-color:transparent; text-decoration:none } .btn.strava:hover { background:#e34402 }
 #signOut { text-decoration:none }
 .role-chip { margin-left:8px; padding:2px 10px; border-radius:999px; background:#81007b; color:#fff; font:700 12px var(--font); vertical-align:middle }
@@ -407,6 +408,13 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 <div class="ui">
   <header><span class="logo"><i></i>LE <b>MOLLET</b></span><button class="btn" id="theme" aria-label="Basculer thème clair ou sombre"></button></header>
 
+  <main id="signinGate" hidden>
+    <div class="gate">
+      <h1>le-mollet</h1>
+      <p class="muted">Ce serveur est en ligne : connecte-toi pour rouler avec les autres.</p>
+      <a class="btn strava" href="/auth/strava">Se connecter avec Strava</a>
+    </div>
+  </main>
   <main id="profiles">
     <div class="block panel">
       <h1>Qui roule ?</h1>
@@ -4606,15 +4614,18 @@ $('#zwoFile').addEventListener('change', e => { importZwo([...e.target.files]); 
 // ---------- account and access (RBAC), see docs/rbac.md ----------
 // Riding needs no account. Signing in with Strava (a cookie the server sets) gives an identity, and the
 // server's roles.json may make it organizer or admin. The account belongs to the browser, not to a profile.
-const auth = { me:{ role:'rider', perms:['ride', 'create_world'], strava:false } };
+const auth = { me:{ role:'rider', perms:['ride', 'create_world'], strava:false, mode:'local' } };
 const can = p => auth.me.perms.includes(p);
 const authed = (path, opts = {}) => fetch(path, { credentials:'same-origin', ...opts });
 const ROLE_NAMES = { rider:'Cycliste', organizer:'Organisateur', admin:'Admin' };
 async function whoami() {
   auth.me = await authed('/whoami').then(r => r.json()).catch(() => auth.me);
-  const { me } = auth, signed = !!me.athlete;
-  $('#account').hidden = !me.strava && !signed; // no Strava app on this server: nothing to sign in to
+  const { me } = auth, signed = !!me.athlete, owner = me.mode === 'local' && me.role === 'admin' && !signed;
+  // Cloud: nothing but the sign-in until Strava says who this is.
+  if (me.mode === 'cloud' && !signed) { for (const sc of SCREENS) $(sc).hidden = true; $('#signinGate').hidden = false; return }
+  $('#account').hidden = !me.strava && !signed && !owner;
   $('#accountState').textContent = signed ? `Connecté avec Strava : ${me.name} (athlète ${me.athlete}) · ${ROLE_NAMES[me.role]}`
+    : owner ? 'Mode local : pas de compte, tout reste sur ce PC et tu es admin.'
     : 'Pas besoin de compte pour rouler. Avec Strava, tu gardes ton identité sur ce serveur (et bientôt, tes sorties partent sur Strava).';
   $('#stravaIn').hidden = signed || !me.strava;
   $('#signOut').hidden = !signed;
