@@ -15,18 +15,27 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 
 - **Real climbs, in real relief.** Legendary climbs rebuilt from OpenStreetMap roads and IGN elevation data,
   validated against their official profiles: Alpe d'Huez, Mont Ventoux, Galibier, Tourmalet, Izoard,
-  La Planche des Belles Filles. Pick them as souvenir fridge
-  magnets.
+  La Planche des Belles Filles. Pick them as souvenir fridge magnets.
+- **Race your ghost.** Finish a climb and your best time rides with you next time, see-through, with the gap in
+  seconds live and your record on the magnet.
 - **Free roam.** A procedural "Boucle du jour", the same for everyone today. Ride lap after lap, no finish line.
 - **Paris, every street.** All 1,790 km of Paris streets with real elevation: pick left, straight or right at
-  each junction, a minimap shows where you go. Montmartre hurts.
+  each junction, a round Lego minimap shows where you go. Start from Notre-Dame, Concorde, Montmartre and more.
+  Montmartre hurts.
 - **Île des Briques.** A Lego island drawn by hand: a volcano you climb in a spiral to its lava lake, a
   pirate port with ships in the bay, a desert with a pyramid and an oasis, a jungle temple and waterfall, farms
-  with a windmill, a castle on its hill. Pick your way at each junction.
+  with a windmill, a castle on its hill, thousands of Lego pieces. Pick a start place on its mosaic map, then
+  your way at each junction.
 - **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
   bike. Self-host it and invite your club on your LAN.
+- **Ride in a bunch.** Sit on a wheel and drafting saves up to 30 % of the air drag. Pace partners (2, 3 and 4
+  W/kg) ride every course and world around the clock, so there is always a wheel to follow.
+- **Segments.** KOM climbs and sprints with arches on the road, a live banner, the time and rank at the line,
+  daily and all-time leaderboards with the leader in the polka-dot or green jersey.
 - **You feel the road.** Speed comes from your watts, weight, the grade, rolling resistance and thinner air up
   high. A smart trainer gets the slope under your wheels, scaled by a difficulty setting.
+- **Your screen, your way.** Drag the ride panels where you want, pick which figures show, resize, fade, or press
+  H to hide it all. Presets (Cockpit, Sides, Minimal) and your layout saved per profile.
 - **No trainer? Demo mode.** Ride with a power slider, jump anywhere on the profile to explore a climb.
 
 ## Train
@@ -42,10 +51,11 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 
 - **Profiles** without an account: name, weight, FTP, optional nationality. Each profile has a unique id; the
   name is just a label.
-- **Garage**: a low-poly bike (road, aero, gravel or vintage frame, colors, rims, handlebars) and rider (jersey,
-  shorts, shoes, helmet, hair, skin) who pedals on a home trainer.
-- **Ride history**: pause anytime, then save or drop the ride. Duration, distance, climbing, average and max
-  power and energy are kept and listed on the home screen.
+- **Garage**, bike and rider apart: the bike (road, aero, gravel or vintage frame, colors, rims, handlebars) on
+  its trainer, and your Lego minifig standing on its plate (jersey and its pattern, shorts, shoes, helmet,
+  glasses, face, hair, skin). The same rider pedals in every ride. Feeling lucky? "Surprise me".
+- **Ride history**: a page of its own with totals, weekly bricks, personal records and each ride's power and
+  elevation curves. Export any ride as a **.fit** file for Strava, Garmin Connect or intervals.icu.
 
 ## The world
 
@@ -61,7 +71,7 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 ## Trainers
 
 Bluetooth smart trainers speaking FTMS (most recent trainers), with the Wahoo proprietary protocol as a fallback
-for older KICKRs.
+for older KICKRs, plus Bluetooth heart rate straps. Each rider connects their own from the browser (Chrome, Edge).
 
 Tested hardware:
 
