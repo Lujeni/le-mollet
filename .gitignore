@@ -7,3 +7,5 @@ courses/*.buildings.bin
 courses/*.district/
 # fetched by `le-mollet ortho courses/<id>.json`
 courses/*.ortho/
+# built by `le-mollet island courses/<id>.map.json`
+courses/ile-des-briques.city.json

@@ -163,7 +163,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 #rideMenu .panel { width:min(620px, 100%); max-height:100%; overflow:auto }
 #free .panel { width:min(720px, 100%); max-height:100%; overflow:auto }
 .tiles.two { grid-template-columns:repeat(2, 1fr); margin-bottom:14px }
-.tile.free { background:#36aebf }
+.tile.free { background:#36aebf } .tile.island { background:#fe8a18 }
 .tile.city { background:#002654; grid-column:1 / -1; min-height:0; flex-direction:row; align-items:center }
 .junction { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:0 0 8px }
 .junction .btn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px }
@@ -324,6 +324,10 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <button class="tile city" id="goCity" hidden>
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M5 0h2v2H5zM5 2h2v3H5zM4 5h4v1H4zM4 6h1v2H4zM7 6h1v2H7zM3 8h6v1H3zM2 9h2v3H2zM8 9h2v3H8zM4 9h4v1H4z"/></svg>
           <b id="goCityName">Ville</b><small id="goCitySub">Toutes les rues, choisis ta route à chaque carrefour</small>
+        </button>
+        <button class="tile island" id="goIsland" hidden>
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M5 1h2v1h1v1h1v1H3V3h1V2h1zM6 4h1v5H6zM2 9h8v1h1v1H1v-1h1z"/></svg>
+          <b id="goIslandName">Île</b><small>Une île Lego dessinée à la main : volcan, désert, port pirate, jungle</small>
         </button>
       </div>
       <p class="muted" id="modeHint"></p>
@@ -1171,7 +1175,9 @@ function showRideMenu() {
   $('#modeHint').textContent = !ride.list ? '' : ride.list.trainer
     ? `Home trainer connecté : ${ride.list.trainer}. La pente suit la route.`
     : 'Mode démo : pas de home trainer, tu règles les watts avec un curseur.';
-  const city = ride.list?.cities?.[0];
+  const city = ride.list?.cities?.find(c => !c.island), island = ride.list?.cities?.find(c => c.island);
+  $('#goIsland').hidden = !island;
+  if (island) $('#goIslandName').textContent = island.name;
   $('#goCity').hidden = !city;
   if (city) {
     $('#goCityName').textContent = city.name;
@@ -1373,6 +1379,8 @@ async function openRide(id, hasTerrain, kind = 'course') {
   ride.zombie = { prev:null, toast:'', toastUntil:0 };
   $('#leave').textContent = '‖ Pause';
   ride.course = await (await fetch(`/course?id=${encodeURIComponent(id)}`)).json();
+  const listed = ride.list.cities?.find(c => c.id === id);
+  [ride.island, ride.props] = [kind === 'city' && !!listed?.island, listed?.props ?? []];
   startGhost(id);
   show('#ride');
   $('#courseName').textContent = zombie ? 'Zombie Halloween' : ride.course.name;
@@ -1487,7 +1495,7 @@ addEventListener('keydown', e => {
 });
 
 // Minimap in place of the elevation profile: heading up, rider in the lower third, route ahead in orange.
-const MAP_COLORS = { 0:[106, 168, 79], 1:[63, 122, 44], 2:[59, 125, 216], 3:[205, 196, 176], 4:[163, 163, 155], 5:[74, 79, 85], 6:[154, 150, 142] };
+const MAP_COLORS = { 0:[106, 168, 79], 1:[63, 122, 44], 2:[59, 125, 216], 3:[205, 196, 176], 4:[163, 163, 155], 5:[74, 79, 85], 6:[154, 150, 142], 7:[228, 205, 158], 8:[254, 138, 24], 9:[165, 202, 24], 10:[124, 80, 58], 11:[74, 76, 78], 12:[24, 70, 50] };
 function drawMap() {
   const cv = $('#profileCanvas'), T = w3.T, dpr = 1; // ponytail: 1 px per canvas px keeps the per-pixel loop cheap
   const [W, H] = [cv.clientWidth, cv.clientHeight];
@@ -1828,7 +1836,7 @@ function drawProfile() {
 }
 
 // ---------- 3D course world (terrain from `le-mollet course` / `le-mollet terrain`) ----------
-const COVER = { GRASS:0, FOREST:1, WATER:2, BUILDING:3, ROCK:4, ROAD:5, PAVE:6 };
+const COVER = { GRASS:0, FOREST:1, WATER:2, BUILDING:3, ROCK:4, ROAD:5, PAVE:6, SAND:7, LAVA:8, FIELD:9, DIRT:10, BASALT:11, JUNGLE:12 }; // 7+: the island's grounds
 const STEP_Y = 2;          // voxel height, m. Calibration knob: smaller = finer terraces
 const CHUNK = 64;          // cells per chunk side (5 m cells = 320 m)
 // ponytail: fixed view distance by screen width; measure fps on real devices before tuning
@@ -1883,6 +1891,7 @@ const LEGO = (() => {
   return {
     top: plastic({ vertexColors:true, map:topMap, normalMap:topNormal }),
     side: plastic({ vertexColors:true, map:sideMap, normalMap:sideNormal, normalScale:new THREE.Vector2(0.6, 0.6) }),
+    lava: plastic({ vertexColors:true, map:topMap, normalMap:topNormal, emissive:'#ff4a00', emissiveIntensity:0.9 }),
     water: plastic({ color:'#2f7fe0', roughness:0.08, transparent:true, opacity:0.78, normalMap:ripple, normalScale:new THREE.Vector2(0.35, 0.35) }),
     smooth: plastic({ vertexColors:true }), // tiles (roads) and the far mountains: no studs
     topMap, topNormal,
@@ -1916,8 +1925,654 @@ function blocks(list) {
   return g;
 }
 
+// ---------- Lego kit: island decor built from real-sized pieces ----------
+// Minifig scale: 1 stud = 0.4 m, 1 plate = 0.16 m (a brick is 3 plates). Models are built in studs (x, z)
+// and plates (y), origin on the ground at their center, front toward +x, into one vertex-colored geometry.
+const S = 0.4, PL = 0.16;
+const LC = {
+  red:'#c91a09', dred:'#720e0f', blue:'#0055bf', dblue:'#0a3463', mblue:'#5a93db', yel:'#f2cd37', org:'#fe8a18',
+  grn:'#237841', bgrn:'#4b9f4a', dgrn:'#184632', lime:'#a5ca18', sgrn:'#a0bcac', tan:'#e4cd9e', dtan:'#958a73',
+  brn:'#582a12', dbrn:'#352100', white:'#f4f4f4', lgray:'#a0a5a9', dgray:'#6c6e68', black:'#1b2a34', glass:'#9cc4e4',
+  gold:'#aa7f2e', pink:'#fc97ac', purple:'#81007b', salmon:'#f6a28c', sand:'#dcbc81',
+};
+function kit() {
+  const pos = [], col = [], c = new THREE.Color();
+  const P = (x, y, z) => [x * S, y * PL, z * S];
+  const tri = (a, b, d) => { pos.push(...a, ...b, ...d); for (let k = 0; k < 3; k++) col.push(c.r, c.g, c.b) };
+  const quad = (a, b, d, e) => { tri(a, b, d); tri(a, d, e) };
+  const k = {
+    // Box from (x0, y0, z0) to (x1, y1, z1); `studs` puts studs on its top, one per whole stud.
+    box(x0, y0, z0, x1, y1, z1, hex, studs = false) {
+      c.set(hex);
+      const [a, b] = [P(x0, y0, z0), P(x1, y1, z1)];
+      const v = (i, j, l) => [i ? b[0] : a[0], j ? b[1] : a[1], l ? b[2] : a[2]];
+      quad(v(0, 1, 0), v(0, 1, 1), v(1, 1, 1), v(1, 1, 0)); quad(v(0, 0, 0), v(1, 0, 0), v(1, 0, 1), v(0, 0, 1));
+      quad(v(0, 0, 0), v(0, 1, 0), v(1, 1, 0), v(1, 0, 0)); quad(v(0, 0, 1), v(1, 0, 1), v(1, 1, 1), v(0, 1, 1));
+      quad(v(0, 0, 0), v(0, 0, 1), v(0, 1, 1), v(0, 1, 0)); quad(v(1, 0, 0), v(1, 1, 0), v(1, 1, 1), v(1, 0, 1));
+      if (studs) for (let i = Math.ceil(x0); i < Math.floor(x1); i++) for (let j = Math.ceil(z0); j < Math.floor(z1); j++) k.stud(i + 0.5, y1, j + 0.5, hex);
+      return k;
+    },
+    // Brick or plate by its min corner and size: w along x, d along z, h in plates.
+    b(x, z, y, w, d, h, hex, studs = true) { return k.box(x, y, z, x + w, y + h, z + d, hex, studs) },
+    stud(x, y, z, hex) { return k.cyl(x, z, y, 0.3, 0.55, hex, 6) },
+    // Round piece: frustum from radius r0 at y0 to r1 at y0 + h (studs, plates). `colors` paints segments in turn.
+    cone(x, z, y0, r0, r1, h, hex, seg = 12, colors = null) {
+      const ring = (r, y, i) => { const a = i / seg * Math.PI * 2; return P(x + Math.cos(a) * r, y, z + Math.sin(a) * r) };
+      for (let i = 0; i < seg; i++) {
+        c.set(colors ? colors[i % colors.length] : hex);
+        quad(ring(r0, y0, i), ring(r0, y0, i + 1), ring(r1, y0 + h, i + 1), ring(r1, y0 + h, i));
+        tri(P(x, y0 + h, z), ring(r1, y0 + h, i + 1), ring(r1, y0 + h, i));
+        tri(P(x, y0, z), ring(r0, y0, i), ring(r0, y0, i + 1));
+      }
+      return k;
+    },
+    cyl(x, z, y0, r, h, hex, seg = 12) { return k.cone(x, z, y0, r, r, h, hex, seg) },
+    // Slope: footprint (x0, z0)-(x1, z1), from y0 up to `lo` on one side and `hi` on the side `to` ('+x', '-x', '+z', '-z').
+    slope(x0, z0, x1, z1, y0, lo, hi, to, hex) {
+      c.set(hex);
+      const y = (i, l) => ({ '+x':i, '-x':1 - i, '+z':l, '-z':1 - l })[to] ? hi : lo;
+      const v = (i, j, l) => P(i ? x1 : x0, j ? y(i, l) : y0, l ? z1 : z0);
+      quad(v(0, 1, 0), v(0, 1, 1), v(1, 1, 1), v(1, 1, 0)); quad(v(0, 0, 0), v(1, 0, 0), v(1, 0, 1), v(0, 0, 1));
+      quad(v(0, 0, 0), v(0, 1, 0), v(1, 1, 0), v(1, 0, 0)); quad(v(0, 0, 1), v(1, 0, 1), v(1, 1, 1), v(0, 1, 1));
+      quad(v(0, 0, 0), v(0, 0, 1), v(0, 1, 1), v(0, 1, 0)); quad(v(1, 0, 0), v(1, 1, 0), v(1, 1, 1), v(1, 0, 1));
+      return k;
+    },
+    // Build pieces with `fn` on a sub-kit, then turn them (radians, around x, y, z in that order) and move them.
+    part(fn, { at = [0, 0, 0], rx = 0, ry = 0, rz = 0, s = 1 } = {}) {
+      const sub = kit();
+      fn(sub);
+      const m = new THREE.Matrix4().compose(new THREE.Vector3(at[0] * S, at[1] * PL, at[2] * S), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'YXZ')), new THREE.Vector3(s, s, s));
+      const v = new THREE.Vector3(), [sp, sc] = sub.raw();
+      for (let i = 0; i < sp.length; i += 3) { v.set(sp[i], sp[i + 1], sp[i + 2]).applyMatrix4(m); pos.push(v.x, v.y, v.z) }
+      col.push(...sc);
+      return k;
+    },
+    raw: () => [pos, col],
+    geo() {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.computeVertexNormals();
+      g.computeBoundingSphere();
+      return g;
+    },
+  };
+  return k;
+}
+// A slightly different shade per brick, so walls read as bricks and not as slabs.
+const shadeHex = (hex, n, amt = 0.035) => '#' + new THREE.Color(hex).offsetHSL(0, 0, (hash(n, 17, 5) - 0.5) * amt * 2).getHexString();
+// Running-bond wall from (x0, z0) to (x1, z1) along x or z, `t` studs thick, courses of 3 plates from y0 to y1,
+// leaving out `holes` [[from, to, yFrom, yTo], ...] measured along the wall.
+function wall(k, x0, z0, x1, z1, y0, y1, hex, holes = [], t = 1) {
+  const alongX = Math.abs(x1 - x0) >= Math.abs(z1 - z0), len = alongX ? x1 - x0 : z1 - z0;
+  for (let y = y0, row = 0; y < y1; y += 3, row++) {
+    const top = Math.min(y + 3, y1);
+    let s = 0;
+    const cuts = holes.filter(h => y < h[3] && top > h[2]).sort((a, b) => a[0] - b[0]);
+    const pieces = [];
+    for (const h of cuts) { if (h[0] > s) pieces.push([s, h[0]]); s = Math.max(s, h[1]) }
+    if (s < len) pieces.push([s, len]);
+    for (const [a0, a1] of pieces) for (let a = a0, n = 0; a < a1; n++) { // bricks of 2 to 4 studs, offset every other course
+      const e = Math.min(a1, a === a0 && row % 2 ? a + 1 + (n % 2) : a + 2 + ((n + row) % 3));
+      const hex2 = shadeHex(hex, Math.round(a * 7 + y * 13 + x0 + z0));
+      if (alongX) k.box(x0 + a, y, z0, x0 + e, top, z0 + t, hex2); else k.box(x0, y, z0 + a, x0 + t, top, z0 + e, hex2);
+      a = e;
+    }
+  }
+}
+// Window: frame, glass, sill and shutters, in a wall facing +x at x = xf, centered at z, from y to y + h plates.
+function windowX(k, xf, z, y, w, h, shutter) {
+  k.box(xf - 0.6, y, z - w / 2, xf - 0.4, y + h, z + w / 2, LC.glass);
+  k.box(xf - 0.6, y + h, z - w / 2 - 0.2, xf + 0.15, y + h + 1, z + w / 2 + 0.2, LC.white);
+  k.box(xf - 0.6, y - 1, z - w / 2 - 0.3, xf + 0.35, y, z + w / 2 + 0.3, LC.white);
+  k.box(xf - 0.55, y, z - 0.08, xf - 0.4, y + h, z + 0.08, LC.white);
+  if (shutter) for (const s of [-1, 1]) k.box(xf, y, z + s * (w / 2 + 0.1), xf + 0.2, y + h, z + s * (w / 2 + 1.1), shutter);
+}
+// Window facing +z at z = zf.
+function windowZ(k, zf, x, y, w, h, shutter) {
+  k.part(s => windowX(s, 0, 0, y, w, h, shutter), { at:[x, 0, zf], ry:-Math.PI / 2 });
+}
+// Gable roof over x0..x1 (front +x) and z0..z1, ridge along z, from y0 up `h` plates, with stepped gables.
+function gableRoof(k, x0, x1, z0, z1, y0, h, roof, gable) {
+  const mid = (x0 + x1) / 2;
+  k.slope(mid, z0 - 0.5, x1 + 0.8, z1 + 0.5, y0, y0 + 1, y0 + h + 1, '-x', roof);
+  k.slope(x0 - 0.8, z0 - 0.5, mid, z1 + 0.5, y0, y0 + 1, y0 + h + 1, '+x', roof);
+  k.box(mid - 0.6, y0 + h, z0 - 0.6, mid + 0.6, y0 + h + 1.6, z1 + 0.6, shadeHex(roof, 3, 0.12));
+  for (let j = 0; j < h / 3; j++) {
+    const half = (x1 - x0) / 2 * (1 - (j + 1) / (h / 3 + 1));
+    for (const z of [z0, z1 - 1]) k.box(mid - half, y0 + j * 3, z, mid + half, y0 + j * 3 + 3, z + 1, shadeHex(gable, j));
+  }
+}
+
+const MODELS = {
+  house(k, v) { // colored townhouse: brick courses, door, shuttered windows, flower boxes, gable roof, chimney
+    const wallHex = [LC.white, LC.tan, LC.yel, LC.mblue, LC.salmon, LC.sgrn][v % 6], roof = [LC.red, LC.dred, LC.blue, LC.grn, LC.dgray, LC.brn][(v * 5 + 1) % 6];
+    const floors = v % 3 === 2 ? 2 : 1, top = 1 + floors * 12;
+    k.b(-5.5, -6.5, 0, 11, 13, 1, LC.dgray, false);
+    const front = [[5, 7, 1, 13]], win = f => [[1.5, 4.5, 4 + f * 12, 10 + f * 12], [7.5, 10.5, 4 + f * 12, 10 + f * 12]];
+    for (let f = 0; f < floors; f++) front.push(...(f ? [[1.5, 4.5, 16, 22], [5, 7, 16, 22], [7.5, 10.5, 16, 22]] : win(0)));
+    wall(k, 4, -6, 4, 6, 1, top, wallHex, front);
+    wall(k, -5, -6, -5, 6, 1, top, wallHex, [[4.5, 7.5, 4, 10]]);
+    wall(k, -4, -6, 4, -6, 1, top, wallHex, [[2.5, 5.5, 4, 10]]);
+    wall(k, -4, 5, 4, 5, 1, top, wallHex, [[2.5, 5.5, 4, 10]]);
+    for (let f = 0; f < floors; f++) for (const z of f ? [-3, 0, 3] : [-3, 3]) {
+      windowX(k, 5, z, 4 + f * 12, 2.4, 6, roof);
+      k.b(4.9, z - 1.4, 2 + f * 12, 0.8, 2.8, 1, LC.brn, false); // flower box
+      for (const dz of [-0.9, 0, 0.9]) k.stud(5.3, 3 + f * 12, z + dz, [LC.red, LC.yel, LC.pink, LC.white][(v + dz * 2 + 3) & 3]);
+    }
+    if (floors === 2) k.b(-5.2, -6.2, 13, 10.4, 12.4, 1, LC.white, false); // floor band
+    k.box(4.3, 1, -1, 4.5, 13, 1, LC.brn); k.stud(4.6, 7, 0.6, LC.yel); // door and knob
+    k.box(4, 13, -1.4, 5.3, 14, 1.4, LC.white); k.b(5, -1.5, 0, 1.5, 3, 1, LC.lgray, false); // lintel, step
+    windowZ(k, -6, -1, 4, 2.4, 6, null); windowZ(k, 6, -1, 4, 2.4, 6, null);
+    gableRoof(k, -5, 5, -6, 6, top, 12, roof, wallHex);
+    k.b(-2.5, 2.5, top + 4, 2, 2, 12, LC.dgray); // chimney
+  },
+  tavern(k) { // two floors: stone below, timber frame above, sign, barrels by the door
+    k.b(-7, -9.5, 0, 14, 19, 1, LC.dgray, false);
+    wall(k, 6, -9, 6, 9, 1, 13, LC.lgray, [[7.5, 10.5, 1, 13], [2, 5, 4, 10], [13, 16, 4, 10]]);
+    wall(k, -7, -9, -7, 9, 1, 25, LC.lgray);
+    wall(k, -6, -9, 6, -9, 1, 25, LC.lgray); wall(k, -6, 8, 6, 8, 1, 25, LC.lgray);
+    k.box(6, 13, -9, 7, 25, 9, LC.tan); // plaster upper floor
+    for (const z of [-9, -4.5, 0, 4.5, 8.4]) k.box(7, 13, z, 7.3, 25, z + 0.6, LC.dbrn); // timber posts
+    k.box(7, 18.5, -9, 7.3, 19.2, 9, LC.dbrn); k.box(7, 13, -9.2, 7.4, 13.8, 9.2, LC.dbrn);
+    for (const z of [-6.5, -2, 2.5, 6.5]) windowX(k, 7.3, z - 0.3, 15, 2, 6, null);
+    for (const z of [-5.5, 5.5]) windowX(k, 6.2, z, 4, 2.4, 6, LC.grn);
+    k.box(6.4, 1, -1.5, 6.6, 13, 1.5, LC.dbrn);
+    gableRoof(k, -7, 7, -9, 9, 25, 15, LC.dred, LC.tan);
+    k.box(7.3, 22, 9, 10, 22.6, 9.4, LC.black); // sign bracket and board with a mug
+    k.box(8, 15, 9.1, 10, 21, 9.3, LC.brn); k.cyl(9, 9.35, 16.5, 0.6, 3, LC.yel, 8);
+    for (const [z, n] of [[-5, 0], [-3.4, 1], [4, 2]]) { k.cyl(8, z, 0, 0.9, 6, LC.brn); k.cyl(8, z, 1.5, 0.95, 0.5, LC.dgray); k.cyl(8, z, 4, 0.95, 0.5, LC.dgray) }
+  },
+  stall(k, v) { // market stall: posts, counter of goods, striped awning
+    const [a, b] = [[LC.red, LC.white], [LC.blue, LC.white], [LC.grn, LC.yel], [LC.org, LC.white]][v % 4];
+    for (const [x, z] of [[-2, -4], [2, -4], [-2, 4], [2, 4]]) k.cyl(x, z, 0, 0.3, 16, LC.brn, 6);
+    k.b(-2.5, -4.5, 6, 5, 9, 2, LC.brn, false);
+    for (let i = -4; i < 4; i++) for (const x of [-1.5, 0, 1.5]) k.stud(x, 8, i + 0.5, [LC.red, LC.org, LC.lime, LC.yel, LC.purple][(i + 8 + x * 2 + v) % 5 | 0]);
+    for (let i = -5; i < 5; i++) k.slope(-3, i, 3.4, i + 1, 16, 16, 18, '-x', i % 2 ? a : b);
+  },
+  fountain(k) {
+    k.cyl(0, 0, 0, 6, 3, LC.lgray, 16); k.cyl(0, 0, 3, 5.4, 0.6, LC.dgray, 16); k.cyl(0, 0, 0.2, 5.2, 2.6, LC.glass, 16);
+    k.cyl(0, 0, 0, 1, 10, LC.lgray, 10); k.cone(0, 0, 10, 1, 3, 1.5, LC.lgray, 12); k.cyl(0, 0, 10.6, 2.6, 0.8, LC.glass, 12);
+    k.cyl(0, 0, 11.5, 0.5, 3, LC.lgray, 8); k.cone(0, 0, 14.5, 0.8, 0, 1.5, LC.gold, 8);
+  },
+  crane(k) { // dockside wooden crane with a hanging crate
+    k.b(-2, -2, 0, 4, 4, 1, LC.dgray, true);
+    for (let y = 1; y < 38; y += 3) k.b(-0.5, -0.5, y, 1, 1, 3, shadeHex(LC.brn, y), false);
+    k.b(-1, -0.5, 36, 13, 1, 2, LC.brn, false); k.slope(-0.5, -0.4, 6, 0.4, 28, 28, 36, '-x', LC.dbrn);
+    k.box(10.9, 18, -0.05, 11.1, 36, 0.05, LC.black);
+    k.b(10, -1, 14, 2, 2, 4, LC.tan, false); k.box(9.9, 15.5, -1.05, 12.1, 16, 1.05, LC.brn);
+  },
+  dock(k) { // planked jetty on posts
+    for (let x = -20; x < 20; x++) k.b(x, -3, 4, 1, 6, 1, x % 3 ? LC.brn : LC.dbrn, false);
+    for (let x = -18; x <= 18; x += 6) for (const z of [-3, 3]) k.cyl(x, z, -12, 0.45, 18, LC.dbrn, 8);
+    for (const x of [-12, 0, 12]) k.cyl(x, 2.4, 5, 0.4, 2, LC.black, 8);
+  },
+  ship(k, v) { // pirate ship: tapered hull in courses, gun ports, decks, stern castle, three masts, sails, flags
+    const stripe = [LC.red, LC.yel, LC.blue][v % 3], sail = v === 1 ? LC.tan : LC.white, mark = v === 2 ? LC.black : LC.red;
+    const halfW = (x, L) => (3 + L * 0.9) * Math.min(1, Math.max(0.15, (28 - x) / 9)) * Math.min(1, Math.max(0.35, (x + 30) / 6));
+    for (let L = 0; L < 7; L++) for (let x = -28; x < 28; x += 2) {
+      const w = halfW(x + 1, L), hex = L < 2 ? LC.dbrn : L === 5 ? stripe : shadeHex(LC.brn, x + L * 31);
+      k.box(x, L * 3 - 6, -w, x + 2, L * 3 - 3, w, hex);
+    }
+    for (let x = -18; x <= 16; x += 6) for (const s of [-1, 1]) { const z = s * halfW(x + 0.6, 5); k.box(x, 9.5, z - 0.3, x + 1.2, 11.5, z + 0.3, LC.black) } // gun ports
+    for (let x = -27; x < 26; x++) k.b(x, -halfW(x + 0.5, 6) + 0.6, 15, 1, halfW(x + 0.5, 6) * 2 - 1.2, 0.5, x % 2 ? LC.tan : LC.sand, false); // deck planks
+    k.b(-29, -5.5, 15, 11, 11, 9, LC.brn, false); k.b(-29, -5.5, 24, 11, 11, 1, LC.dbrn, false); // stern castle
+    for (const z of [-3, 0, 3]) k.box(-29.3, 17, z - 0.8, -29, 21, z + 0.8, LC.yel); // stern windows
+    for (let x = -28; x < 26; x += 2) for (const s of [-1, 1]) k.box(x, 15, s * halfW(x + 1, 6) - 0.3, x + 0.5, 18, s * halfW(x + 1, 6) + 0.3, LC.dbrn); // rail posts
+    k.part(s => s.cyl(0, 0, 0, 0.5, 70, LC.dbrn, 8), { at:[27, 12, 0], rz:-1.2 }); // bowsprit
+    k.box(-30, -4, -0.3, -29, 14, 0.3, LC.dbrn); // rudder
+    for (const [x, hm, ws] of [[13, 78, 9], [0, 92, 11], [-14, 70, 8]]) {
+      k.cyl(x, 0, 15, 0.6, hm, LC.dbrn, 8);
+      for (const [y0, y1, w] of [[30, 52, ws], [56, hm - 10, ws * 0.75]]) {
+        k.cyl(x + 0.8, 0, y1, 0.3, 0.6, LC.dbrn, 6); k.box(x + 0.4, y1, -w - 0.5, x + 1, y1 + 0.8, w + 0.5, LC.dbrn); // yard
+        k.box(x + 0.9, y0, -w, x + 1.4, y1, w, sail); k.box(x + 1.4, y0 + 2, -w + 0.5, x + 1.9, y1 - 2, w - 0.5, sail); // sail, bellied
+        if (v !== 1) k.box(x + 1.95, (y0 + y1) / 2 - 1.5, -w + 1, x + 2.05, (y0 + y1) / 2 + 1.5, w - 1, mark);
+      }
+      k.cyl(x, 0, hm + 15, 1.6, 2, LC.brn, 10); // crow's nest
+      k.box(x - 0.1, hm + 9, 0, x + 0.1, hm + 14, 4, LC.black); k.stud(x + 0.2, hm + 11, 2, LC.white); // jolly roger
+    }
+  },
+  boat(k) { // rowboat with oars
+    for (let L = 0; L < 2; L++) for (let x = -4; x < 4; x++) { const w = (1.4 + L * 0.5) * Math.min(1, (4.5 - Math.abs(x + 0.5)) / 2); k.box(x, L * 2 - 2, -w, x + 1, L * 2, w, L ? LC.brn : LC.dbrn) }
+    k.b(-1, -1.5, 1.5, 1, 3, 0.5, LC.tan, false);
+    for (const s of [-1, 1]) k.part(p => p.box(0, 0, 0, 0.3, 0.3, 7, LC.tan), { at:[0, 2, s * 1.5], ry:s * 0.4, rx:s * -0.3 });
+  },
+  fort(k) { // harbor fort: stone walls with crenels, round corner towers, gate, courtyard
+    k.b(-15, -15, 0, 30, 30, 1, LC.dgray, false);
+    for (const [x0, z0, x1, z1, holes] of [[14, -14, 14, 14, [[12, 16, 1, 13]]], [-15, -14, -15, 14, []], [-14, -15, 14, -15, []], [-14, 14, 14, 14, []]]) {
+      wall(k, x0, z0, x1, z1, 1, 19, LC.lgray, holes, 1);
+      const alongX = x0 !== x1;
+      for (let a = 0; a < 28; a += 2) alongX ? k.b(x0 + a, z0, 19, 1, 1, 3, LC.lgray) : k.b(x0, z0 + a, 19, 1, 1, 3, LC.lgray);
+    }
+    k.box(14.2, 1, -2, 14.6, 13, 2, LC.brn); k.box(14.6, 13, -2.5, 15.3, 15, 2.5, LC.dgray);
+    for (const [x, z] of [[14, 14], [14, -14], [-14, 14], [-14, -14]]) {
+      for (let y = 1; y < 27; y += 3) k.cyl(x, z, y, 4, 3, shadeHex(LC.lgray, y + x), 14);
+      for (let i = 0; i < 8; i += 2) k.part(p => p.b(3, -0.5, 0, 1, 1, 3, LC.lgray), { at:[x, 27, z], ry:i / 8 * Math.PI * 2 });
+      k.cyl(x, z, 27, 3.3, 0.6, LC.dgray, 12);
+    }
+    k.b(-13, -13, 1, 26, 26, 1, LC.tan, false);
+  },
+  cannon(k) {
+    k.b(-1.5, -1, 0.5, 3, 2, 2, LC.brn, false);
+    for (const z of [-1.2, 1.2]) k.part(p => p.cyl(0, 0, 0, 1, 0.5, LC.black, 10), { at:[0, 1.5, z], rx:Math.PI / 2 });
+    k.part(p => { p.cyl(0, 0, 0, 0.8, 18, LC.black, 10); p.cyl(0, 0, 0, 1, 2, LC.black, 10) }, { at:[-1, 4, 0], rz:-1.35 });
+  },
+  lighthouse(k) { // striped round tower, gallery with railing, lantern room, red dome
+    k.cyl(0, 0, 0, 7, 3, LC.dgray, 16);
+    for (let y = 3, n = 0; y < 66; y += 3, n++) k.cyl(0, 0, y, 5 - y / 66 * 1.4, 3, Math.floor(n / 2) % 2 ? LC.white : LC.red, 16);
+    k.box(4.8, 3, -1, 5.3, 12, 1, LC.brn);
+    for (const y of [24, 42]) k.box(4.2 - y / 66, y, -0.6, 4.7 - y / 66, y + 4, 0.6, LC.black);
+    k.cyl(0, 0, 66, 5.2, 1, LC.dgray, 16);
+    for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; k.cyl(Math.cos(a) * 4.9, Math.sin(a) * 4.9, 67, 0.15, 4, LC.black, 4) }
+    k.cyl(0, 0, 70.5, 5, 0.4, LC.black, 16);
+    k.cone(0, 0, 76, 3.2, 0.8, 5, LC.red, 12); k.cyl(0, 0, 81, 0.8, 1, LC.red, 8); k.stud(0, 82, 0, LC.gold);
+  },
+  hut(k) { // beach hut on stilts: bamboo walls, thatched roof, ladder
+    for (const [x, z] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) k.cyl(x, z, 0, 0.45, 10, LC.dbrn, 6);
+    k.b(-5, -5, 10, 10, 10, 1, LC.brn, false);
+    for (let a = -4.5; a <= 4.5; a += 1) for (const [x, z] of [[a, -4.5], [a, 4.5], [-4.5, a], ...(Math.abs(a) > 1.2 ? [[4.5, a]] : [])]) k.cyl(x, z, 11, 0.45, 13, (a * 2) % 2 ? LC.tan : LC.sand, 6);
+    for (let j = 0; j < 5; j++) k.b(-6 + j * 1.2, -6 + j * 1.2, 24 + j * 2, 12 - j * 2.4, 12 - j * 2.4, 2, j % 2 ? LC.dtan : LC.sand, false);
+    for (let y = 1; y < 10; y += 2) k.b(5, -1, y, 1, 2, 0.5, LC.brn, false);
+  },
+  parasol(k, v) {
+    const cols = [[LC.red, LC.white], [LC.blue, LC.white], [LC.yel, LC.org], [LC.grn, LC.white]][v % 4];
+    k.cyl(0, 0, 0, 0.2, 13, LC.white, 6); k.cone(0, 0, 13, 6, 0.3, 4, null, 8, cols);
+    k.b(1, -1.5, 0, 6, 3, 0.4, cols[0], false); k.b(1.5, -1.1, 0.4, 0.8, 0.8, 0.3, cols[1], false);
+  },
+  surf(k, v) { k.b(-3, -0.8, 0, 6, 1.6, 0.6, [LC.org, LC.mblue, LC.lime][v % 3], false); k.b(-2.5, -0.2, 0.6, 5, 0.4, 0.1, LC.white, false) },
+  palm(k, v) { // curved trunk of round bricks, drooping fronds, coconuts
+    const n = 8 + (v % 3) * 2;
+    let x = 0;
+    for (let i = 0; i < n; i++) { x = (i / n) ** 2 * 3; k.cyl(x, 0, i * 3, 0.75 - i * 0.02, 3, i % 2 ? LC.dtan : LC.brn, 8) }
+    const top = n * 3;
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * Math.PI * 2 + v;
+      k.part(p => { p.box(0, 0, -0.7, 4, 0.5, 0.7, i % 2 ? LC.bgrn : LC.grn); p.part(q => q.box(0, 0, -0.55, 3.5, 0.5, 0.55, LC.bgrn), { at:[4, 0, 0], rz:-0.6 }) }, { at:[x, top, 0], ry:a, rz:0.15 });
+    }
+    for (const z of [-0.6, 0.6]) k.cyl(x + 0.6, z, top - 2, 0.55, 1.6, LC.brn, 6);
+  },
+  wreck(k) { // half-buried hull with a broken mast
+    k.part(s => { MODELS.ship(s, 2) }, { at:[0, -14, 0], rz:0.22, rx:0.35, s:0.7 });
+  },
+  chest(k) {
+    k.b(-1.5, -1, 0, 3, 2, 4, LC.brn, false); k.box(-1.55, 3.2, -1.05, 1.55, 3.6, 1.05, LC.gold);
+    k.part(p => { p.box(0, 0, -1, 3, 0.5, 1, LC.brn); p.box(0, 0.5, -1, 3, 0.9, 1, LC.gold) }, { at:[-1.5, 4, 0], rz:1.1 });
+    for (let i = 0; i < 6; i++) k.stud(-1 + (i % 3), 4, -0.5 + (i > 2), i === 4 ? LC.red : LC.yel);
+  },
+  crab(k) { k.b(-0.8, -1, 0.5, 1.6, 2, 1, LC.red, false); for (const z of [-1, 0.6]) k.b(0.8, z, 0.5, 0.8, 0.5, 0.8, LC.red, false); for (const z of [-0.2, 0.2]) k.stud(0.3, 1.5, z, LC.black) },
+  pyramid(k) { // stepped sandstone pyramid, stairs up the front, a small gold-topped shrine
+    for (let L = 0; L < 15; L++) { const h = 32 - L * 2; k.b(-h, -h, L * 3, h * 2, h * 2, 3, L % 2 ? LC.tan : LC.sand, L === 14) }
+    for (let L = 0; L < 45; L++) k.b(32 - L * 2 / 3, -3, L, 1, 6, 1, LC.dtan, false);
+    k.b(-3, -3, 45, 6, 6, 12, LC.dtan, false); k.box(2.9, 45, -1, 3.1, 52, 1, LC.black);
+    k.cone(0, 0, 57, 3.5, 0, 6, LC.gold, 4);
+  },
+  obelisk(k) { for (let y = 0; y < 60; y += 3) { const h = 2 - y / 60; k.b(-h, -h, y, h * 2, h * 2, 3, y % 6 ? LC.tan : LC.sand, false); if (y % 9 === 3) k.stud(h + 0.1, y + 1, 0, LC.dtan) } k.cone(0, 0, 60, 1.4, 0, 4, LC.gold, 4) },
+  well(k) {
+    k.cyl(0, 0, 0, 3, 5, LC.lgray, 14); k.cyl(0, 0, 4.4, 2.2, 0.6, LC.dblue, 12);
+    for (const z of [-2.6, 2.6]) k.b(-0.4, z - 0.4, 5, 0.8, 0.8, 13, LC.brn, false);
+    k.slope(-3, -3.5, 0, 3.5, 18, 18, 21, '+x', LC.dred); k.slope(0, -3.5, 3, 3.5, 18, 18, 21, '-x', LC.dred);
+    k.cyl(0, 0, 9, 0.7, 2.2, LC.brn, 8);
+  },
+  tent(k, v) {
+    const [a, b] = [[LC.white, LC.red], [LC.tan, LC.dblue]][v % 2];
+    for (let i = -5; i < 5; i++) { k.slope(i, -5, i + 1, 0, 0, 0, 14, '+z', i % 2 ? a : b); k.slope(i, 0, i + 1, 5, 0, 0, 14, '-z', i % 2 ? a : b) }
+    k.b(5, -2, 0, 4, 4, 0.3, LC.red, false); k.cyl(5, 0, 0, 0.2, 15, LC.brn, 6);
+  },
+  camel(k) {
+    for (const [x, z] of [[2, -0.8], [2, 0.8], [-2, -0.8], [-2, 0.8]]) k.b(x - 0.4, z - 0.4, 0, 0.8, 0.8, 9, LC.dtan, false);
+    k.b(-3, -1.3, 9, 6, 2.6, 5, LC.tan, false); k.cyl(-1.2, 0, 14, 1.2, 2.5, LC.tan, 8); k.cyl(1.2, 0, 14, 1, 2, LC.tan, 8);
+    k.b(-1.2, -1.4, 13, 2.4, 2.8, 1, LC.red, false); for (const z of [-1.4, 1.4]) k.stud(0, 11, z, LC.yel);
+    k.part(p => p.b(0, -0.5, 0, 1, 1, 9, LC.tan, false), { at:[3, 11, 0], rz:-0.5 });
+    k.b(4.6, -0.6, 18, 2.4, 1.2, 2, LC.tan, false);
+  },
+  bones(k) { k.b(-0.8, -0.8, 0, 1.6, 1.6, 2, LC.white, false); for (let i = 0; i < 5; i++) k.b(1 + i, -0.2, 0, 0.6, 0.4, 0.6, LC.white, false); k.b(2, -2, 0, 0.4, 4, 0.6, LC.white, false) },
+  sign(k) { // signpost with three arrow boards
+    k.cyl(0, 0, 0, 0.4, 20, LC.brn, 6);
+    for (const [y, a, hex] of [[17, 0.4, LC.red], [14, -1.2, LC.blue], [11, 2.4, LC.grn]])
+      k.part(p => { p.b(0, -0.15, 0, 5, 0.3, 2, hex, false); p.slope(5, -0.15, 6, 0.15, 0, 0, 2, '-x', hex); p.b(0.4, -0.2, 0.6, 3.4, 0.4, 0.6, LC.white, false) }, { at:[0, y, 0], ry:a });
+  },
+  temple(k) { // jungle temple: three stone tiers, front stairs, column shrine, vines, torches
+    for (let L = 0; L < 3; L++) { const h = 14 - L * 4; wall(k, -h, -h, h, -h, L * 9, L * 9 + 9, LC.sgrn); wall(k, -h, h - 1, h, h - 1, L * 9, L * 9 + 9, LC.sgrn); wall(k, -h, -h, -h, h, L * 9, L * 9 + 9, LC.dgray); wall(k, h - 1, -h, h - 1, h, L * 9, L * 9 + 9, LC.dgray); k.b(-h, -h, L * 9 + 8, h * 2, h * 2, 1, LC.lgray, true) }
+    for (let L = 0; L < 27; L++) k.b(14 - L * 0.4, -3, L, 1, 6, 1, LC.lgray, false);
+    for (const [x, z] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) k.cyl(x, z, 27, 0.8, 14, LC.lgray, 10);
+    k.b(-5, -5, 41, 10, 10, 2, LC.dgray, false); k.b(-3, -3, 43, 6, 6, 3, LC.sgrn, false); k.stud(0, 46, 0, LC.gold);
+    for (let i = 0; i < 9; i++) k.box(13.9 - (i % 3) * 4, 9 + (i % 4) * 3, -12 + i * 3, 14.2 - (i % 3) * 4, 17 + (i % 4) * 3, -11.5 + i * 3, LC.bgrn); // vines
+    for (const z of [-5, 5]) { k.cyl(16, z, 0, 0.4, 10, LC.brn, 6); k.cone(16, z, 10, 0.9, 0.6, 1, LC.dgray, 8) }
+  },
+  idol(k) { // tiki statue
+    k.b(-1.5, -1.5, 0, 3, 3, 15, LC.dtan, false);
+    for (const z of [-0.8, 0.8]) k.box(1.5, 10, z - 0.4, 1.7, 12, z + 0.4, LC.black);
+    k.box(1.5, 5, -1, 1.7, 7, 1, LC.white); k.box(1.5, 7, -0.3, 1.9, 10, 0.3, LC.dtan); k.b(-2, -2, 15, 4, 4, 2, LC.grn, false);
+  },
+  windmill(k) { // white tower tapering up, door and windows, gallery, red cap (sails turn separately)
+    for (let y = 0; y < 54; y += 3) k.cyl(0, 0, y, 6 - y / 54 * 2.2, 3, shadeHex(LC.white, y, 0.02), 8);
+    k.box(5.6, 0, -1.2, 6.2, 9, 1.2, LC.brn); for (const y of [20, 36]) k.box(5.1 - y / 54 * 2, y, -0.8, 5.5 - y / 54 * 2, y + 5, 0.8, LC.glass);
+    k.cyl(0, 0, 30, 6.8, 0.8, LC.brn, 12);
+    k.cone(0, 0, 54, 4.6, 1, 10, LC.red, 8); k.cyl(4.5, 0, 56, 1, 2, LC.dgray, 8);
+  },
+  barn(k) { // red barn: white trims, big X doors, hay loft, gambrel roof, weather vane
+    k.b(-8, -12, 0, 16, 24, 1, LC.dgray, false);
+    wall(k, 7, -11, 7, 11, 1, 22, LC.red, [[7, 15, 1, 16]]); wall(k, -8, -11, -8, 11, 1, 22, LC.red);
+    wall(k, -7, -11, 7, -11, 1, 22, LC.red); wall(k, -7, 10, 7, 10, 1, 22, LC.red);
+    k.box(7.2, 1, -4, 7.5, 16, 4, LC.dred);
+    for (const s of [-1, 1]) k.part(p => p.box(0, 0, -0.25, 0.3, 17, 0.25, LC.white), { at:[7.5, 0.5, s * 2], rx:s * 0.55 });
+    k.box(7.5, 1, -4.3, 7.8, 16.6, -3.8, LC.white); k.box(7.5, 1, 3.8, 7.8, 16.6, 4.3, LC.white); k.box(7.5, 16, -4.3, 7.8, 16.6, 4.3, LC.white);
+    k.box(7.2, 17, -1.5, 7.6, 21, 1.5, LC.brn); for (const z of [-11.2, 10.8]) k.box(-8.2, 1, z, 8.2, 1.6, z + 0.4, LC.white);
+    k.slope(4, -12, 8.6, 12, 22, 22, 32, '-x', LC.dgray); k.slope(-8.6, -12, -4, 12, 22, 22, 32, '+x', LC.dgray);
+    k.slope(0, -12, 4, 12, 32, 32, 36, '-x', LC.dgray); k.slope(-4, -12, 0, 12, 32, 32, 36, '+x', LC.dgray);
+    for (const z of [-11, 10]) for (let y = 22; y < 34; y += 3) k.box(-(36 - y) / 2, y, z, (36 - y) / 2, y + 3, z + 1, LC.red);
+    k.cyl(0, 0, 36, 0.15, 8, LC.black, 4); k.box(-1.5, 42, -0.1, 1.5, 42.3, 0.1, LC.black); k.box(0.8, 42, -0.1, 2, 43.5, 0.1, LC.black);
+  },
+  silo(k) { for (let y = 0; y < 45; y += 3) k.cyl(0, 0, y, 4, 3, (y / 3) % 4 === 3 ? LC.blue : LC.lgray, 14); k.cone(0, 0, 45, 4.2, 0.5, 5, LC.lgray, 14); for (let y = 1; y < 44; y += 2) k.b(4, -0.5, y, 0.3, 1, 0.3, LC.dgray, false) },
+  tractor(k) {
+    k.b(-1, -2, 4, 7, 4, 5, LC.grn, false); k.b(4, -1.5, 4, 2, 3, 3, LC.grn, false); k.b(5.5, -1, 5, 0.6, 2, 1.5, LC.dgray, false);
+    k.b(-3, -2.5, 4, 3, 5, 2, LC.grn, false); k.b(-2.6, -1, 6, 1.6, 2, 3, LC.black, false); k.cyl(4, 1.4, 9, 0.3, 6, LC.black, 6);
+    for (const z of [-3.2, 3.2]) k.part(p => { p.cyl(0, 0, 0, 3, 1.4, LC.black, 12); p.cyl(0, 0, -0.1, 1.6, 1.6, LC.yel, 10) }, { at:[-1.5, 4.5, z], rx:Math.PI / 2 });
+    for (const z of [-2.6, 2.6]) k.part(p => { p.cyl(0, 0, 0, 1.7, 1, LC.black, 10); p.cyl(0, 0, -0.1, 0.9, 1.2, LC.yel, 8) }, { at:[4.5, 2.6, z], rx:Math.PI / 2 });
+    for (const [x, z] of [[-2.8, -2.4], [-2.8, 2.4], [0.4, -2.4], [0.4, 2.4]]) k.cyl(x, z, 6, 0.2, 10, LC.black, 4);
+    k.b(-3.2, -2.8, 16, 4, 5.6, 0.6, LC.yel, false);
+  },
+  scarecrow(k) { k.cyl(0, 0, 0, 0.3, 22, LC.brn, 6); k.b(-0.3, -4, 15, 0.6, 8, 0.6, LC.brn, false); k.b(-1, -1.6, 10, 2, 3.2, 6, LC.blue, false); k.b(-1.1, -1.7, 12, 2.2, 3.4, 0.6, LC.red, false); k.b(-1, -1, 16, 2, 2, 4, LC.tan, false); k.cyl(0, 0, 20, 2.2, 0.4, LC.yel, 10); k.cyl(0, 0, 20.4, 1.2, 2, LC.yel, 10) },
+  pier(k) { for (let x = 0; x < 30; x++) k.b(x, -2.5, 3, 1, 5, 1, x % 3 ? LC.brn : LC.dbrn, false); for (let x = 2; x < 30; x += 7) for (const z of [-2.5, 2.5]) k.cyl(x, z, -8, 0.4, 13, LC.dbrn, 6) },
+  castle(k) { // curtain walls with crenels and banners, four round towers with cone roofs, gatehouse, tall keep
+    const H = 36;
+    k.b(-36, -26, 0, 72, 52, 1, LC.tan, false);
+    for (const [x0, z0, x1, z1, holes] of [[34, -24, 34, 24, [[20, 28, 1, 20]]], [-35, -24, -35, 24, []], [-34, -25, 34, -25, []], [-34, 24, 34, 24, []]]) {
+      wall(k, x0, z0, x1, z1, 1, H, LC.lgray, holes, 1);
+      const alongX = x0 !== x1, len = alongX ? x1 - x0 : z1 - z0;
+      for (let a = 0; a < len; a += 2) alongX ? k.b(x0 + a, z0, H, 1, 1, 3, LC.lgray) : k.b(x0, z0 + a, H, 1, 1, 3, LC.lgray);
+    }
+    for (const [x, z] of [[34, 25], [34, -25], [-35, 25], [-35, -25]]) {
+      for (let y = 0; y < H + 15; y += 3) k.cyl(x, z, y, 6, 3, shadeHex(LC.lgray, y * 3 + x), 16);
+      for (const y of [18, 34]) for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.4; k.box(x + Math.cos(a) * 5.9 - 0.3, y, z + Math.sin(a) * 5.9 - 0.3, x + Math.cos(a) * 5.9 + 0.3, y + 4, z + Math.sin(a) * 5.9 + 0.3, LC.black) }
+      k.cyl(x, z, H + 15, 6.6, 1, LC.dgray, 16); k.cone(x, z, H + 16, 6.4, 0.3, 22, (x > 0) === (z > 0) ? LC.blue : LC.red, 16);
+    }
+    k.box(34, 1, -4, 34.4, 20, 4, LC.black); for (let z = -3.5; z < 4; z += 1.4) k.box(34.4, 1, z, 34.6, 20, z + 0.25, LC.dgray); // portcullis
+    k.b(34.5, -4, 0, 9, 8, 1, LC.brn, false); for (const z of [-4.5, 3.5]) k.b(34, z, 20, 1, 1, 22, LC.lgray, false);
+    for (const z of [-15, -5, 5, 15]) { k.box(35, H - 18, z - 1.5, 35.2, H - 2, z + 1.5, z % 10 ? LC.red : LC.blue); k.box(35.2, H - 12, z - 0.5, 35.3, H - 8, z + 0.5, LC.yel) } // banners
+    for (let y = 1; y < 75; y += 3) for (const [x0, z0, x1, z1] of [[-10, -10, 10, -9], [-10, 9, 10, 10], [-10, -9, -9, 9], [9, -9, 10, 9]]) k.box(x0, y, z0, x1, y + 3, z1, shadeHex(LC.lgray, y + x0 * 3 + z0));
+    for (let a = -10; a < 10; a += 2) for (const [x, z] of [[a, -10], [a, 9], [-10, a], [9, a]]) k.b(x, z, 76, 1, 1, 3, LC.lgray);
+    for (const y of [20, 40, 60]) for (const z of [-5, 0, 5]) k.box(10, y, z - 0.4, 10.2, y + 5, z + 0.4, LC.black);
+    k.b(-9, -9, 75, 18, 18, 1, LC.dgray, false);
+  },
+  lamp(k) { k.b(-0.8, -0.8, 0, 1.6, 1.6, 1, LC.black, false); k.cyl(0, 0, 1, 0.25, 18, LC.black, 6); k.cone(0, 0, 22.5, 1, 0.2, 1.5, LC.black, 6) },
+  barrel(k) { k.cyl(0, 0, 0, 1, 6, LC.brn, 10); for (const y of [1, 4.5]) k.cyl(0, 0, y, 1.05, 0.5, LC.dgray, 10); k.cyl(0, 0, 6, 0.85, 0.2, LC.dbrn, 10) },
+  crate(k) { k.b(-1, -1, 0, 2, 2, 5, LC.tan, false); for (const y of [0.5, 2.5, 4.5]) k.box(-1.05, y, -1.05, 1.05, y + 0.3, 1.05, LC.dtan) },
+  fence(k) { k.cyl(0, 0, 0, 0.35, 8, LC.dbrn, 6); for (const y of [3, 6]) k.b(0, -0.2, y, 12, 0.4, 0.8, LC.brn, false) },
+  cow(k) {
+    for (const [x, z] of [[2, -0.9], [2, 0.9], [-2, -0.9], [-2, 0.9]]) k.b(x - 0.45, z - 0.45, 0, 0.9, 0.9, 6, LC.white, false);
+    k.b(-3, -1.5, 6, 6, 3, 6, LC.white, false); k.b(-1.5, -1.55, 8, 2, 3.1, 3, LC.black, false); k.b(1.2, -1.55, 7, 1.2, 3.1, 2, LC.black, false);
+    k.b(3, -1, 9, 2, 2, 4, LC.white, false); k.b(4.6, -0.8, 9, 0.8, 1.6, 2, LC.pink, false); for (const z of [-1.2, 1]) k.b(3.4, z, 13, 0.4, 0.2, 1.2, LC.tan, false);
+    k.b(-3.2, -0.2, 7, 0.3, 0.4, 4, LC.white, false);
+  },
+  sheep(k) {
+    for (const [x, z] of [[1.4, -0.7], [1.4, 0.7], [-1.4, -0.7], [-1.4, 0.7]]) k.b(x - 0.35, z - 0.35, 0, 0.7, 0.7, 4, LC.black, false);
+    k.b(-2.2, -1.3, 4, 4.4, 2.6, 5, LC.white, true); k.b(2.2, -0.7, 6, 1.6, 1.4, 3, LC.black, false); k.stud(3, 9, 0, LC.white);
+  },
+  cactus(k, v) { const h = 12 + v * 4; k.cyl(0, 0, 0, 1.1, h, LC.grn, 8); for (const [s, y] of [[1, h * 0.4], [-1, h * 0.6]].slice(0, 1 + (v > 0))) { k.b(0, s > 0 ? 0.6 : -2.6, y, 1, 2, 1.6, LC.grn, false); k.cyl(0.5, s * 2.6, y, 0.7, h * 0.35, LC.grn, 8) } k.stud(0, h, 0, LC.pink) },
+  rock(k, v) { k.slope(-3, -2, 1, 2, 0, 1, 6 + v * 2, '-x', LC.lgray); k.slope(1, -2.5, 3.5, 2, 0, 1, 4 + v, '+x', LC.dgray); k.b(-1, -3, 0, 3, 1.5, 3, LC.lgray, false) },
+  lavarock(k, v) { k.slope(-2.5, -2, 1, 2, 0, 1, 5 + v * 2, '-x', LC.black); k.slope(1, -2, 3, 2, 0, 1, 4, '+x', '#3b3b3b'); k.box(-0.5, 2, -2.05, 1.5, 2.4, -1.9, LC.org) },
+  fern(k, v) { for (let i = 0; i < 6; i++) k.part(p => p.box(0, 0, -0.5, 3 + v, 0.4, 0.5, i % 2 ? LC.grn : LC.bgrn), { at:[0, 1, 0], ry:i / 6 * Math.PI * 2 + v, rz:0.5 }) },
+  tree(k, v) { // round tree: trunk, ball of round plates, apples or blossom
+    k.cyl(0, 0, 0, 0.8, 14, LC.brn, 8);
+    const r = [2.5, 4, 5, 5.5, 5, 4, 2.5];
+    r.forEach((rad, i) => k.cyl(0, 0, 12 + i * 2, rad, 2, shadeHex(i % 2 ? LC.bgrn : LC.grn, i + v), 9));
+    if (v) for (let i = 0; i < 8; i++) { const a = i * 0.8; k.stud(Math.cos(a) * 4.6, 18 + (i % 3) * 2, Math.sin(a) * 4.6, v === 1 ? LC.red : LC.pink) }
+  },
+  flowers(k, v) { k.b(-1, -1, 0, 2, 2, 0.6, LC.grn, false); for (const [x, z] of [[-0.5, -0.5], [0.5, 0.4], [-0.3, 0.6], [0.6, -0.5]]) { k.cyl(x, z, 0.6, 0.08, 1.5, LC.grn, 4); k.stud(x, 2.1, z, [LC.red, LC.yel, LC.white, LC.purple][v % 4]) } },
+  bush(k, v) { for (const [x, z, r, y] of [[0, 0, 2.2, 0], [1.4, 0.8, 1.6, 0], [-1.2, 0.9, 1.5, 0], [0.2, 0, 1.6, 2]]) k.cyl(x, z, y, r, 2, shadeHex(v ? LC.grn : LC.bgrn, x * 9 + y), 10); if (v === 2) for (let i = 0; i < 5; i++) k.stud(Math.cos(i) * 1.6, 2, Math.sin(i) * 1.6, LC.red) },
+  grass(k, v) { for (let i = 0; i < 5; i++) k.part(p => p.box(-0.1, 0, -0.4, 0.1, 3 + (i % 3), 0.4, i % 2 ? LC.bgrn : LC.lime), { ry:i * 1.3 + v, rz:(i - 2) * 0.2 }) },
+  mushroom(k, v) { k.cyl(0, 0, 0, 0.4, 3, LC.white, 8); k.cone(0, 0, 3, 1.4, 0.4, 1.5, v ? LC.red : LC.tan, 10); if (v) for (let i = 0; i < 4; i++) k.stud(Math.cos(i * 1.6) * 0.8, 4, Math.sin(i * 1.6) * 0.8, LC.white) },
+  sandcastle(k) { k.b(-2, -2, 0, 4, 4, 3, LC.tan, false); for (const [x, z] of [[-2, -2], [1, -2], [-2, 1], [1, 1]]) k.b(x, z, 3, 1, 1, 3, LC.tan, true); k.cyl(0, 0, 3, 0.1, 5, LC.white, 4); k.box(0, 6, 0, 1.2, 7, 0.1, LC.red) },
+  bench(k) { for (const x of [-2, 2]) k.b(x - 0.3, -0.8, 0, 0.6, 1.6, 3, LC.dgray, false); k.b(-3, -0.8, 3, 6, 1.6, 0.6, LC.brn, false); k.b(-3, -0.9, 3.6, 6, 0.3, 3, LC.brn, false) },
+  haystack(k) { k.part(p => p.cyl(0, 0, -2, 3, 4, LC.yel, 12), { at:[0, 3, 0], rx:Math.PI / 2 }) },
+  pine(k, v) { k.cyl(0, 0, 0, 0.8, 6, LC.brn, 8); for (let i = 0; i < 9; i++) k.cyl(0, 0, 5 + i * 2.6, 5.5 - i * 0.55, 1.2, shadeHex(v ? LC.dgrn : LC.grn, i), 8); k.cone(0, 0, 28.4, 0.8, 0, 2, LC.dgrn, 6) },
+  crater() {},
+  waterfall() {},
+  flagpole(k) { k.cyl(0, 0, 0, 0.25, 40, LC.lgray, 6); k.stud(0, 40, 0, LC.gold) },
+  ropebridge(k) { // planks over the deck, rope rails sagging between the banks, posts at both ends
+    for (let x = -126; x < 126; x++) k.b(x, -3.2, 0.4, 0.8, 6.4, 0.5, x % 3 ? LC.brn : LC.tan, false);
+    for (const s of [-1, 1]) {
+      for (const x of [-126, 126]) k.cyl(x, s * 3.4, -2, 0.5, 14, LC.dbrn, 6);
+      for (let x = -126; x < 126; x += 6) { const y = 9 - 2.5 * (1 - (x / 126) ** 2); k.box(x, y, s * 3.4 - 0.1, x + 6, y + 0.25, s * 3.4 + 0.1, LC.tan); k.box(x, 0.8, s * 3.4 - 0.05, x + 0.15, y, s * 3.4 + 0.05, LC.tan) }
+    }
+  },
+};
+// Moving parts, built apart and animated each frame: what spins, waves, glows or flows.
+const MOVING = {
+  windmill: () => [{ anim:'blades', at:[7.2, 54, 0], build:k => { for (let i = 0; i < 4; i++) k.part(p => { p.box(-0.3, 0, -0.4, 0.3, 50, 0.4, LC.brn); for (let y = 10; y < 48; y += 4) p.box(-0.2, y, 0.4, 0.2, y + 3.2, 4, LC.white) }, { rx:i * Math.PI / 2 }); k.cyl(0, 0, -1, 1.2, 2, LC.dgray, 8) } }],
+  lighthouse: () => [{ anim:'beacon', at:[0, 71, 0], glow:true, build:k => k.cyl(0, 0, 0, 3, 5, LC.yel, 12) }],
+  flag: v => [{ anim:'wave', at:[0, 34, 0], build:k => { k.b(0, -0.1, 0, 7, 0.2, 5, [LC.black, LC.red, LC.blue][v % 3], false); if (v % 3 === 0) { k.stud(3.5, 2.3, 0.1, LC.white); k.box(2.5, 1, 0.1, 4.5, 1.3, 0.2, LC.white) } } }],
+  lamp: () => [{ anim:'lamp', at:[0, 20, 0], glow:true, build:k => k.box(-0.8, 0, -0.8, 0.8, 2.5, 0.8, LC.yel) }],
+  crater: () => [{ anim:'smoke', at:[0, 0, 0], build:() => {} }],
+  waterfall: () => [{ anim:'falls', at:[0, 0, 0], build:() => {} }],
+};
+// Pieces that stand anywhere on the island and are seen from afar: always built, not per chunk.
+const LANDMARKS = new Set(['lighthouse', 'castle', 'pyramid', 'crater', 'windmill', 'fort', 'temple', 'ship', 'obelisk', 'waterfall', 'silo', 'barn', 'tavern', 'ropebridge']);
+// Decor that moves about as a whole: boats float, animals graze and walk, crabs scuttle, parrots fly.
+const ROAMING = { ship:'float', boat:'float', cow:'graze', sheep:'graze', camel:'walk', crab:'scuttle', parrot:'fly' };
+MODELS.flag = MODELS.flagpole;
+MODELS.parrot = (k, v) => { const c0 = [LC.red, LC.blue, LC.grn][v % 3]; k.b(-1, -0.5, 0, 2, 1, 1.4, c0, false); k.b(1, -0.4, 1, 0.8, 0.8, 0.8, c0, false); k.b(1.8, -0.15, 1.1, 0.4, 0.3, 0.4, LC.yel, false); for (const s of [-1, 1]) k.b(-0.8, s > 0 ? 0.5 : -2.5, 1, 1.6, 2, 0.3, LC.yel, false); k.b(-2.4, -0.3, 0.4, 1.4, 0.6, 0.3, c0, false) };
+
+const propGeo = new Map();
+function propGeometry(kind, v) {
+  const key = `${kind}:${v}`;
+  if (!propGeo.has(key)) { const k = kit(); (MODELS[kind] ?? MODELS.crate)(k, v); propGeo.set(key, Object.assign(k.geo(), { userData:{ shared:true } })) }
+  return propGeo.get(key);
+}
+
+// ---------- island decor: placed from the map's prop list, landmarks always there, the rest per terrain chunk ----------
+const glowMat = Object.assign(new THREE.MeshStandardMaterial({ color:'#f2cd37', emissive:'#ffb347', emissiveIntensity:0, roughness:0.3 }), { userData:{ keep:true } });
+
+// Props in scene meters: standing on the voxel under them, boats on the water.
+function islandProps() {
+  const T = w3.T, out = [];
+  for (const p of ride.props ?? []) {
+    const [x, z] = T.toXZ(p.lat, p.lon), c = Math.floor((x - T.ox) / T.cx), r = Math.floor((z - T.oz) / T.cz);
+    if (c < 0 || r < 0 || c >= T.w || r >= T.h) continue;
+    let y = T.top(c, r);
+    if (p.k === 'ropebridge') { // on the deck: the banks at both ends
+      const a = p.y * Math.PI / 180, end = s => { const [ex, ez] = [x + Math.cos(a) * 50 * s, z + Math.sin(a) * 50 * s]; return T.ele(Math.floor((ez - T.oz) / T.cz) * T.w + Math.floor((ex - T.ox) / T.cx)) };
+      y = (end(1) + end(-1)) / 2 + 0.2;
+    }
+    out.push({ k:p.k, v:p.v, x, y, z, yaw:p.y * Math.PI / 180 });
+  }
+  return out;
+}
+
+// One prop as a group: its pieces, plus moving parts and what makes it roam.
+function propObject(p) {
+  const g = new THREE.Group();
+  g.position.set(p.x, p.y, p.z);
+  g.rotation.y = -p.yaw; // map yaw turns +x toward +z (south); three turns +x toward -z
+  const body = new THREE.Mesh(propGeometry(p.k, p.v), LEGO.smooth);
+  body.castShadow = body.receiveShadow = true;
+  g.add(body);
+  for (const m of MOVING[p.k]?.(p.v) ?? []) {
+    if (m.anim === 'smoke') { g.add(volcanoFx()); continue } // effects, not pieces
+    if (m.anim === 'falls') { g.add(waterfallMesh(p)); continue }
+    const k = kit();
+    m.build(k);
+    const part = new THREE.Mesh(k.geo(), m.glow ? glowMat : LEGO.smooth);
+    part.position.set(m.at[0] * S, m.at[1] * PL, m.at[2] * S);
+    part.userData.anim = m.anim;
+    g.add(part);
+    if (m.anim === 'beacon') g.add(beamMesh(part.position));
+  }
+  if (ROAMING[p.k]) g.userData.roam = { kind:ROAMING[p.k], home:g.position.clone(), yaw:g.rotation.y, phase:hash(Math.round(p.x), Math.round(p.z), 9) * 6, v:p.v };
+  return g;
+}
+
+// Static props of a chunk: one instanced mesh per model; moving or roaming ones as their own objects.
+function chunkProps(list) {
+  const g = new THREE.Group(), groups = new Map(), mx = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+  for (const p of list) {
+    if (MOVING[p.k] || ROAMING[p.k]) { g.add(propObject(p)); continue }
+    const key = `${p.k}:${p.v}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+  for (const [key, ps] of groups) {
+    const [k, v] = key.split(':'), geo = propGeometry(k, +v);
+    if (!geo.attributes.position.count) continue;
+    const m = new THREE.InstancedMesh(geo, LEGO.smooth, ps.length);
+    ps.forEach((p, i) => m.setMatrixAt(i, mx.compose(new THREE.Vector3(p.x, p.y, p.z), q.setFromAxisAngle(up, -p.yaw), one)));
+    m.castShadow = m.receiveShadow = true;
+    m.userData.shared = true; // geometry cached across chunks: never disposed with the chunk
+    g.add(m);
+  }
+  return g;
+}
+
+// What grows on each island cell, by its ground: [chance per cell, kind, variants]. The places, roads and
+// landmarks are drawn by hand; this only fills woods and meadows so they are not bare.
+const SEA_E = 50; // the island's sea level (src/island.rs SEA)
+const FILL = {
+  [COVER.JUNGLE]: [[0.03, 'palm', 3], [0.025, 'tree', 3], [0.06, 'fern', 2], [0.03, 'bush', 2], [0.004, 'mushroom', 2]],
+  [COVER.FOREST]: [[0.05, 'pine', 2], [0.012, 'tree', 3], [0.025, 'bush', 2]],
+  [COVER.GRASS]: [[0.003, 'tree', 3], [0.008, 'bush', 3], [0.03, 'grass', 3], [0.012, 'flowers', 4]],
+  beach: [[0.004, 'palm', 3], [0.002, 'rock', 3]],
+  desert: [[0.003, 'cactus', 3], [0.002, 'rock', 3], [0.0008, 'bones', 1]],
+  [COVER.BASALT]: [[0.006, 'lavarock', 3]],
+};
+const TALL = new Set(['palm', 'tree', 'pine']);
+function islandFill(T, ci, cj) {
+  const out = [], road = (c, r) => T.cover[r * T.w + c] === COVER.ROAD;
+  for (let r = Math.max(1, cj * CHUNK); r < Math.min((cj + 1) * CHUNK, T.h - 1); r++) for (let c = Math.max(1, ci * CHUNK); c < Math.min((ci + 1) * CHUNK, T.w - 1); c++) {
+    const cov = T.cover[r * T.w + c], e = T.ele(r * T.w + c);
+    const list = cov === COVER.SAND ? FILL[e < SEA_E + 5 ? 'beach' : 'desert'] : FILL[cov];
+    if (!list || road(c, r)) continue;
+    let h = hash(c, r, 61);
+    for (const [p, k, n] of list) {
+      if (h >= p) { h -= p; continue }
+      if (TALL.has(k) && (road(c + 1, r) || road(c - 1, r) || road(c, r + 1) || road(c, r - 1))) break; // no trunk at the roadside
+      out.push({ k, v:Math.floor(hash(c, r, 62) * n), x:T.ox + (c + 0.2 + hash(c, r, 63) * 0.6) * T.cx, y:T.top(c, r), z:T.oz + (r + 0.2 + hash(c, r, 64) * 0.6) * T.cz, yaw:hash(c, r, 65) * Math.PI * 2 });
+      break;
+    }
+  }
+  return out;
+}
+
+function enterIsland() {
+  const T = w3.T, props = islandProps();
+  w3.propCells = new Map();
+  w3.landmarks = new THREE.Group();
+  for (const p of props) {
+    if (LANDMARKS.has(p.k)) { w3.landmarks.add(propObject(p)); continue }
+    const key = `${Math.floor((p.x - T.ox) / T.cx / CHUNK)},${Math.floor((p.z - T.oz) / T.cz / CHUNK)}`;
+    if (!w3.propCells.has(key)) w3.propCells.set(key, []);
+    w3.propCells.get(key).push(p);
+  }
+  w3.group.add(w3.landmarks);
+}
+
+// Lighthouse beam: two long see-through cones turning around the lantern, at night.
+function beamMesh(at) {
+  const g = new THREE.Group(), mat = new THREE.MeshBasicMaterial({ color:'#fff3b0', transparent:true, opacity:0.18, depthWrite:false, side:THREE.DoubleSide });
+  for (const s of [1, -1]) {
+    const c = new THREE.Mesh(new THREE.ConeGeometry(6, 160, 16, 1, true).translate(0, -80, 0), mat);
+    c.rotation.z = s * Math.PI / 2;
+    g.add(c);
+  }
+  g.position.copy(at).add(new THREE.Vector3(0, 0.4, 0));
+  g.userData.anim = 'beam';
+  return g;
+}
+
+// Volcano: smoke puffs rising from the lava lake and, now and then, an eruption of glowing bricks.
+function volcanoFx() {
+  const g = new THREE.Group();
+  const puffs = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 0.6, 10), new THREE.MeshStandardMaterial({ color:'#cfcfcf', roughness:0.9, transparent:true, opacity:0.85 }), 60);
+  const bombs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.8, 0.5, 0.8), new THREE.MeshStandardMaterial({ color:'#fe8a18', emissive:'#ff5a00', emissiveIntensity:1.4 }), 40);
+  for (const m of [puffs, bombs]) { m.frustumCulled = false; g.add(m) }
+  const light = new THREE.PointLight('#ff7a2a', 3000, 400, 1.6);
+  light.position.y = 6;
+  g.add(light);
+  g.userData = { anim:'volcano', puffs, bombs, seeds:[...Array(60)].map((_, i) => hash(i, 3, 77)), next:8, erupt:-1 };
+  return g;
+}
+
+// Waterfall: a scrolling white-and-blue sheet from the cliff top down into the lake, foam at its foot.
+function waterfallMesh(p) {
+  const T = w3.T, at = (dx, dz) => { const [x, z] = [p.x + dx, p.z + dz]; return T.top(Math.floor((x - T.ox) / T.cx), Math.floor((z - T.oz) / T.cz)) };
+  const [top, bottom] = [at(0, -12), at(0, 14)], hgt = Math.max(4, top - bottom);
+  const tex = canvasTex(64, ctx => { for (let y = 0; y < 64; y++) { ctx.fillStyle = y % 8 < 3 ? '#ffffff' : y % 8 < 5 ? '#cfe8f7' : '#9cc4e4'; ctx.fillRect(0, y, 64, 1) } });
+  tex.repeat.set(2, hgt / 3);
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(6, hgt), new THREE.MeshStandardMaterial({ map:tex, transparent:true, opacity:0.9, roughness:0.2, side:THREE.DoubleSide }));
+  sheet.position.set(0, bottom - p.y + hgt / 2, 0); // in the prop's frame (y measured from its base)
+  sheet.rotation.y = Math.PI / 2;
+  sheet.userData.anim = 'falls';
+  const g = new THREE.Group();
+  g.add(sheet);
+  const foam = new THREE.Mesh(new THREE.CylinderGeometry(4, 5, 0.6, 12), new THREE.MeshStandardMaterial({ color:'#ffffff', roughness:0.6 }));
+  foam.position.set(1.5, bottom - p.y + 0.2, 0);
+  foam.userData.anim = 'foam';
+  g.add(foam);
+  return g;
+}
+
+// Every frame: spin, wave, glow, flow, float, graze, walk, fly. Only what is near enough to be seen.
+function updateIsland(dt) {
+  if (!w3.landmarks) return;
+  const t = clock.elapsedTime, bike = w3.bike.position, dark = night;
+  glowMat.emissiveIntensity = dark ? 2.2 : 0.15;
+  const near = o => Math.abs(o.position.x - bike.x) < 700 && Math.abs(o.position.z - bike.z) < 700;
+  const animate = obj => obj.traverse(o => {
+    const a = o.userData.anim;
+    if (a === 'blades') o.rotation.x += dt * 0.9;
+    else if (a === 'wave') o.rotation.y = Math.sin(t * 3 + o.id) * 0.35;
+    else if (a === 'beam') { o.visible = dark; o.rotation.y += dt * 0.8 }
+    else if (a === 'falls') o.material.map.offset.y -= dt * 1.5;
+    else if (a === 'foam') o.scale.setScalar(1 + Math.sin(t * 6) * 0.06);
+    else if (a === 'volcano') volcanoTick(o.userData, dt, t);
+  });
+  for (const o of w3.landmarks.children) if (o.userData.roam || near(o)) { animate(o); roam(o, dt, t) }
+  for (const chunk of w3.chunks.values()) for (const g of chunk.children) if (g.userData.props) for (const o of g.children) { if (o.userData.roam) roam(o, dt, t); if (o.children.length > 1) animate(o) }
+}
+
+function roam(o, dt, t) {
+  const r = o.userData.roam;
+  if (!r) return;
+  const ph = r.phase;
+  if (r.kind === 'float') { // boats bob and roll; the third pirate ship sails a wide loop in the bay
+    if (r.v === 2) { const a = t * 0.02 + ph; o.position.set(r.home.x + Math.cos(a) * 120 - 120, r.home.y, r.home.z + Math.sin(a) * 50); o.rotation.y = -(a + Math.PI / 2) }
+    o.position.y = r.home.y + Math.sin(t * 0.9 + ph) * 0.25;
+    o.rotation.z = Math.sin(t * 0.7 + ph) * 0.03; o.rotation.x = Math.sin(t * 0.5 + ph) * 0.05;
+  } else if (r.kind === 'graze') { // a slow loop around its spot, head down now and then
+    const [x, z] = [r.home.x + Math.sin(t * 0.06 + ph) * 3, r.home.z + Math.cos(t * 0.05 + ph) * 3];
+    o.position.set(x, r.home.y, z);
+    o.rotation.y = Math.atan2(0.15 * Math.sin(t * 0.05 + ph), 0.18 * Math.cos(t * 0.06 + ph));
+    o.rotation.z = Math.sin(t * 0.8 + ph) > 0.6 ? -0.1 : 0;
+  } else if (r.kind === 'walk') { // camels plod along a long oval
+    const a = t * 0.03 + ph;
+    o.position.set(r.home.x + Math.cos(a) * 25, r.home.y + Math.abs(Math.sin(t * 3 + ph)) * 0.08, r.home.z + Math.sin(a) * 12);
+    o.rotation.y = -Math.atan2(Math.cos(a) * 12, -Math.sin(a) * 25);
+  } else if (r.kind === 'scuttle') { const s = Math.sin(t * 1.3 + ph); o.position.set(r.home.x + s * 2, r.home.y, r.home.z); o.rotation.y = r.yaw + Math.PI / 2 }
+  else if (r.kind === 'fly') { const a = t * 0.8 + ph; o.position.set(r.home.x + Math.cos(a) * 9, r.home.y + 9 + Math.sin(t * 2 + ph), r.home.z + Math.sin(a) * 9); o.rotation.y = -(a + Math.PI / 2); o.rotation.z = Math.sin(t * 12) * 0.3 }
+}
+
+function volcanoTick(u, dt, t) {
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+  u.seeds.forEach((seed, i) => { // each puff: rises over 12 s, drifts with the wind, swells
+    const k = ((t / 12 + seed) % 1), r = 3 + k * 14;
+    p.set(Math.sin(seed * 40) * 6 + k * 30, 4 + k * 120, Math.cos(seed * 40) * 6 + k * 8);
+    u.puffs.setMatrixAt(i, m.compose(p, q, s.set(r, 2 + k * 5, r)));
+  });
+  u.puffs.instanceMatrix.needsUpdate = true;
+  if (t > u.next && u.erupt < 0) { u.erupt = t; u.next = t + 20 + Math.random() * 25 }
+  const e = u.erupt >= 0 ? t - u.erupt : -1;
+  for (let i = 0; i < 40; i++) {
+    if (e < 0 || e > 6) { u.bombs.setMatrixAt(i, m.makeScale(0, 0, 0)); continue }
+    const a = hash(i, 5, 78) * Math.PI * 2, sp = 18 + hash(i, 6, 78) * 22, up = 35 + hash(i, 7, 78) * 30;
+    p.set(Math.cos(a) * sp * e, Math.max(0, up * e - 4.9 * e * e), Math.sin(a) * sp * e);
+    u.bombs.setMatrixAt(i, m.compose(p, q.setFromAxisAngle(s.set(1, 0, 0), e * 5 + i), s.set(1, 1, 1)));
+  }
+  if (e > 6) u.erupt = -1;
+  u.bombs.instanceMatrix.needsUpdate = true;
+}
+
 function parseTerrain(buf, course) {
-  const city = ride.mode === 'city';
+  const city = ride.mode === 'city' && !ride.island; // a hand-made island has relief: not a flat town
   const dv = new DataView(buf);
   const w = dv.getUint32(0, true), h = dv.getUint32(4, true);
   const [west, south, east, north] = [8, 16, 24, 32].map(o => dv.getFloat64(o, true));
@@ -1930,14 +2585,20 @@ function parseTerrain(buf, course) {
   const ele = i => heights[i] / 10;
   const top = (c, r) => {
     const i = r * w + c;
-    const step = city ? 0.5 : STEP_Y; // a city is nearly flat: fine steps, no staircase streets
+    const step = city ? 0.5 : ride.island ? 1 : STEP_Y; // a city is nearly flat: fine steps, no staircase streets; finer bricks on the island
     return Math.floor(ele(i) / step) * step + (cover[i] === COVER.BUILDING && !w3.bld ? (city ? 18 : 6) : 0); // real buildings once loaded, blocks until then
   };
-  return { w, h, cover, ele, top, toXZ, ox, oz, city, west, north, cx:(east - west) / w * kx, cz:(north - south) / h * kz };
+  return { w, h, cover, ele, top, toXZ, ox, oz, city, island:!!ride.island, west, north, cx:(east - west) / w * kx, cz:(north - south) / h * kz };
 }
 
 // Official Lego colors: Bright Green grass, Dark Green forest, Dark Tan rock, Dark Bluish Gray road.
-function topColor(cov, e) {
+function topColor(cov, e, c = 0, r = 0) {
+  if (cov === COVER.SAND) return '#e4cd9e';
+  if (cov === COVER.JUNGLE) return '#184632';
+  if (cov === COVER.LAVA) return '#fe8a18';
+  if (cov === COVER.DIRT) return '#7c503a';
+  if (cov === COVER.BASALT) return '#4a4c4e';
+  if (cov === COVER.FIELD) return r % 4 === 0 ? '#7c503a' : ['#a5ca18', '#f2cd37', '#4b9f4a', '#c8a2e0'][Math.floor(hash(c >> 5, r >> 5, 31) * 4)]; // crop rows, each field its own crop
   if (cov === COVER.ROAD) return '#6c6e68';
   if (cov === COVER.PAVE || (cov === COVER.BUILDING && w3.bld)) return '#a0a5a9'; // paved under real buildings
   if (cov === COVER.BUILDING) return w3.T?.city ? '#6c6e68' : '#c91a09'; // gray roofs in town, red in the mountains
@@ -1945,7 +2606,7 @@ function topColor(cov, e) {
   if (cov === COVER.ROCK || e > 2400) return e > 2800 ? '#f4f4f4' : '#958a73';
   return cov === COVER.FOREST ? '#237841' : e > 1800 ? '#a5ca18' : '#4b9f4a'; // lime alpine pasture
 }
-const sideColor = (cov, e) => cov === COVER.PAVE ? '#6c6e68' : cov === COVER.BUILDING ? '#e4cd9e' : cov === COVER.ROCK || e > 2400 ? '#6c6e68' : '#582a12';
+const sideColor = (cov, e) => cov === COVER.SAND ? '#dcbc81' : cov === COVER.BASALT || cov === COVER.LAVA ? '#3b3b3b' : cov === COVER.DIRT || cov === COVER.FIELD ? '#582a12' : cov === COVER.PAVE ? '#6c6e68' : cov === COVER.BUILDING ? '#e4cd9e' : cov === COVER.ROCK || e > 2400 ? '#6c6e68' : '#582a12';
 const shade = (hex, c, r) => new THREE.Color(hex).offsetHSL(0, 0, (hash(c, r, 7) - 0.5) * 0.04); // bricks are uniform, a hint keeps cells apart
 const TRUNK = new THREE.Color('#582a12'), LEAVES = '#184632';
 
@@ -1969,12 +2630,13 @@ function animalAt(T, c, r) {
   return null;
 }
 
-// Material groups of a chunk: 0 studded tops, 1 brick sides, 2 water.
+// Material groups of a chunk: 0 studded tops, 1 brick sides, 2 water, 3 lava.
 function chunkMesh(T, ci, cj) {
-  const G = [0, 1, 2].map(() => ({ pos:[], col:[], uv:[] }));
+  const G = [0, 1, 2, 3].map(() => ({ pos:[], col:[], uv:[] }));
   // Tops: one cell = one UV unit, so studs line up across cells. Sides: u along the wall, v = two brick courses.
-  const topUV = ([x, , z]) => [(x - T.ox) / T.cx, -(z - T.oz) / T.cz];
-  const sideUV = ([x, y, z]) => [(x - T.ox) / T.cx + (z - T.oz) / T.cz, y / (STEP_Y * 2)];
+  // On the island, true minifig scale whatever the cell: 0.4 m studs, 1.6 m bricks, 0.48 m courses.
+  const topUV = T.island ? ([x, , z]) => [x / 0.8, -z / 0.8] : ([x, , z]) => [(x - T.ox) / T.cx, -(z - T.oz) / T.cz];
+  const sideUV = T.island ? ([x, y, z]) => [(x + z) / 1.6, y / 0.96] : ([x, y, z]) => [(x - T.ox) / T.cx + (z - T.oz) / T.cz, y / (STEP_Y * 2)];
   const quad = (g, pts, c) => {
     const s = G[g], uv = g === 1 ? sideUV : topUV;
     for (const i of [0, 1, 2, 0, 2, 3]) { s.pos.push(...pts[i]); s.uv.push(...uv(pts[i])); s.col.push(c.r, c.g, c.b) }
@@ -1993,7 +2655,7 @@ function chunkMesh(T, ci, cj) {
     for (let c = ci * CHUNK; c < Math.min((ci + 1) * CHUNK, T.w); c++) {
       const i = r * T.w + c, cov = T.cover[i], e = T.ele(i), y = top(c, r);
       const x0 = T.ox + c * T.cx, x1 = x0 + T.cx, z0 = T.oz + r * T.cz, z1 = z0 + T.cz;
-      quad(cov === COVER.WATER ? 2 : 0, [[x0, y, z0], [x0, y, z1], [x1, y, z1], [x1, y, z0]], shade(topColor(cov, e), c, r));
+      quad(cov === COVER.WATER ? 2 : cov === COVER.LAVA ? 3 : 0, [[x0, y, z0], [x0, y, z1], [x1, y, z1], [x1, y, z0]], shade(topColor(cov, e, c, r), c, r));
       const sc = shade(sideColor(cov, e), c, r);
       for (const [dc, dr, [ax, az], [bx, bz]] of [[1, 0, [x1, z0], [x1, z1]], [-1, 0, [x0, z0], [x0, z1]], [0, 1, [x0, z1], [x1, z1]], [0, -1, [x0, z0], [x1, z0]]]) {
         const n = Math.max(top(c + dc, r + dr), y - 40);
@@ -2001,7 +2663,7 @@ function chunkMesh(T, ci, cj) {
       }
       const kind = animalAt(T, c, r);
       if (kind) animals.push([kind, (x0 + x1) / 2, y, (z0 + z1) / 2, hash(c, r, 5) * Math.PI * 2]);
-      if (cov === COVER.FOREST && e < 2000 && hash(c, r, 1) < 0.3) { // Lego pine: round trunk, two stacked studded layers
+      if (cov === COVER.FOREST && e < 2000 && !T.island && hash(c, r, 1) < 0.3) { // the island has its own trees, piece by piece // Lego pine: round trunk, two stacked studded layers
         const [tx, tz, leaf] = [(x0 + x1) / 2, (z0 + z1) / 2, shade(LEAVES, c, r)];
         box(tx, y, tz, 1.2, 3, 1.2, TRUNK);
         box(tx, y + 3, tz, T.cx * 0.96, 2.5, T.cz * 0.96, leaf);
@@ -2016,7 +2678,7 @@ function chunkMesh(T, ci, cj) {
   let start = 0;
   G.forEach((s, k) => { g.addGroup(start, s.pos.length / 3, k); start += s.pos.length / 3 });
   g.computeVertexNormals();
-  const m = new THREE.Mesh(g, [LEGO.top, LEGO.side, LEGO.water]);
+  const m = new THREE.Mesh(g, [LEGO.top, LEGO.side, LEGO.water, LEGO.lava]);
   m.castShadow = m.receiveShadow = true;
   for (const [kind, x, y, z, yaw] of animals) m.add(beastMesh(kind, x, y, z, yaw));
   return m;
@@ -2622,6 +3284,7 @@ function enter3d(buf) {
   menuBg.visible = false;
   if (ride.mode === 'zombie') halloween();
   if (climb() && ride.ghost) w3.group.add(w3.ghost = ghostModel());
+  if (ride.island) enterIsland();
   [w3.crowd, w3.cars, w3.pigeons, w3.clouds] = [makeCrowd(), [], [], makeClouds()];
   w3.group.add(w3.clouds);
   // Lego light: filmic tone curve, studio reflections on the plastic, sun shadows that follow the rider.
@@ -2651,7 +3314,7 @@ function exit3d() {
   sun.target.position.set(0, 0, 0);
   sun.target.updateMatrixWorld();
   renderer.toneMapping = THREE.NoToneMapping;
-  Object.assign(w3, { far:null, road:null, arrows:null, bld:null, group:null, T:null, bike:null, eagle:null, horde:null, bonus:null, mirror:null, sky:null, lamp:null, crowd:null, cars:null, pigeons:null, clouds:null, ghost:null, gt:0 });
+  Object.assign(w3, { far:null, road:null, arrows:null, bld:null, group:null, T:null, bike:null, eagle:null, horde:null, bonus:null, mirror:null, sky:null, lamp:null, crowd:null, cars:null, pigeons:null, clouds:null, ghost:null, gt:0, landmarks:null, propCells:null });
   $('#mirror').hidden = true;
   renderNight();
   w3.chunks.clear();
@@ -2855,6 +3518,7 @@ function update3d(dt) {
   updateOthers(dt);
   if (w3.horde) updateHorde(dt);
   updateGhost(dt);
+  updateIsland(dt);
   updateBeasts(dt);
   updateCrowd(dt);
   updateCars(dt);
@@ -2865,7 +3529,8 @@ function update3d(dt) {
   // Voxel chunks around the rider: build nearest first (one per frame), drop far ones.
   const [ci, cj] = [Math.floor((p.x - T.ox) / T.cx / CHUNK), Math.floor((p.z - T.oz) / T.cz / CHUNK)];
   const wanted = [];
-  for (let dj = -CHUNK_RADIUS; dj <= CHUNK_RADIUS; dj++) for (let di = -CHUNK_RADIUS; di <= CHUNK_RADIUS; di++) {
+  const R = T.island ? CHUNK_RADIUS + 1 : CHUNK_RADIUS; // island chunks are 160 m: see a bit further
+  for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
     const [i, j] = [ci + di, cj + dj];
     if (i >= 0 && j >= 0 && i * CHUNK < T.w && j * CHUNK < T.h && !w3.chunks.has(`${i},${j}`)) wanted.push([di * di + dj * dj, i, j]);
   }
@@ -2873,14 +3538,16 @@ function update3d(dt) {
   for (const [, i, j] of wanted.slice(0, w3.chunks.size ? 1 : 9)) {
     const m = chunkMesh(T, i, j), bld = w3.bld?.get(`${i},${j}`);
     if (bld) m.add(buildingMesh(bld));
+    const props = T.island && [...(w3.propCells?.get(`${i},${j}`) ?? []), ...islandFill(T, i, j)];
+    if (props?.length) m.add(Object.assign(chunkProps(props), { userData:{ props:true } }));
     w3.group.add(m);
     w3.chunks.set(`${i},${j}`, m);
   }
   for (const [key, m] of w3.chunks) {
     const [i, j] = key.split(',').map(Number);
-    if (Math.max(Math.abs(i - ci), Math.abs(j - cj)) > CHUNK_RADIUS + 1) {
+    if (Math.max(Math.abs(i - ci), Math.abs(j - cj)) > R + 1) {
       w3.group.remove(m);
-      m.traverse(o => o.geometry?.dispose());
+      m.traverse(o => { if (!o.geometry?.userData.shared) o.geometry?.dispose() }); // decor models are shared by every chunk
       w3.chunks.delete(key);
     }
   }
@@ -3141,7 +3808,8 @@ addEventListener('keydown', e => {
 $('#goRide').addEventListener('click', showRideMenu);
 $('#goCircuits').addEventListener('click', showCourses);
 $('#goFree').addEventListener('click', showFree);
-$('#goCity').addEventListener('click', () => { const c = ride.list.cities[0]; openRide(c.id, c.terrain, 'city') });
+$('#goCity').addEventListener('click', () => { const c = ride.list.cities.find(c => !c.island); openRide(c.id, c.terrain, 'city') });
+$('#goIsland').addEventListener('click', () => { const c = ride.list.cities.find(c => c.island); openRide(c.id, c.terrain, 'city') });
 $('#rideMenuBack').addEventListener('click', () => showHome());
 $('#freeBack').addEventListener('click', showRideMenu);
 $('#goTrain').addEventListener('click', showTraining);

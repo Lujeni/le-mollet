@@ -33,6 +33,12 @@ cargo run -- terrain courses/alpe-dhuez.json
 cargo run -- terrain courses/ventoux-bedoin.json
 ```
 
+The Lego island is drawn in a map file and built offline (about ten seconds), see [island.md](island.md):
+
+```sh
+cargo run --release -- island courses/ile-des-briques.map.json
+```
+
 Without them, the climbs play with the elevation profile and the bike in its garage. Open-world loops always
 have 3D: they are generated on the fly.
 
@@ -95,6 +101,7 @@ Always build it with `--release`: Bevy is too slow unoptimized.
 | `stats <course.json>` | validation figures of a course |
 | `terrain <course.json>` | (re)build the 3D terrain of a course |
 | `city <name> -o <file> --relation <osm id> --start <lat,lon>` | build an open city, see [city.md](city.md) |
+| `island <map.json>` | build the hand-made Lego island, see [island.md](island.md) |
 
 `cargo run -- <command> --help` lists every option. Adding a course step by step:
 [courses/AGENTS.md](../courses/AGENTS.md).
@@ -124,6 +131,7 @@ Layout:
 | `courses/` | course files, see its AGENTS.md |
 | `docs/courses.md` | how real roads become courses |
 | `src/city.rs`, `docs/city.md` | open city: street graph, turns, growing route |
+| `src/island.rs`, `docs/island.md` | hand-made Lego island: map file to roads, terrain and decor |
 
 ## Troubleshooting
 

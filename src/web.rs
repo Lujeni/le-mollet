@@ -133,6 +133,7 @@ impl Track {
             "terrain": self.terrain.is_some(), "looped": c.looped,
             "relief": self.relief.map(Relief::label), "riders": self.riders.lock().unwrap().len(),
             "city": self.city.as_ref().map(|c| c.streets.len()), "buildings": self.buildings.is_some(), "district": !self.district.is_empty(), "ortho": !self.ortho.is_empty(),
+            "island": self.city.as_ref().is_some_and(|c| c.island), "props": self.city.as_ref().map(|c| &c.props),
         })
     }
 }
@@ -165,7 +166,7 @@ impl App {
     /// Load every `*.json` course in `dir` (the id is the file stem) and open today's world.
     pub fn new(dir: &str, trainer: Option<Trainer>, difficulty: f32) -> anyhow::Result<Self> {
         let mut paths: Vec<_> = std::fs::read_dir(dir)
-            .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json")).collect())
+            .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json") && !p.to_string_lossy().ends_with(".map.json")).collect())
             .unwrap_or_default();
         paths.sort();
         let mut tracks = vec![];

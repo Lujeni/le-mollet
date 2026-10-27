@@ -16,6 +16,11 @@ pub struct City {
     /// `[lat, lon]` riders start from, snapped to the nearest junction.
     pub start: [f64; 2],
     pub streets: Vec<Street>,
+    /// Hand-made island (see island.rs) rather than a real town: relief, decor.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub island: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub props: Vec<Prop>,
     /// Junction -> streets leaving it, as (street, walked a -> b).
     #[serde(skip)]
     links: Vec<Vec<(usize, bool)>>,
@@ -30,6 +35,17 @@ pub struct Street {
     pub name: String,
     /// `[lat, lon, ele]` about every 10 m from `a` to `b`.
     pub pts: Vec<[f64; 3]>,
+}
+
+/// One piece of decor: kind, where, ground height (m), heading (degrees) and variant.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Prop {
+    pub k: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub e: f32,
+    pub y: f32,
+    pub v: u32,
 }
 
 /// One way out of a junction.
@@ -74,6 +90,12 @@ impl City {
         if c.streets.is_empty() { bail!("{path}: city without streets") }
         c.link();
         Ok(c)
+    }
+
+    pub fn island(name: String, attribution: String, start: [f64; 2], streets: Vec<Street>, props: Vec<Prop>) -> Self {
+        let mut c = Self { name, attribution, start, streets, island: true, props, links: vec![] };
+        c.link();
+        c
     }
 
     fn link(&mut self) {
@@ -322,6 +344,8 @@ pub fn build(name: &str, relation: u64, start: [f64; 2]) -> Result<(City, Terrai
         attribution: "Streets and buildings © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).".into(),
         start,
         streets,
+        island: false,
+        props: vec![],
         links: vec![],
     };
     city.link();
@@ -367,6 +391,8 @@ mod tests {
             attribution: String::new(),
             start: [48.85, 2.35 - 0.0015],
             streets: vec![arm(1, 0.0, 0.0015), arm(2, 0.001, 0.0), arm(3, 0.0, -0.0015), arm(4, -0.001, 0.0)],
+            island: false,
+            props: vec![],
             links: vec![],
         };
         c.link();

@@ -4,6 +4,7 @@ pub mod buildings;
 pub mod city;
 pub mod course;
 pub mod district;
+pub mod island;
 pub mod ortho;
 pub mod physics;
 pub mod protocol;

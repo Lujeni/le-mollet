@@ -61,6 +61,11 @@ enum Cmd {
         #[arg(long)]
         start: String,
     },
+    /// Build a hand-made island from its map file, see docs/island.md
+    Island {
+        /// Map file, e.g. courses/ile-des-briques.map.json; writes x.city.json and x.city.terrain.bin
+        map: String,
+    },
     /// (Re)fetch the real buildings (IGN BD TOPO) of an open city, over its terrain box
     Buildings {
         /// City file, e.g. courses/paris.city.json (its terrain file must exist)
@@ -117,6 +122,14 @@ async fn main() -> anyhow::Result<()> {
             let u = |o: usize| u32::from_le_bytes(head[o..o + 4].try_into().unwrap()) as usize;
             le_mollet::ortho::build(&ortho_dir(&course), [f(8), f(16), f(24), f(32)], u(0), u(4))
         }).await?,
+        Cmd::Island { map } => {
+            let out = format!("{}.city.json", map.strip_suffix(".map.json").context("map file must end in .map.json")?);
+            let i = le_mollet::island::build(&map)?;
+            std::fs::write(&out, serde_json::to_string(&i.city)?)?;
+            std::fs::write(terrain_path(&out), i.terrain.to_bytes())?;
+            println!("{out}: {} roads, {} decor pieces; terrain {}x{} cells", i.city.streets.len(), i.city.props.len(), i.terrain.w, i.terrain.h);
+            Ok(())
+        }
         Cmd::Buildings { city } => tokio::task::spawn_blocking(move || build_buildings(&city)).await?,
         Cmd::City { name, out, relation, start } => {
             let start = parse_latlon(&start)?;
