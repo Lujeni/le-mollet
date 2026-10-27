@@ -50,6 +50,12 @@ floor per window), the top 3.2 m in zinc with dormers like a mansard, a flat roo
 in a canvas, 4 x 4 windows wide so lit windows at night (a third of them) do not repeat. Under real
 buildings the voxel ground stays flat and paved.
 
+## Start places
+
+A city file can list `starts`: `{ "name": "Concorde", "at": [lat, lon] }`. The ride menu then opens a start
+picker (the town as a Lego mosaic made from its terrain, a pin per place); the rider starts from the junction
+nearest to the place picked (`/events?...&start=<n>`). `le-mollet city` keeps them when it rebuilds the file.
+
 ## Turn choice
 
 At a junction, exits are sorted left to right by heading change. Straight on is the exit with the smallest

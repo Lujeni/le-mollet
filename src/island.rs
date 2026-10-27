@@ -4,7 +4,7 @@
 //!
 //! Map coordinates are meters, x east and z south from the north-west corner.
 
-use crate::city::{City, Prop, Street};
+use crate::city::{City, Prop, Start, Street};
 use crate::course::{STEP_M, smooth};
 use crate::terrain::{self, Terrain};
 use anyhow::{Context, Result, bail};
@@ -34,6 +34,9 @@ struct Map {
     cell: f64,
     /// Node riders start from.
     start: String,
+    /// Places offered as starts: a name and its node.
+    #[serde(default)]
+    starts: Vec<MapStart>,
     coast: Vec<Xz>,
     #[serde(default)]
     areas: Vec<Area>,
@@ -80,6 +83,12 @@ struct River {
     pts: Vec<Xz>,
     width: f64,
     depth: f64,
+}
+
+#[derive(Deserialize)]
+struct MapStart {
+    name: String,
+    node: String,
 }
 
 #[derive(Deserialize)]
@@ -343,13 +352,14 @@ pub fn build(path: &str) -> Result<Island> {
         heights: height.iter().map(|&e| (e + SEA).max(0.0) as f32).collect(),
         cover,
     };
-    let mut city = City::island(map.name, "Île dessinée à la main pour le-mollet.".into(), geo(*start), streets, props);
+    let starts = map.starts.iter().map(|s| Ok(Start { name: s.name.clone(), at: geo(*map.nodes.get(&s.node).with_context(|| format!("start {}: no node {}", s.name, s.node))?) })).collect::<Result<Vec<_>>>()?;
+    let mut city = City::island(map.name, "Île dessinée à la main pour le-mollet.".into(), geo(*start), starts, streets, props);
     (city.preview, city.preview_w) = preview(&terrain.cover, w, h, 20);
     Ok(Island { city, terrain })
 }
 
 /// Thumbnail: the main ground of each `block`-cell square, roads first so they show; one letter per block.
-fn preview(cover: &[u8], w: usize, h: usize, block: usize) -> (String, usize) {
+pub fn preview(cover: &[u8], w: usize, h: usize, block: usize) -> (String, usize) {
     let (pw, ph) = (w / block, h / block);
     let mut s = String::with_capacity(pw * ph);
     for br in 0..ph {

@@ -134,6 +134,20 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px }
 .ride-head h1, .ride-head h2 { margin:0 }
 
+/* Start picker: the map with numbered pins, the list beside it */
+#startPick { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
+.pick { width:min(1040px, 100%); max-height:100%; overflow:auto; padding:28px }
+.pick-body { display:grid; grid-template-columns:1.7fr 1fr; gap:18px; align-items:stretch }
+#pickMap { width:100%; height:min(460px, 56vh); display:block; border-radius:18px; cursor:pointer; background:#0b1220; box-shadow:inset 0 0 0 1px var(--edge) }
+.pick-side { display:flex; flex-direction:column; gap:12px; min-height:0 }
+.pick-list { display:flex; flex-direction:column; gap:6px; overflow:auto; max-height:min(390px, 48vh); padding-right:4px }
+.pick-item { display:flex; align-items:center; gap:10px; padding:9px 12px; text-align:left; cursor:pointer; color:var(--ink); background:var(--glass-hi); border:1px solid var(--edge); border-radius:12px; font:600 15px var(--font); transition:background .12s, transform .12s }
+.pick-item:hover { background:var(--glass-hi2); transform:translateX(3px) }
+.pick-item.on { background:var(--accent); color:#1b2a34; border-color:transparent }
+.pin { flex:none; width:26px; height:26px; border-radius:50%; display:grid; place-items:center; background:#c91a09; color:#fff; font:700 13px var(--font); box-shadow:inset 0 -2px 0 rgba(0,0,0,.25) }
+.pick-item.on .pin { background:#1b2a34 }
+#pickGo { padding:13px 16px; white-space:normal }
+
 /* Garage */
 #garage { flex:1; display:flex; justify-content:flex-end; padding:0 22px 22px; min-height:0 }
 .side { width:350px; overflow:auto; display:flex; flex-direction:column; gap:16px }
@@ -237,6 +251,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 @media (max-width:1000px) { .dests { grid-template-columns:repeat(2, 1fr) } }
 @media (max-width:900px) { #home { justify-content:center } }
 @media (max-width:700px) {
+  .pick-body { grid-template-columns:1fr } #pickMap { height:38vh } .pick { padding:20px }
   .tiles { grid-template-columns:1fr }
   .tiles .tile.me { grid-column:auto }
   .tiles .tile.ride { grid-row:auto; min-height:150px }
@@ -380,6 +395,22 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         </button>
       </div>
       <p class="muted" id="modeHint"></p>
+    </div>
+  </main>
+
+  <main id="startPick" hidden>
+    <div class="block panel pick">
+      <div class="ride-head">
+        <div><p class="kicker">Point de départ</p><h1 id="pickName"></h1></div>
+        <button class="btn" id="pickBack">‹ Rouler</button>
+      </div>
+      <div class="pick-body">
+        <canvas id="pickMap" aria-label="Carte des points de départ"></canvas>
+        <div class="pick-side">
+          <div class="pick-list" id="pickList" role="listbox" aria-label="Points de départ"></div>
+          <button class="btn primary" id="pickGo"></button>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -1015,7 +1046,7 @@ function h(tag, props = {}, ...kids) {
 }
 
 // One screen at a time. Leaving the ride stops its stream, sound and 3D world.
-const SCREENS = ['#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#courses', '#free', '#training', '#ride'];
+const SCREENS = ['#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
 function show(id) {
   if (id !== '#ride') {
     $('#ride').classList.remove('editing', 'bare');
@@ -1489,7 +1520,8 @@ async function openZombie() {
 }
 
 // kind: 'course' (climb or loop), 'zombie' (chased on a loop) or 'city' (open city, the route grows as you ride).
-async function openRide(id, hasTerrain, kind = 'course') {
+async function openRide(id, hasTerrain, kind = 'course', start = null) {
+  ride.start = start; // open world: index of the picked start place
   const zombie = kind === 'zombie';
   ride.ended = false;
   ride.routed = false;
@@ -1520,7 +1552,7 @@ async function openRide(id, hasTerrain, kind = 'course') {
   // ponytail: 8 kg bike until the garage has weights
   const me = `&name=${encodeURIComponent(current.name)}&color=${encodeURIComponent(current.bike.frame)}&frame=${current.bike.frameType ?? 'road'}&country=${current.country ?? ''}`;
   const game = zombie ? `&mode=zombie&ftp=${current.ftp}` : '';
-  ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}${me}${game}`);
+  ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}${me}${game}${start != null ? `&start=${start}` : ''}`);
   if (hasTerrain) {
     $('#attrib').textContent = 'Chargement du terrain…';
     const buf = await (await fetch(`/terrain?id=${encodeURIComponent(id)}`)).arrayBuffer();
@@ -3929,8 +3961,60 @@ addEventListener('keydown', e => {
 $('#goRide').addEventListener('click', showRideMenu);
 $('#goCircuits').addEventListener('click', showCourses);
 $('#goFree').addEventListener('click', showFree);
-$('#goCity').addEventListener('click', () => { const c = ride.list.cities.find(c => !c.island); openRide(c.id, c.terrain, 'city') });
-$('#goIsland').addEventListener('click', () => { const c = ride.list.cities.find(c => c.island); openRide(c.id, c.terrain, 'city') });
+// Open worlds with named places: pick where to start, on the map or in the list.
+const openWorld = c => c.starts?.length ? showStarts(c) : openRide(c.id, c.terrain, 'city');
+$('#goCity').addEventListener('click', () => openWorld(ride.list.cities.find(c => !c.island)));
+$('#goIsland').addEventListener('click', () => openWorld(ride.list.cities.find(c => c.island)));
+
+let pick = null; // { c: the world summary, i: picked start, pins: [[x, y], ...] on the map canvas }
+function showStarts(c) {
+  show('#startPick');
+  pick = { c, i:Math.min(current.lastStart?.[c.id] ?? 0, c.starts.length - 1), pins:[] };
+  $('#pickName').textContent = c.name;
+  renderPick();
+}
+function renderPick() {
+  const { c, i } = pick;
+  $('#pickList').replaceChildren(...c.starts.map((st, k) => h('button', {
+    class:'pick-item' + (k === i ? ' on' : ''), role:'option', 'aria-selected':k === i,
+    onclick: () => { pick.i = k; renderPick() }, ondblclick: startPicked,
+  }, h('span', { class:'pin' }, String(k + 1)), st.name)));
+  $('#pickGo').textContent = `C'est parti : ${c.starts[i].name}`;
+  requestAnimationFrame(drawPickMap);
+}
+function startPicked() {
+  const { c, i } = pick;
+  current.lastStart = { ...current.lastStart, [c.id]:i };
+  persist();
+  openRide(c.id, c.terrain, 'city', i);
+}
+// The island as its Lego mosaic, a town as a dark baseplate; pins where each place is.
+function drawPickMap() {
+  const cv = $('#pickMap'), { c, i } = pick, [ctx, W, H] = thumbCanvas(cv), [west, south, east, north] = c.bbox ?? [0, 0, 1, 1];
+  let [pw, ph] = c.preview ? [c.preview_w, c.preview.length / c.preview_w] : [64, Math.round(64 * (north - south) / ((east - west) * Math.cos((north + south) / 2 * Math.PI / 180)))]; // a town: a dark baseplate at its real proportions
+  const s = Math.min(W / pw, H / ph), [ox, oy] = [(W - pw * s) / 2, (H - ph * s) / 2];
+  ctx.fillStyle = c.island ? '#2f7fe0' : '#141a3a'; ctx.fillRect(0, 0, W, H); // the sea around the island, night around a town
+  for (let y = 0; y < ph; y++) for (let x = 0; x < pw; x++) studs(ctx, ox + x * s, oy + y * s, s, c.preview ? THUMB[c.preview.charCodeAt(y * pw + x) - 97] ?? THUMB[2] : '#1c2550');
+  const at = ([lat, lon]) => [ox + (lon - west) / (east - west) * pw * s, oy + (north - lat) / (north - south) * ph * s];
+  pick.pins = c.starts.map(st => at(st.at));
+  c.starts.forEach((st, k) => { // a pin: shadow, colored head, its number; the picked one bigger, yellow, with a ring
+    const [x, y] = pick.pins[k], on = k === i, r = on ? 13 : 10;
+    if (on) { ctx.strokeStyle = 'rgba(242,205,55,.55)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(x, y - r - 6, r + 9, 0, 7); ctx.stroke() }
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, y + 2, r * 0.7, r * 0.3, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = on ? '#f2cd37' : '#c91a09'; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y - r - 6, r, Math.PI * 0.75, Math.PI * 0.25); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = on ? '#1b2a34' : '#fff'; ctx.font = `700 ${on ? 14 : 12}px Fredoka, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(k + 1), x, y - r - 5);
+    if (on) { ctx.font = '700 15px Fredoka, sans-serif'; const tw = ctx.measureText(st.name).width + 16, ty = y - r * 2 - 30;
+      ctx.fillStyle = 'rgba(17,21,28,.85)'; ctx.beginPath(); ctx.roundRect(Math.max(4, Math.min(W - tw - 4, x - tw / 2)), ty - 13, tw, 26, 8); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(st.name, Math.max(4 + tw / 2, Math.min(W - tw / 2 - 4, x)), ty) }
+  });
+}
+// Click a pin to pick it, double-click to go.
+const pinAt = e => { const r = $('#pickMap').getBoundingClientRect(), [x, y] = [e.clientX - r.left, e.clientY - r.top]; let best = -1, bd = 30; pick.pins.forEach(([px, py], k) => { const d = Math.hypot(px - x, py - 16 - y); if (d < bd) [best, bd] = [k, d] }); return best };
+$('#pickMap').addEventListener('click', e => { const k = pinAt(e); if (k >= 0) { pick.i = k; renderPick() } });
+$('#pickMap').addEventListener('dblclick', e => { if (pinAt(e) >= 0) startPicked() });
+$('#pickGo').addEventListener('click', startPicked);
+$('#pickBack').addEventListener('click', showRideMenu);
+addEventListener('resize', () => { if (!$('#startPick').hidden) drawPickMap() });
 $('#rideMenuBack').addEventListener('click', () => showHome());
 $('#freeBack').addEventListener('click', showRideMenu);
 $('#goTrain').addEventListener('click', showTraining);

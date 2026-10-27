@@ -133,7 +133,9 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Buildings { city } => tokio::task::spawn_blocking(move || build_buildings(&city)).await?,
         Cmd::City { name, out, relation, start } => {
             let start = parse_latlon(&start)?;
-            let (city, terrain) = tokio::task::spawn_blocking(move || le_mollet::city::build(&name, relation, start)).await??;
+            let (mut city, terrain) = tokio::task::spawn_blocking(move || le_mollet::city::build(&name, relation, start)).await??;
+            // Hand-picked start places survive a rebuild.
+            if let Ok(old) = le_mollet::city::City::load(&out) { city.starts = old.starts }
             std::fs::write(&out, serde_json::to_string(&city)?)?;
             std::fs::write(terrain_path(&out), terrain.to_bytes())?;
             let city_path = out.clone();

@@ -3,6 +3,19 @@
   "size": [4800, 3600],
   "cell": 2.5,
   "start": "port_c",
+  "starts": [
+    { "name": "Port des Pirates", "node": "port_c" },
+    { "name": "Phare du Cap", "node": "phare" },
+    { "name": "Plage des Cocotiers", "node": "plage" },
+    { "name": "Oasis de Sablor", "node": "oasis" },
+    { "name": "Pyramide", "node": "desert_n" },
+    { "name": "Pied du Volcan", "node": "volcan_pied" },
+    { "name": "Cratère du Magmor", "node": "cratere" },
+    { "name": "Château du Roc", "node": "chateau" },
+    { "name": "Temple de la Jungle", "node": "temple" },
+    { "name": "Moulin des Prairies", "node": "moulin" },
+    { "name": "Lac des Prairies", "node": "lac" }
+  ],
 
   "coast": [
     [250, 700], [600, 350], [1100, 180], [1700, 120], [2300, 150], [2900, 220], [3500, 250], [4000, 380],

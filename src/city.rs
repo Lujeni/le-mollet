@@ -15,6 +15,9 @@ pub struct City {
     pub attribution: String,
     /// `[lat, lon]` riders start from, snapped to the nearest junction.
     pub start: [f64; 2],
+    /// Named places a rider can pick to start from, each snapped to its nearest junction.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub starts: Vec<Start>,
     pub streets: Vec<Street>,
     /// Hand-made island (see island.rs) rather than a real town: relief, decor.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -40,6 +43,12 @@ pub struct Street {
     pub name: String,
     /// `[lat, lon, ele]` about every 10 m from `a` to `b`.
     pub pts: Vec<[f64; 3]>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Start {
+    pub name: String,
+    pub at: [f64; 2],
 }
 
 /// One piece of decor: kind, where, ground height (m), heading (degrees) and variant.
@@ -97,8 +106,8 @@ impl City {
         Ok(c)
     }
 
-    pub fn island(name: String, attribution: String, start: [f64; 2], streets: Vec<Street>, props: Vec<Prop>) -> Self {
-        let mut c = Self { name, attribution, start, streets, island: true, props, preview: String::new(), preview_w: 0, links: vec![] };
+    pub fn island(name: String, attribution: String, start: [f64; 2], starts: Vec<Start>, streets: Vec<Street>, props: Vec<Prop>) -> Self {
+        let mut c = Self { name, attribution, start, streets, island: true, starts, props, preview: String::new(), preview_w: 0, links: vec![] };
         c.link();
         c
     }
@@ -193,7 +202,12 @@ pub struct Route {
 
 impl Route {
     pub fn start(city: &City) -> Self {
-        let node = city.nearest(city.start);
+        Self::start_at(city, city.start)
+    }
+
+    /// Start from the junction nearest to `at` (`[lat, lon]`).
+    pub fn start_at(city: &City, at: [f64; 2]) -> Self {
+        let node = city.nearest(at);
         let first = city.exits(node, None).into_iter().next().expect("junction has a street");
         let mut r = Self {
             course: Course { name: city.name.clone(), attribution: city.attribution.clone(), waypoints: vec![], roads: vec![], looped: false, points: vec![] },
@@ -348,6 +362,7 @@ pub fn build(name: &str, relation: u64, start: [f64; 2]) -> Result<(City, Terrai
         name: name.into(),
         attribution: "Streets and buildings © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).".into(),
         start,
+        starts: vec![],
         streets,
         island: false,
         props: vec![],
@@ -397,6 +412,7 @@ mod tests {
             name: "Plus".into(),
             attribution: String::new(),
             start: [48.85, 2.35 - 0.0015],
+            starts: vec![],
             streets: vec![arm(1, 0.0, 0.0015), arm(2, 0.001, 0.0), arm(3, 0.0, -0.0015), arm(4, -0.001, 0.0)],
             island: false,
             props: vec![],

@@ -95,7 +95,14 @@ impl Track {
     }
 
     /// An open city: its course is only the first street, each rider grows their own route.
-    fn city(id: String, city: City, terrain: Option<Vec<u8>>, buildings: Option<Vec<u8>>) -> anyhow::Result<Self> {
+    fn city(id: String, mut city: City, terrain: Option<Vec<u8>>, buildings: Option<Vec<u8>>) -> anyhow::Result<Self> {
+        // A real town has no hand-made thumbnail: make one from its terrain (streets, water, parks, buildings).
+        if let Some(t) = terrain.as_ref().filter(|t| city.preview.is_empty() && t.len() >= 8) {
+            let (w, h) = (u32::from_le_bytes(t[0..4].try_into()?) as usize, u32::from_le_bytes(t[4..8].try_into()?) as usize);
+            if let Some(cover) = t.get(40 + w * h * 2..40 + w * h * 3) {
+                (city.preview, city.preview_w) = le_mollet::island::preview(cover, w, h, (w / 110).max(1));
+            }
+        }
         let mut t = Self::new(id, Route::start(&city).course, terrain, None)?;
         (t.city, t.buildings) = (Some(city), buildings);
         Ok(t)
@@ -124,6 +131,13 @@ impl Track {
         self
     }
 
+    /// `[west, south, east, north]` of the terrain, from its file header.
+    fn bbox(&self) -> Option<[f64; 4]> {
+        let t = self.terrain.as_ref().filter(|t| t.len() >= 40)?;
+        let f = |o: usize| f64::from_le_bytes(t[o..o + 8].try_into().unwrap());
+        Some([f(8), f(16), f(24), f(32)])
+    }
+
     fn summary(&self) -> serde_json::Value {
         let c = &self.course;
         // 60-sample elevation profile for the picker thumbnails.
@@ -133,7 +147,7 @@ impl Track {
             "terrain": self.terrain.is_some(), "looped": c.looped,
             "relief": self.relief.map(Relief::label), "riders": self.riders.lock().unwrap().len(),
             "city": self.city.as_ref().map(|c| c.streets.len()), "buildings": self.buildings.is_some(), "district": !self.district.is_empty(), "ortho": !self.ortho.is_empty(),
-            "island": self.city.as_ref().is_some_and(|c| c.island), "props": self.city.as_ref().map(|c| &c.props),
+            "island": self.city.as_ref().is_some_and(|c| c.island), "props": self.city.as_ref().map(|c| &c.props), "starts": self.city.as_ref().map(|c| &c.starts), "bbox": self.bbox(),
             "preview": self.city.as_ref().map(|c| &c.preview), "preview_w": self.city.as_ref().map(|c| c.preview_w),
         })
     }
@@ -392,7 +406,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             if let Some(t) = &track {
                 t.riders.lock().unwrap().insert(sid, presence(query, sid));
             }
-            let res = ride_session(&mut sock, &app, track.as_deref(), plan, game, sid, mass.unwrap_or(83.0)).await;
+            let start = param(query, "start").and_then(|s| s.parse::<usize>().ok());
+            let res = ride_session(&mut sock, &app, track.as_deref(), plan, game, (sid, start), mass.unwrap_or(83.0)).await;
             if let Some(t) = &track {
                 t.riders.lock().unwrap().remove(&sid);
             }
@@ -437,13 +452,15 @@ async fn ride_session(
     track: Option<&Track>,
     plan: Option<(&Workout, f32)>,
     mut game: Option<Game>,
-    sid: u64,
+    (sid, start): (u64, Option<usize>),
     mass: f32,
 ) -> std::io::Result<()> {
     let base = track.map_or(&app.flat, |t| &t.course);
     // Open city: this rider's own route, grown street by street; `sent` route points already streamed.
     let city = track.and_then(|t| t.city.as_ref());
-    let (mut route, mut sent_pts) = (city.map(Route::start), 0);
+    // Open city: start from the place the rider picked, else the city's own start.
+    let route = city.map(|c| Route::start_at(c, start.and_then(|i| c.starts.get(i)).map_or(c.start, |s| s.at)));
+    let (mut route, mut sent_pts) = (route, 0);
     let mut ride = Ride::new(mass);
     let mut tick = tokio::time::interval(Duration::from_secs_f32(DT));
     let (mut n, mut sent) = (0u32, None::<f32>);

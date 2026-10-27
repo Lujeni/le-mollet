@@ -21,6 +21,7 @@ Meters, x east and z south from the north-west corner. Everything below is drawn
 | `relief` | `cone` (volcano: rim, lava lake, flanks a spiral road climbs at a steady grade), `hill`, `plateau` (mesas, cliffs), `dunes` |
 | `areas` | ground per polygon: `grass`, `forest`, `jungle`, `sand`, `field`, `dirt`, `pave`, `rock`, `basalt`, `water`, `lava`; `flat` levels it (lakes, the town) |
 | `rivers` | water channels along a polyline |
+| `starts` | places offered in the start picker: `{ "name": ..., "node": ... }` |
 | `nodes`, `roads` | junctions and named roads between them, bends in `via`; `bridge` for a deck, `spiral` for a climb around a center |
 | `props` | landmarks and single pieces: `{ "k": kind, "at": [x, z], "yaw": degrees, "v": variant, "sea": floats }` |
 | `rows` | pieces lined up along a street: houses, lamps, fences, benches |
