@@ -1201,7 +1201,7 @@ function showCourses() {
       cv,
       h('span', { class:'badge' }, `${Math.round(Math.max(...c.profile))}`, h('br'), 'm'),
       h('span', { class:'ribbon', style:`background:${theme.ribbon}` }, c.name,
-        h('small', {}, `${(c.length / 1000).toFixed(1)} km · +${c.gain} m · ${avg} %`)));
+        h('small', {}, `${(c.length / 1000).toFixed(1)} km · +${c.gain} m · ${avg} %${current?.ghosts?.[c.id] ? ` · record ${hms(current.ghosts[c.id].elapsed)}` : ''}`)));
     requestAnimationFrame(() => magnetArt(cv, c.profile, theme));
     return card;
   }));
@@ -1373,6 +1373,7 @@ async function openRide(id, hasTerrain, kind = 'course') {
   ride.zombie = { prev:null, toast:'', toastUntil:0 };
   $('#leave').textContent = '‖ Pause';
   ride.course = await (await fetch(`/course?id=${encodeURIComponent(id)}`)).json();
+  startGhost(id);
   show('#ride');
   $('#courseName').textContent = zombie ? 'Zombie Halloween' : ride.course.name;
   $('#attrib').textContent = attribution();
@@ -1400,7 +1401,7 @@ async function openRide(id, hasTerrain, kind = 'course') {
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -1611,6 +1612,7 @@ function renderStats() {
       : stat('distance', 'Distance', (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`),
     stat('ele', 'Altitude', Math.round(s.ele), 'm'),
     stat('time', 'Temps', hms, ''),
+    ...(climb() && ride.ghost ? [stat('ghost', 'Fantôme', signed(ghostGap(s)), 's')] : []),
     ...(s.finished ? [h('div', { class:'finish' }, `Arrivée en ${hms} !`)] : []),
   );
 }
@@ -1626,9 +1628,9 @@ const HUD_PRESETS = {
 const HUD_WIDGETS = { stats:'Chiffres', controls:'Commandes', power:'Puissance (démo)', map:'Profil / carte', mirror:'Rétro (zombies)' };
 const STAT_KEYS = {
   workout:['power', 'target', 'interval', 'session', 'speed', 'distance'], zombie:['power', 'speed', 'gap', 'wave', 'time', 'sprints'],
-  ride:['power', 'speed', 'grade', 'distance', 'ele', 'time'],
+  ride:['power', 'speed', 'grade', 'distance', 'ele', 'time', 'ghost'],
 };
-const STAT_NAMES = { power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints' };
+const STAT_NAMES = { power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints', ghost:'Fantôme' };
 const defaultHud = () => structuredClone(HUD_PRESETS[innerWidth <= 700 ? 'phone' : 'cockpit']);
 const hud = () => current?.hud ?? defaultHud();
 
@@ -1696,6 +1698,65 @@ addEventListener('keydown', e => {
   $('#ride').classList.toggle('bare');
 });
 
+// ---------- ghost: race your best time on a climb ----------
+// On a climb, (elapsed s, distance m) is sampled every 2 s. A finished, saved ride without demo jumps that
+// beats the record becomes the profile's ghost for that climb, replayed as a see-through rider.
+const GHOST_STEP = 2;
+const climb = () => ride.mode === 'course' && !ride.course?.looped;
+function startGhost(id) {
+  ride.id = id;
+  ride.trace = { pts:[], jumped:false };
+  ride.ghostResult = null;
+  ride.ghost = climb() ? current.ghosts?.[id] ?? null : null;
+}
+function recordGhost() {
+  const s = ride.state, T = ride.trace;
+  if (!climb() || !s || !T) return;
+  const last = T.pts.at(-1);
+  if (last && s.elapsed - last[0] < GHOST_STEP) return;
+  // A demo jump (click on the profile) breaks the race: that trace can never become a ghost.
+  if (last && Math.abs(s.distance - last[1]) > (s.elapsed - last[0]) * 30 + 20) T.jumped = true;
+  T.pts.push([Math.round(s.elapsed * 10) / 10, Math.round(s.distance)]);
+}
+// Interpolate column b at value x of column a; time and distance both only grow along a trace.
+function along(pts, a, b, x) {
+  const i = pts.findIndex(p => p[a] >= x); // ponytail: linear scan, ~1800 samples an hour is nothing
+  if (i < 0) return pts.at(-1)[b];
+  if (i === 0) return pts[0][b];
+  const [p, q] = [pts[i - 1], pts[i]];
+  return p[b] + (q[b] - p[b]) * (x - p[a]) / ((q[a] - p[a]) || 1);
+}
+const ghostDist = t => along(ride.ghost.trace, 0, 1, t);
+const ghostGap = s => s.elapsed - along(ride.ghost.trace, 1, 0, s.distance); // s behind (+) or ahead (−)
+const signed = g => `${g >= 0 ? '+' : '−'}${Math.abs(Math.round(g))}`;
+
+// Keep the trace as the new ghost when it beats the record. Returns how it went, for the summary.
+function keepGhost(r) {
+  const T = ride.trace, best = current.ghosts?.[ride.id];
+  if (!climb() || !r.completed || T?.jumped || !(T?.pts.length > 1)) return null;
+  if (best && r.elapsed >= best.elapsed) return { record:false, diff:r.elapsed - best.elapsed };
+  current.ghosts = { ...current.ghosts, [ride.id]: { elapsed:r.elapsed, date:r.date, trace:[...T.pts, [r.elapsed, ride.course.points.at(-1).d]] } };
+  return { record:true, diff:best ? r.elapsed - best.elapsed : null };
+}
+
+// See-through copy of the rider, with a tag.
+function ghostModel() {
+  const g = new THREE.Group(), bike = riderModel(current.bike, current.rider);
+  bike.traverse(o => { if (o.isMesh) o.material = Object.assign(o.material.clone(), { transparent:true, opacity:0.35, depthWrite:false }) });
+  g.add(bike, nameTag(`Record ${hms(ride.ghost.elapsed)}`));
+  g.userData.bike = bike;
+  return g;
+}
+function updateGhost(dt) {
+  const s = ride.state;
+  if (!w3.ghost || !s) return;
+  w3.gt = Math.abs((w3.gt ?? 0) - s.elapsed) > 1 ? s.elapsed : w3.gt + dt + (s.elapsed - w3.gt) * Math.min(1, dt); // smooth between updates
+  const d = ghostDist(w3.gt), [p, dir] = roadSide(d, 1.2);
+  w3.ghost.position.copy(p);
+  w3.ghost.userData.bike.rotation.set(0, Math.atan2(-dir.z, dir.x), 0);
+  w3.ghost.userData.bike.children[0].children[0]?.userData.tick?.(dt, d < ride.course.points.at(-1).d ? 85 : 0);
+}
+
 let profileLayout = null;
 function drawProfile() {
   if (ride.mode === 'city') return drawMap();
@@ -1737,6 +1798,12 @@ function drawProfile() {
     const oe = pts[Math.min(pts.length - 1, Math.round(o.distance / 10))].ele;
     ctx.fillStyle = o.color;
     ctx.fillRect(x(o.distance) - 4, y(oe) - 10, 8, 8);
+  }
+  // Ghost: a see-through brick at its distance.
+  if (climb() && ride.ghost) {
+    const gd = ghostDist(ride.state?.elapsed ?? 0), ge = pts[Math.min(pts.length - 1, Math.round(gd / 10))].ele;
+    ctx.fillStyle = 'rgba(255,255,255,.55)';
+    ctx.fillRect(x(gd) - 6, y(ge) - 14, 12, 12);
   }
   // Rider marker: a little yellow brick.
   const ele = pts[Math.min(pts.length - 1, Math.round(pos / 10))].ele;
@@ -2554,6 +2621,7 @@ function enter3d(buf) {
   w3.saved = { near:camera.near, far:camera.far, fov:camera.fov };
   menuBg.visible = false;
   if (ride.mode === 'zombie') halloween();
+  if (climb() && ride.ghost) w3.group.add(w3.ghost = ghostModel());
   [w3.crowd, w3.cars, w3.pigeons, w3.clouds] = [makeCrowd(), [], [], makeClouds()];
   w3.group.add(w3.clouds);
   // Lego light: filmic tone curve, studio reflections on the plastic, sun shadows that follow the rider.
@@ -2583,7 +2651,7 @@ function exit3d() {
   sun.target.position.set(0, 0, 0);
   sun.target.updateMatrixWorld();
   renderer.toneMapping = THREE.NoToneMapping;
-  Object.assign(w3, { far:null, road:null, arrows:null, bld:null, group:null, T:null, bike:null, eagle:null, horde:null, bonus:null, mirror:null, sky:null, lamp:null, crowd:null, cars:null, pigeons:null, clouds:null });
+  Object.assign(w3, { far:null, road:null, arrows:null, bld:null, group:null, T:null, bike:null, eagle:null, horde:null, bonus:null, mirror:null, sky:null, lamp:null, crowd:null, cars:null, pigeons:null, clouds:null, ghost:null, gt:0 });
   $('#mirror').hidden = true;
   renderNight();
   w3.chunks.clear();
@@ -2786,6 +2854,7 @@ function update3d(dt) {
   w3.eagle.rotation.set(0.3, Math.atan2(-Math.cos(a), -Math.sin(a)), 0); // nose along the circle, banked
   updateOthers(dt);
   if (w3.horde) updateHorde(dt);
+  updateGhost(dt);
   updateBeasts(dt);
   updateCrowd(dt);
   updateCars(dt);
@@ -3001,6 +3070,7 @@ function openMenu(mode) {
   const titles = { pause:'Pause', end, saved:'Sortie enregistrée' };
   $('#menuTitle').textContent = titles[mode];
   renderSummary(r);
+  ghostLine(mode, r);
   $('#resume').hidden = mode !== 'pause';
   $('#saveQuit').hidden = $('#quitNoSave').hidden = mode === 'saved';
   $('#saveQuit').disabled = r.elapsed < 1;
@@ -3008,6 +3078,18 @@ function openMenu(mode) {
   $('#menu').hidden = false;
   if (mode === 'pause') fetch(`/pause?session=${ride.session}&on=1`).catch(() => {});
   ($('#resume').hidden ? ($('#toHome').hidden ? $('#saveQuit') : $('#toHome')) : $('#resume')).focus();
+}
+
+// The race against the ghost, under the summary: at the finish, and once saved.
+function ghostLine(mode, r) {
+  if (!climb() || !r.completed) return;
+  const best = ride.ghost?.elapsed, res = mode === 'saved' ? ride.ghostResult : null;
+  const text = res?.record ? 'Nouveau record : ton fantôme roulera avec ce chrono.'
+    : res && !res.record ? (ride.trace?.jumped ? '' : `${signed(res.diff)} s sur ton record.`)
+    : ride.trace?.jumped ? 'Chrono sans fantôme : tu as sauté une partie du parcours.'
+    : best == null ? 'Enregistre la sortie pour courir contre ton fantôme la prochaine fois.'
+    : r.elapsed < best ? `Record battu de ${Math.round(best - r.elapsed)} s ! Enregistre pour le garder.` : `${signed(r.elapsed - best)} s sur ton record.`;
+  if (text) $('#menuStats').append(h('div', { class:'finish' }, text));
 }
 
 function resumeRide() {
@@ -3026,6 +3108,7 @@ function checkEnd() {
 // ponytail: history lives in the browser profile (cap 200), move to the Rust backend with login
 function saveRide() {
   const r = summary();
+  ride.ghostResult = keepGhost(r);
   current.history = [r, ...(current.history ?? [])].slice(0, 200);
   persist();
   ride.events?.close();
