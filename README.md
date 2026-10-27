@@ -47,6 +47,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 <td><img src="docs/screenshots/bonus.jpg" alt="Draft bonus in use, its time bar in the ride panel"><br><sub><b>Road bonuses.</b> Feather, Aero or Draft: press B when it counts.</sub></td>
 </tr>
 <tr>
+<td><img src="docs/screenshots/plan.jpg" alt="FTP plan calendar: sessions done, missed and to come, the next one"><br><sub><b>Training plans.</b> A calendar from the day you start, sessions ticked off as you ride.</sub></td>
+<td><img src="docs/screenshots/form.jpg" alt="Form chart: fitness, fatigue and daily stress over 90 days, power records"><br><sub><b>Form.</b> Fitness, fatigue, freshness, power records and an FTP estimate.</sub></td>
+</tr>
+<tr>
 <td><img src="docs/screenshots/club.jpg" alt="Club page: tag, invite code, members ranked by kilometres this week"><br><sub><b>Clubs.</b> Your tag on the road, the week's kilometres, an invite code.</sub></td>
 <td><img src="docs/screenshots/fog.jpg" alt="Alpe d'Huez in thick fog"><br><sub><b>Fog.</b> Some spells you only see the next hairpin.</sub></td>
 </tr>
@@ -91,6 +95,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 ## Train
 
 - **Structured sessions** calibrated on your FTP: recovery, endurance, sweet spot, threshold, VO2max.
+- **Training plans.** Back on the bike (4 weeks), FTP +5 % (6 weeks), sportive prep (8 weeks): a calendar from the
+  day you start, today's session one click away, sessions ticked off as you ride them.
+- **Form and power records.** Training stress (TSS) and normalized power for each ride, fitness, fatigue and
+  freshness over 90 days, best 5 s, 1, 5 and 20 min efforts, and an FTP estimate you can apply in one click.
 - **Bring your own**: import Zwift workout files (.zwo), thousands are free online; they stay in your profile.
 - **FTP test**: 20 minutes all out after a warm-up, and your FTP updates itself (95 % of the 20-minute average).
 - **ERG mode**: the trainer holds each target power for you. In demo mode, follow the target or turn on autopilot.

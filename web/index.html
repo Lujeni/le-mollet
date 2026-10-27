@@ -236,6 +236,28 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .hist-sub .muted { margin:0; font-size:12px }
 #histWeeks { width:100%; height:190px; display:block; border-radius:16px; background:var(--glass-hi) }
 .records { display:grid; grid-template-columns:1fr 1fr; gap:8px }
+.record .btn { margin-top:6px; align-self:flex-start; padding:4px 10px; font-size:12px }
+#histForm { width:100%; height:170px; display:block; border-radius:16px; background:var(--glass-hi) }
+.form-kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:8px }
+.form-kpis div { padding:8px 12px; border-radius:12px; background:var(--glass-hi); border:1px solid var(--edge) }
+.form-kpis b { display:block; font:700 20px var(--font); font-variant-numeric:tabular-nums }
+.form-kpis small { color:var(--muted); font-size:11.5px }
+.form-kpis i { display:block; width:18px; height:4px; border-radius:2px; margin-bottom:4px }
+.plan { margin-bottom:18px }
+.plan h2 { margin:0 0 10px }
+.plan-cards { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px }
+.plan-card { display:flex; flex-direction:column; gap:6px; padding:14px; border-radius:16px; background:var(--glass-hi); border:1px solid var(--edge) }
+.plan-card b { font:700 17px var(--font) } .plan-card small { color:var(--muted) } .plan-card .btn { margin-top:auto; align-self:flex-start }
+.plan-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap }
+.plan-bar { height:8px; border-radius:4px; background:var(--glass-hi2); overflow:hidden; margin:8px 0 12px } .plan-bar i { display:block; height:100%; background:var(--accent) }
+.plan-today { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 14px; border-radius:16px; background:linear-gradient(90deg, #0b5ed0, #1595ad); color:#fff; margin-bottom:12px }
+.plan-today small { display:block; opacity:.8 }
+.plan-cal { display:grid; grid-template-columns:auto repeat(7, 1fr); gap:4px; font-size:11.5px }
+.plan-cal > span { color:var(--muted); align-self:center; padding-right:6px }
+.plan-cal .day { min-height:44px; padding:4px 6px; border-radius:8px; background:var(--glass-hi); color:var(--muted); overflow:hidden }
+.plan-cal .day.s { background:var(--c); color:#fff; font-weight:600 }
+.plan-cal .day.done::after { content:' ✓' } .plan-cal .day.missed { opacity:.4; text-decoration:line-through }
+.plan-cal .day.today { outline:2px solid var(--accent) }
 .record { padding:10px 12px; border-radius:14px; background:var(--glass-hi); border:1px solid var(--edge); display:flex; flex-direction:column; min-width:0 }
 .record small { color:var(--muted); font-size:11.5px }
 .record b { font:700 19px var(--font) }
@@ -387,7 +409,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   .tiles { grid-template-columns:1fr }
   .devices { grid-template-columns:1fr } .seg-banner { top:150px; min-width:0 }
   .tiles .tile.me, .tiles .tile.zombie { grid-column:auto }
-  .club-forms { grid-template-columns:1fr }
+  .club-forms, .plan-cards { grid-template-columns:1fr } .plan-cal { font-size:10px } .plan-cal .day { padding:3px }
   .kpis { grid-template-columns:repeat(3, 1fr) } .hist-top, .hist-body { grid-template-columns:1fr } .hist { padding:20px } .hist-list { max-height:none }
   .tiles .tile.ride { grid-row:auto; min-height:150px }
   .tiles .tile.ride b { font-size:30px }
@@ -583,6 +605,11 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <section class="hist-weeks"><div class="hist-sub"><h2>12 dernières semaines</h2><small class="muted" id="histWeekSub"></small></div><canvas id="histWeeks" aria-label="Kilomètres par semaine"></canvas></section>
         <section><h2>Tes records</h2><div class="records" id="histRecords"></div></section>
       </div>
+      <div class="hist-top">
+        <section class="hist-form"><div class="hist-sub"><h2>Ta forme</h2><small class="muted" id="formSub"></small></div>
+          <div class="form-kpis" id="formKpis"></div><canvas id="histForm" aria-label="Forme, fatigue et charge des 90 derniers jours"></canvas></section>
+        <section><h2>Records de puissance</h2><div class="records" id="powerRecords"></div></section>
+      </div>
       <section class="hist-badges"><h2 id="histBadgesTitle">Badges</h2><div class="badge-wall" id="histBadges"></div></section>
       <div class="seg hist-filters" id="histFilters"></div>
       <div class="hist-body">
@@ -636,6 +663,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <button class="btn" id="trainingBack">‹ Accueil</button>
       </div>
       <p class="muted" id="trainingHint"></p>
+      <section class="plan" id="plan"></section>
       <div class="import-row"><label class="btn" for="zwoFile">Importer des séances .zwo</label><input type="file" id="zwoFile" accept=".zwo,application/xml,text/xml" multiple hidden>
         <small class="muted">Le format de Zwift : des milliers de séances gratuites (whatsonzwift.com, zwiftworkouts…).</small></div>
       <div id="workoutList" class="list"></div>
@@ -1341,7 +1369,7 @@ function showHome(p = current) {
   $('#homeStats').replaceChildren(chip(p.ftp, 'W FTP'), chip((p.ftp / p.weightKg).toFixed(1), 'W/kg'), chip(p.weightKg, 'kg'), chip(Math.round(km), 'km roulés'));
   const n = ride.list?.courses.length ?? 0;
   $('#goRideSub').textContent = `${n} col${n > 1 ? 's' : ''} mythique${n > 1 ? 's' : ''} et le monde ouvert`;
-  $('#goTrainSub').textContent = `${ride.workouts?.length ?? 0} séances calées sur ta FTP`;
+  $('#goTrainSub').textContent = planToday() ?? `${ride.workouts?.length ?? 0} séances calées sur ta FTP`;
   renderHistory();
   renderSensors();
   initProgress(p);
@@ -1661,6 +1689,7 @@ const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2
 
 function showTraining() {
   show('#training');
+  renderPlan();
   $('#trainingHint').textContent = ride.list?.trainer
     ? `Le home trainer tient la puissance (mode ERG). Cibles calculées sur ta FTP de ${current.ftp} W.`
     : `Mode démo : suis la cible au curseur, ou laisse le pilote auto. Cibles calculées sur ta FTP de ${current.ftp} W.`;
@@ -4217,7 +4246,9 @@ function renderHistoryPage() {
     kpi(`${Math.floor(t / 3600)} h ${String(Math.floor(t / 60) % 60).padStart(2, '0')}`, 'en selle'), kpi(Math.round(sum('energyKj')).toLocaleString('fr'), 'kcal brûlées'),
     kpi(Object.keys(current.ghosts ?? {}).length, 'fantômes'));
   renderRecords(all);
+  renderPower(all);
   renderBadges();
+  requestAnimationFrame(() => drawForm($('#histForm'), formSeries(all)));
   requestAnimationFrame(() => drawWeeks($('#histWeeks'), all));
   const counts = Object.fromEntries(Object.keys(CATS).map(k => [k, all.filter(r => catOf(r) === k).length]));
   $('#histFilters').replaceChildren(...[['all', `Tout · ${all.length}`], ...Object.entries(CATS).filter(([k]) => counts[k]).map(([k, [n]]) => [k, `${n} · ${counts[k]}`])].map(([k, label]) =>
@@ -4294,6 +4325,7 @@ function renderDetail(r) {
       stat('Durée', hms(r.elapsed), ''), stat('Distance', (r.distance / 1000).toFixed(2), 'km'), stat('Dénivelé', Math.round(r.climbed), 'm'),
       stat('Vitesse moy.', r.avgSpeed.toFixed(1), 'km/h'), stat('Puissance moy.', Math.round(r.avgPower), 'W'), stat('Puissance max', Math.round(r.maxPower), 'W'),
       stat('W/kg moy.', (r.avgPower / current.weightKg).toFixed(2), ''), stat('Énergie', Math.round(r.energyKj), 'kcal'),
+      stat('Puiss. normalisée', Math.round(loadOf(r).np), 'W'), stat('Charge', Math.round(loadOf(r).tss), 'TSS'),
       r.kind === 'zombie' ? stat('Vague', r.wave, `· ${r.sprintsWon}/${r.sprints} sprints`) : stat('Sorties ici', Math.max(1, same.length), same.length > 1 ? `· record ${hms(best)}` : '')),
     r.trace?.length > 1 ? cv : h('p', { class:'muted' }, 'Les courbes d\'altitude et de puissance s\'enregistrent à partir de tes prochaines sorties.'),
     h('div', { class:'form-actions' },
@@ -4751,6 +4783,200 @@ addEventListener('keydown', e => {
 
 $('#zwoFile').addEventListener('change', e => { importZwo([...e.target.files]); e.target.value = '' });
 
+// ---------- fitness: power records, training load (TSS), form (CTL / ATL / TSB) ----------
+// FITNESS-MATH-START
+// Durations of the power records, in seconds.
+const BESTS = [[5, '5 s'], [60, '1 min'], [300, '5 min'], [1200, '20 min']];
+// [[t s, W]] in time order -> one watt value a second, each sample held until the next one.
+const perSecond = pts => pts.flatMap(([t, w], i) => Array(Math.max(1, Math.round((pts[i + 1]?.[0] ?? t + 1) - t))).fill(w));
+// Best average power over each record duration (as long as the ride is), from samples `step` s apart:
+// a coarse trace cannot tell a 5 s sprint, so durations under 5 samples are left out.
+function bestPowers(ws, step = 1) {
+  const out = {};
+  for (const [d] of BESTS) {
+    if (ws.length < d || d < step * 5) continue;
+    let sum = 0;
+    for (let i = 0; i < d; i++) sum += ws[i];
+    let best = sum;
+    for (let i = d; i < ws.length; i++) { sum += ws[i] - ws[i - d]; if (sum > best) best = sum }
+    out[d] = Math.round(best / d);
+  }
+  return out;
+}
+// Normalized power: 30 s rolling average, to the 4th power, averaged, 4th root. Surges cost more than steady watts.
+function normalized(ws) {
+  if (ws.length < 30) return ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : 0;
+  let sum = 0, acc = 0, n = 0;
+  for (let i = 0; i < ws.length; i++) {
+    sum += ws[i] - (i >= 30 ? ws[i - 30] : 0);
+    if (i >= 29) { acc += (sum / 30) ** 4; n++ }
+  }
+  return (acc / n) ** 0.25;
+}
+// Training stress: 100 = one hour at FTP.
+const tssOf = (secs, np, ftp) => ftp > 0 ? secs / 3600 * (np / ftp) ** 2 * 100 : 0;
+// Form like TrainingPeaks: fitness (CTL) is the 42-day average of daily TSS, fatigue (ATL) the 7-day one,
+// freshness (TSB) the gap. `daily`: Map(local midnight ms -> TSS). Returns the last `days` days.
+function formFrom(daily, today, days) {
+  const next = t => { const x = new Date(t + 36 * 36e5); x.setHours(0, 0, 0, 0); return x.getTime() }; // DST-proof
+  let [ctl, atl] = [0, 0];
+  const out = [], from = Math.min(today - (days - 1) * 864e5, ...daily.keys());
+  for (let t = from; t <= today; t = next(t)) {
+    const tss = daily.get(t) ?? 0;
+    ctl += (tss - ctl) / 42; atl += (tss - atl) / 7;
+    if (t > today - days * 864e5) out.push({ t, tss, ctl, atl, tsb:ctl - atl });
+  }
+  return out;
+}
+// FITNESS-MATH-END
+const midnight = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime() };
+// What a saved ride adds, from its 1 Hz samples: records, normalized power, stress, and the FTP it was rated on.
+function rideLoad(full, ftp) {
+  const ws = perSecond(full.map(s => [s.t, s.p])), np = normalized(ws);
+  return { best:bestPowers(ws), np:Math.round(np), tss:Math.round(tssOf(ws.length, np, ftp)), ftp };
+}
+// Rides saved before: the same from their trace (a sample every 5 s or more), else from their average power.
+const loads = new WeakMap();
+function loadOf(r) {
+  if (r.tss != null) return r;
+  if (!loads.has(r)) {
+    const pts = r.trace?.length > 1 ? r.trace.map(p => [p[0], p[1]]) : null, step = pts ? (pts.at(-1)[0] - pts[0][0]) / (pts.length - 1) : 0;
+    const ws = pts ? perSecond(pts) : null, np = ws ? normalized(ws) : r.avgPower ?? 0;
+    loads.set(r, { best:ws ? bestPowers(ws, step) : {}, np, tss:tssOf(r.elapsed, np, current.ftp) });
+  }
+  return loads.get(r);
+}
+// Best of each record duration over these rides: {d: {w, r}}.
+function allBests(rides) {
+  const out = {};
+  for (const r of rides) for (const [d, w] of Object.entries(loadOf(r).best ?? {})) if (w > (out[d]?.w ?? 0)) out[d] = { w, r };
+  return out;
+}
+const formSeries = (all, days = 90) => {
+  const daily = new Map();
+  for (const r of all) daily.set(midnight(r.date), (daily.get(midnight(r.date)) ?? 0) + loadOf(r).tss);
+  return formFrom(daily, midnight(Date.now()), days);
+};
+const FORM_COLORS = { ctl:'#1595ad', atl:'#d63384', tss:'rgba(128,140,155,.35)' };
+function freshness(tsb) {
+  return tsb > 15 ? 'Très frais : idéal pour un test ou une course' : tsb > 5 ? 'Frais' : tsb > -10 ? 'Équilibré' : tsb > -30 ? 'Chargé : tu construis' : 'Surcharge : lève le pied';
+}
+function renderPower(all) {
+  const card = (label, v, sub, extra = '') => h('div', { class:'record' }, h('small', {}, label), h('b', {}, v), h('span', {}, sub), extra);
+  const best = allBests(all), recent = allBests(all.filter(r => Date.now() - Date.parse(r.date) < 42 * 864e5));
+  const day = r => new Date(r.date).toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
+  const ftp = recent[1200] && Math.round(recent[1200].w * 0.95);
+  $('#powerRecords').replaceChildren(...BESTS.map(([d, label]) => best[d]
+    ? card(label, `${best[d].w} W`, `${(best[d].w / current.weightKg).toFixed(1)} W/kg · ${day(best[d].r)}${recent[d] && recent[d].w !== best[d].w ? ` · 6 sem. ${recent[d].w} W` : ''}`)
+    : card(label, '–', d === 5 ? 'Un sprint dans ta prochaine sortie' : `Roule ${label} d'affilée`)),
+    ftp ? card('FTP estimée (95 % du 20 min, 6 sem.)', `${ftp} W`, `Ton profil : ${current.ftp} W`,
+      Math.abs(ftp - current.ftp) >= 3 ? h('button', { class:'btn', onclick: () => { current.ftp = ftp; persist(); renderHistoryPage() } }, `Passer à ${ftp} W`) : '') : '');
+  const s = formSeries(all), last = s.at(-1) ?? { ctl:0, atl:0, tsb:0 };
+  const kpi = (label, v, color) => h('div', {}, h('i', { style:`background:${color}` }), h('b', {}, Math.round(v)), h('small', {}, label));
+  $('#formKpis').replaceChildren(kpi('Forme (42 j)', last.ctl, FORM_COLORS.ctl), kpi('Fatigue (7 j)', last.atl, FORM_COLORS.atl), kpi('Fraîcheur', last.tsb, 'transparent'));
+  $('#formSub').textContent = freshness(last.tsb);
+}
+// 90 days: daily stress as bars, fitness and fatigue as lines.
+function drawForm(cv, series) {
+  const [ctx, W, H] = thumbCanvas(cv), pad = 18, n = series.length;
+  if (!n) return;
+  const top = Math.max(50, ...series.map(p => Math.max(p.tss, p.atl, p.ctl))) * 1.1, x = i => pad + i * (W - pad * 2) / Math.max(1, n - 1), y = v => H - pad - v / top * (H - pad * 2);
+  ctx.fillStyle = FORM_COLORS.tss;
+  series.forEach((p, i) => { if (p.tss) ctx.fillRect(x(i) - 1.5, y(p.tss), 3, H - pad - y(p.tss)) });
+  for (const k of ['atl', 'ctl']) {
+    ctx.strokeStyle = FORM_COLORS[k]; ctx.lineWidth = k === 'ctl' ? 3 : 1.5; ctx.beginPath();
+    series.forEach((p, i) => i ? ctx.lineTo(x(i), y(p[k])) : ctx.moveTo(x(i), y(p[k])));
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(128,140,155,.9)'; ctx.font = '600 10px Inter, sans-serif'; ctx.textAlign = 'center';
+  series.forEach((p, i) => { if (new Date(p.t).getDate() === 1) ctx.fillText(new Date(p.t).toLocaleDateString('fr-FR', { month:'short' }), x(i), H - 4) });
+}
+function recordsLine() {
+  if (!ride.newRecords?.length) return;
+  $('#menuStats').append(h('div', { class:'award' }, ...ride.newRecords.map(([label, w]) => h('div', { class:'badge-won' }, h('span', {}, '⚡'), h('b', {}, `Record ${label} : ${w} W`), h('small', {}, `${(w / current.weightKg).toFixed(1)} W/kg`)))));
+}
+
+// ---------- training plans: weeks of sessions on set days, counted from the day the plan starts ----------
+// A session is a built-in workout (w) or a free ride of `ride` minutes, on day `d` (0 to 6) of its week.
+const wk = (d, w) => ({ d, w }), free = (d, min) => ({ d, ride:min });
+const PLANS = [
+  { id:'reprise', name:'Reprise en douceur', weeks:4, desc:'3 sorties par semaine pour retrouver le rythme sans se cramer.',
+    build: k => [wk(0, k < 2 ? 'recup' : 'endurance'), free(2, 30 + k * 10), wk(5, 'endurance')] },
+  { id:'ftp', name:'FTP +5 %', weeks:6, desc:'Sweet spot puis seuil, une semaine légère au milieu, un test FTP pour mesurer le gain.',
+    build: k => k === 5 ? [wk(0, 'sweet-spot'), wk(2, 'recup'), wk(5, 'test-ftp')]
+      : k === 2 ? [wk(0, 'endurance'), wk(2, 'recup'), free(5, 60)]
+      : [wk(0, 'sweet-spot'), wk(1, 'endurance'), wk(3, k < 2 ? 'sweet-spot' : 'seuil'), free(5, 75 + k * 15)] },
+  { id:'fondo', name:'Prépa cyclosportive', weeks:8, desc:'Une longue sortie qui monte jusqu\'à 3 h, de l\'intensité, et du jus pour le jour J.',
+    build: k => k === 7 ? [wk(0, 'vo2max'), wk(2, 'recup'), free(5, 45)]
+      : [wk(0, k % 2 ? 'vo2max' : 'sweet-spot'), wk(2, 'endurance'), free(5, k === 3 ? 60 : Math.min(180, 90 + k * 15)), wk(6, 'recup')] },
+];
+const workoutById = id => ride.workouts?.find(x => x.w.id === id);
+const sessionName = s => s.w ? workoutById(s.w)?.w.name ?? s.w : `Sortie libre ${s.ride} min`;
+const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// The plan's sessions with their dates; each is done by the first matching ride from its day until the next session.
+function planSessions(p = current.plan) {
+  const plan = p && PLANS.find(x => x.id === p.id);
+  if (!plan) return null;
+  const list = [];
+  for (let k = 0; k < plan.weeks; k++) for (const s of plan.build(k)) {
+    const d = new Date(`${p.start}T00:00`);
+    d.setDate(d.getDate() + k * 7 + s.d);
+    list.push({ ...s, week:k, date:d.getTime() });
+  }
+  const used = new Set(), H = current.history ?? [];
+  list.forEach((s, i) => {
+    const end = list[i + 1]?.date ?? s.date + 3 * 864e5;
+    s.done = H.find(r => {
+      const t = Date.parse(r.date);
+      if (used.has(r) || t < s.date || t >= end) return false;
+      if (!s.w) return r.kind !== 'workout' && r.elapsed >= s.ride * 60 * 0.8; // 80 % of a free ride is fine
+      return r.kind === 'workout' && r.completed && (r.workoutId ? r.workoutId === s.w : r.name === workoutById(s.w)?.w.name); // older rides: by name
+    });
+    if (s.done) used.add(s.done);
+  });
+  return { plan, list };
+}
+// The home line: today's session, if a plan runs.
+function planToday() {
+  const P = planSessions();
+  const s = P?.list.find(s => s.date === midnight(Date.now()));
+  return s ? (s.done ? `Séance du jour faite ✓ · ${P.plan.name}` : `Aujourd'hui : ${sessionName(s)}`) : null;
+}
+function startSession(s) {
+  if (s.w) { const w = workoutById(s.w); if (w) openWorkout(w.w) }
+  else showRideMenu();
+}
+function renderPlan() {
+  const box = $('#plan'), P = planSessions(), today = midnight(Date.now());
+  if (!P) {
+    return box.replaceChildren(h('h2', {}, 'Plans d\'entraînement'),
+      h('div', { class:'plan-cards' }, ...PLANS.map(p => h('div', { class:'plan-card' }, h('b', {}, p.name),
+        h('small', {}, `${p.weeks} semaines · ${p.build(1).length} séances par semaine`), h('span', {}, p.desc),
+        h('button', { class:'btn primary', onclick: () => { current.plan = { id:p.id, start:localDay() }; persist(); renderPlan() } }, 'Commencer aujourd\'hui')))));
+  }
+  const { plan, list } = P, done = list.filter(s => s.done).length, over = list.at(-1).date < today;
+  const first = new Date(`${current.plan.start}T00:00`);
+  const week = Math.min(plan.weeks, Math.floor((today - first.getTime()) / (7 * 864e5)) + 1);
+  const next = list.find(s => s.date >= today && !s.done), color = s => s.w ? CATS.workout[1] : CATS.climb[1];
+  const stop = h('button', { class:'btn', onclick: () => { if (over || confirm(`Arrêter le plan « ${plan.name} » ?`)) { delete current.plan; persist(); renderPlan() } } }, over ? 'Choisir un autre plan' : 'Arrêter le plan');
+  const days = [];
+  for (let k = 0; k < plan.weeks; k++) {
+    days.push(h('span', {}, `S${k + 1}`));
+    for (let d = 0; d < 7; d++) {
+      const t = new Date(first); t.setDate(t.getDate() + k * 7 + d);
+      const s = list.find(x => x.date === t.getTime()), cls = ['day', s && 's', s?.done && 'done', s && !s.done && t.getTime() < today && 'missed', t.getTime() === today && 'today'].filter(Boolean).join(' ');
+      days.push(h('div', { class:cls, style:s ? `--c:${color(s)}` : '', title:s ? sessionName(s) : '' },
+        h('small', {}, t.toLocaleDateString('fr-FR', { weekday:'short', day:'numeric' })), s ? h('div', {}, sessionName(s)) : ''));
+    }
+  }
+  box.replaceChildren(
+    h('div', { class:'plan-head' }, h('div', {}, h('h2', {}, plan.name), h('small', { class:'muted' }, over ? `Plan terminé : ${done} séances sur ${list.length}. Bravo !` : `Semaine ${week} sur ${plan.weeks} · ${done} / ${list.length} séances`)), stop),
+    h('div', { class:'plan-bar' }, h('i', { style:`width:${(done / list.length * 100).toFixed(1)}%` })),
+    next ? h('div', { class:'plan-today' }, h('div', {}, h('small', {}, next.date === today ? 'Séance du jour' : `Prochaine séance · ${new Date(next.date).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'short' })}`), h('b', {}, sessionName(next))),
+      next.date === today ? h('button', { class:'btn', onclick: () => startSession(next) }, 'Démarrer') : '') : '',
+    h('div', { class:'plan-cal' }, ...days));
+}
+
 // ---------- clubs: a name and a tag before members' names, kilometres of the week (kept by the server) ----------
 // The profile keeps its club's tag to show it on the road; the server is the reference (see src/club.rs).
 const clubName = () => current.club ? `[${current.club.tag}] ${current.name}` : current.name;
@@ -4963,6 +5189,7 @@ function summary(s = ride.state ?? {}) {
   return {
     date: new Date().toISOString(),
     kind: ride.mode,
+    ...(ride.mode === 'workout' && { workoutId:ride.workout.id }),
     name: ride.mode === 'workout' ? ride.workout.name
       : ride.mode === 'zombie' ? `Zombie Halloween · vague ${z?.wave ?? 1} · ${z?.sprints_won ?? 0} sprint${z?.sprints_won > 1 ? 's' : ''}`
       : ride.course.name,
@@ -5015,7 +5242,7 @@ function openMenu(mode) {
   renderSummary(r);
   ghostLine(mode, r);
   ftpLine(mode);
-  if (mode === 'saved') awardLine(ride.award);
+  if (mode === 'saved') { awardLine(ride.award); recordsLine() }
   renderBoards();
   $('#exportFit').hidden = !(ride.full?.length > 5);
   $('#resume').hidden = mode !== 'pause';
@@ -5054,7 +5281,9 @@ function checkEnd() {
 
 // ponytail: history lives in the browser profile (cap 200), move to the Rust backend with login
 function saveRide() {
-  const r = summary();
+  const r = summary(), before = allBests(current.history ?? []);
+  Object.assign(r, rideLoad(ride.full ?? [], current.ftp));
+  ride.newRecords = BESTS.filter(([d]) => (r.best[d] ?? 0) > (before[d]?.w ?? 0)).map(([d, label]) => [label, r.best[d]]);
   ride.ghostResult = keepGhost(r);
   r.record = !!ride.ghostResult?.record;
   current.history = [r, ...(current.history ?? [])].slice(0, 200);
