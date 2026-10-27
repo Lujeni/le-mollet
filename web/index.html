@@ -192,6 +192,8 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .ctrl { display:flex; flex-direction:column; gap:8px; padding:12px 16px; width:min(400px, calc(100vw - 32px)) }
 .ctrl .ride-head { margin:0 } .ctrl .ride-head span { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end }
 .map { padding:10px; width:min(520px, calc(100vw - 32px)) }
+.map.round { width:240px; height:240px; padding:0; border-radius:50%; background:none !important; border:0; box-shadow:0 12px 30px rgba(0,0,0,.45) }
+.map.round #profileCanvas { width:100%; height:100% !important; border-radius:50% }
 .hud.demo { padding:10px 14px; width:min(460px, calc(100vw - 32px)) }
 .stat small { display:block; font:600 11px var(--font); letter-spacing:1px; text-transform:uppercase; color:var(--muted) }
 .stat b { font:700 28px var(--font); font-variant-numeric:tabular-nums }
@@ -251,6 +253,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 @media (max-width:1000px) { .dests { grid-template-columns:repeat(2, 1fr) } }
 @media (max-width:900px) { #home { justify-content:center } }
 @media (max-width:700px) {
+  .map.round { width:170px; height:170px }
   .pick-body { grid-template-columns:1fr } #pickMap { height:38vh } .pick { padding:20px }
   .tiles { grid-template-columns:1fr }
   .tiles .tile.me { grid-column:auto }
@@ -1522,6 +1525,7 @@ async function openZombie() {
 // kind: 'course' (climb or loop), 'zombie' (chased on a loop) or 'city' (open city, the route grows as you ride).
 async function openRide(id, hasTerrain, kind = 'course', start = null) {
   ride.start = start; // open world: index of the picked start place
+  $('.map').classList.toggle('round', kind === 'city'); // open worlds get the round minimap
   const zombie = kind === 'zombie';
   ride.ended = false;
   ride.routed = false;
@@ -1647,38 +1651,57 @@ addEventListener('keydown', e => {
 });
 
 // Minimap in place of the elevation profile: heading up, rider in the lower third, route ahead in orange.
-const MAP_COLORS = { 0:[106, 168, 79], 1:[63, 122, 44], 2:[59, 125, 216], 3:[205, 196, 176], 4:[163, 163, 155], 5:[74, 79, 85], 6:[154, 150, 142], 7:[228, 205, 158], 8:[254, 138, 24], 9:[165, 202, 24], 10:[124, 80, 58], 11:[74, 76, 78], 12:[24, 70, 50] };
+// Open world minimap: a round Lego mosaic, heading up, ~900 m across: one stud per 20 m square of ground,
+// the road ahead, the other riders, a compass N turning on the rim.
+const MINIMAP_M = 4; // meters per pixel
 function drawMap() {
-  const cv = $('#profileCanvas'), T = w3.T, dpr = 1; // ponytail: 1 px per canvas px keeps the per-pixel loop cheap
-  const [W, H] = [cv.clientWidth, cv.clientHeight];
-  cv.width = W * dpr; cv.height = H * dpr;
-  const ctx = cv.getContext('2d');
+  const cv = $('#profileCanvas'), T = w3.T, [ctx, W, H] = thumbCanvas(cv), R = Math.min(W, H) / 2, [cx0, cy0] = [W / 2, H / 2];
   const pts = ride.course.points;
-  if (!T || pts.length < 2) { ctx.fillStyle = '#888'; ctx.fillText('Chargement de la carte…', 10, 20); return }
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx0, cy0, R, 0, Math.PI * 2); ctx.clip();
+  ctx.fillStyle = '#141a22'; ctx.fillRect(0, 0, W, H);
+  if (!T || pts.length < 2) { ctx.restore(); return }
   const d = w3.dist ?? ride.state?.distance ?? 0, me = pointAt(d), ahead = pointAt(d + 15).sub(pointAt(d - 15));
   const ang = Math.atan2(ahead.x, -ahead.z); // heading, 0 = north (-z)
-  const [cs, sn] = [Math.cos(ang), Math.sin(ang)], M = 1.6; // meters per pixel
-  const [cx0, cy0] = [W / 2, H * 0.7];
-  const img = ctx.createImageData(W, H);
-  for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) {
-    const [u, v] = [(px - cx0) * M, (py - cy0) * M]; // right, back
-    const [x, z] = [me.x + u * cs - v * sn, me.z + u * sn + v * cs];
-    const c = Math.floor((x - T.ox) / T.cx), r = Math.floor((z - T.oz) / T.cz), o = (py * W + px) * 4;
-    const rgb = c >= 0 && r >= 0 && c < T.w && r < T.h ? MAP_COLORS[T.cover[r * T.w + c]] ?? MAP_COLORS[6] : [30, 30, 30];
-    [img.data[o], img.data[o + 1], img.data[o + 2], img.data[o + 3]] = [...rgb, 255];
+  const [cs, sn] = [Math.cos(ang), Math.sin(ang)];
+  const world = (px, py) => { const [u, v] = [(px - cx0) * MINIMAP_M, (py - cy0) * MINIMAP_M]; return [me.x + u * cs - v * sn, me.z + u * sn + v * cs] };
+  const screen = p => { const [dx, dz] = [p.x - me.x, p.z - me.z]; return [cx0 + (dx * cs + dz * sn) / MINIMAP_M, cy0 + (-dx * sn + dz * cs) / MINIMAP_M] };
+  const S = 5; // px per stud
+  for (let py = 0; py < H; py += S) for (let px = 0; px < W; px += S) {
+    if (Math.hypot(px + S / 2 - cx0, py + S / 2 - cy0) > R + S) continue;
+    // 3x3 samples per stud, a road wins: 7 m roads would slip between 20 m studs otherwise.
+    let code = -1;
+    for (let k = 0; k < 9 && code !== COVER.ROAD; k++) {
+      const [x, z] = world(px + (k % 3 + 0.5) * S / 3, py + (Math.floor(k / 3) + 0.5) * S / 3), c = Math.floor((x - T.ox) / T.cx), r = Math.floor((z - T.oz) / T.cz);
+      const v = c >= 0 && r >= 0 && c < T.w && r < T.h ? T.cover[r * T.w + c] : -1;
+      if (k === 4 || v === COVER.ROAD) code = v;
+    }
+    studs(ctx, px, py, S, code < 0 ? (T.island ? THUMB[2] : '#1c2550') : code === COVER.ROAD ? '#3b3f44' : THUMB[code] ?? THUMB[6]);
   }
-  ctx.putImageData(img, 0, 0);
-  const screen = p => { const [dx, dz] = [p.x - me.x, p.z - me.z]; return [cx0 + (dx * cs + dz * sn) / M, cy0 + (-dx * sn + dz * cs) / M] };
-  ctx.strokeStyle = '#fe8a18'; ctx.lineWidth = 4; ctx.beginPath();
-  for (let k = 0; k <= 30; k++) { const [sx, sy] = screen(pointAt(Math.min(d + k * 10, pts.at(-1).d))); k ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy) }
-  ctx.stroke();
+  // The road ahead in orange, as far as it is known.
+  ctx.lineCap = ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let k = 0; k <= 60; k++) { const [sx, sy] = screen(pointAt(Math.min(d + k * 10, pts.at(-1).d))); k ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy) }
+  ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 7; ctx.stroke();
+  ctx.strokeStyle = '#fe8a18'; ctx.lineWidth = 4; ctx.stroke();
   for (const o of ride.state?.others ?? []) {
     if (!o.pos) continue;
     const [x, z] = T.toXZ(...o.pos), [sx, sy] = screen({ x, z });
-    ctx.fillStyle = o.color; ctx.fillRect(sx - 4, sy - 4, 8, 8);
+    ctx.fillStyle = o.color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   }
+  // Me: a yellow arrow pointing up (heading up).
   ctx.fillStyle = '#f2cd37'; ctx.strokeStyle = '#1b2a34'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(cx0, cy0 - 9); ctx.lineTo(cx0 + 7, cy0 + 7); ctx.lineTo(cx0 - 7, cy0 + 7); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx0, cy0 - 10); ctx.lineTo(cx0 + 8, cy0 + 8); ctx.lineTo(cx0, cy0 + 4); ctx.lineTo(cx0 - 8, cy0 + 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  // Rim, a compass N where north is, and the scale.
+  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(cx0, cy0, R - 2, 0, Math.PI * 2); ctx.stroke();
+  const na = -ang - Math.PI / 2, [nx, ny] = [cx0 + Math.cos(na) * (R - 12), cy0 + Math.sin(na) * (R - 12)];
+  ctx.fillStyle = '#c91a09'; ctx.beginPath(); ctx.arc(nx, ny, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = '700 12px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('N', nx, ny + 0.5);
+  ctx.fillStyle = 'rgba(17,21,28,.75)'; ctx.beginPath(); ctx.roundRect(cx0 - 27, H - 34, 54, 18, 9); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = '600 11px Fredoka, sans-serif'; ctx.fillText('200 m', cx0, H - 25);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx0 - 25, H - 40); ctx.lineTo(cx0 + 25, H - 40); ctx.stroke(); // 50 px = 200 m
 }
 
 function setPower(w) {
