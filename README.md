@@ -59,6 +59,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 <td><img src="docs/screenshots/pen.jpg" alt="In the start pen at Longchamp: the countdown before the group ride"><br><sub><b>Start pen.</b> Everyone waits on the line, then goes at once.</sub></td>
 </tr>
 <tr>
+<td><img src="docs/screenshots/duel.jpg" alt="Duel the record: the Alpe d'Huez record of 1997 at 100 %, 85 %, 70 % or at your FTP"><br><sub><b>Duel the record.</b> The fastest ascent as a ghost, scaled to a fair fight.</sub></td>
+<td><img src="docs/screenshots/rider-card.jpg" alt="Rider card: overall score, rider type and six ratings from your own power"><br><sub><b>Rider card.</b> Ratings from your own power, like a manager game.</sub></td>
+</tr>
+<tr>
 <td><img src="docs/screenshots/club.jpg" alt="Club page: tag, invite code, members ranked by kilometres this week"><br><sub><b>Clubs.</b> Your tag on the road, the week's kilometres, an invite code.</sub></td>
 <td><img src="docs/screenshots/fog.jpg" alt="Alpe d'Huez in thick fog"><br><sub><b>Fog.</b> Some spells you only see the next hairpin.</sub></td>
 </tr>
@@ -69,6 +73,8 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 - **Real climbs, in real relief.** Legendary climbs rebuilt from OpenStreetMap roads and IGN elevation data,
   validated against their official profiles: Alpe d'Huez, Mont Ventoux, Galibier, Tourmalet, Izoard,
   La Planche des Belles Filles. Pick them as souvenir fridge magnets.
+- **Duel the record.** On the Alpe d'Huez, the Ventoux and the Tourmalet, race the fastest ascent ever timed as a
+  ghost: its public time turned into even power on our road, at 100 % or scaled down to a fair fight at your FTP.
 - **Race your ghost.** Finish a climb and your best time rides with you next time, see-through, with the gap in
   seconds live and your record on the magnet.
 - **Free roam.** A procedural "Boucle du jour", the same for everyone today. Ride lap after lap, no finish line.
@@ -114,6 +120,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 - **Structured sessions** calibrated on your FTP: recovery, endurance, sweet spot, threshold, VO2max.
 - **Training plans.** Back on the bike (4 weeks), FTP +5 % (6 weeks), sportive prep (8 weeks): a calendar from the
   day you start, today's session one click away, sessions ticked off as you ride them.
+- **Rider card.** Ratings like Pro Cycling Manager's (climbing, time trial, punch, sprint, endurance, recovery)
+  computed from your own power records, longest ride and form, with your rider type and an overall score.
+- **Energy reserve.** A gauge of what is left above your FTP (W' balance, sized from your 1 and 5 min records):
+  it drains in an attack and refills as you ease off, so you know how many more you have in you.
 - **Form and power records.** Training stress (TSS) and normalized power for each ride, fitness, fatigue and
   freshness over 90 days, best 5 s, 1, 5 and 20 min efforts, and an FTP estimate you can apply in one click.
 - **Bring your own**: import Zwift workout files (.zwo), thousands are free online; they stay in your profile.

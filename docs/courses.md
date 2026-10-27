@@ -191,6 +191,40 @@ the east side up to the Moulin de Longchamp. Reference: 3.5 to 3.6 km, flat with
 Terrain 1848x2199 cells of 2 m. Decor: 13,014 pieces (6,465 broadleaf trees, 5,888 of them from the photo,
 20 pines, 4,589 rail sections, 1,871 hedge sections, 28 benches, 27 lamps, the mill); 11,459 IGN buildings.
 
+### Col de la Madeleine (from La Chambre, D213)
+
+```sh
+cargo run --release -- course "Col de la Madeleine (La Chambre)" -o courses/madeleine-la-chambre.json \
+  --road "D 213" \
+  45.359713,6.299329 45.434952,6.375522
+```
+
+Start = north end of the Grande Rue in La Chambre, where the D213 turns onto the Route de Saint-Martin and starts
+to climb (473 m). Starting in the town centre instead (45.356730,6.302000) adds 400 m of flat street: 19.68 km,
+first km 3.3 %. Finish = OSM saddle node of the col (1993 m). No via: the D213 stays inside the box, via
+Saint-Martin-sur-la-Chambre and Saint-François-Longchamp.
+Result: 19.27 km, 473 m to 1993 m, +1520 m (gain = net), avg 7.9 %, max 11.3 % over 100 m.
+Reference: 19.0-19.3 km, ~470-475 m to 1993 m, +1515 to 1522 m, 7.8-8.0 %, max 11-13.5 %. Per-km: 5.6 / 7.7 / 8.2 /
+9.4 / 8.7 / 7.9 / 7.2 / 9.7 / 8.0 / 7.6 / 9.1 / 6.3 / 7.8 / 8.4 / 7.9 / 7.8 / 7.1 / 8.0 / 8.0 %, the published shape:
+steep 2-4 km above La Chambre, ~10 % around km 7 and 10, a short ease after km 11, steady ~8 % to the top.
+
+## Climb records (duel)
+
+The page lets a rider duel the fastest ascent ever timed on a climb (`RECORDS` in web/index.html). Only public
+times, labelled by year, without the rider's name (French law protects a person's name and likeness). Each record
+is measured on the race's own stretch of road, which is not exactly ours: its time over that length and gain
+gives an even power (67 kg with the bike, the same air and rolling model as the server), and the ghost rides
+that power on our profile, grade by grade. A rider can scale it down (85 %, 70 %, or to their own FTP).
+
+| Climb | Year | Time | Measured on | Sources |
+|---|---|---|---|---|
+| Alpe d'Huez | 1997 | 37'35" | 14.5 km, ~+1130 m | official record for 31 years (Tour Magazin, Sticky Bottle); a 2026 time of 35'27" is reported but not confirmed here |
+| Mont Ventoux (Bédoin) | 2004 | 55'51" | 21.6 km, ~+1610 m | Critérium du Dauphiné time trial (Cyclingnews, Cycling Weekly) |
+| Col du Tourmalet (Sainte-Marie-de-Campan) | 2023 | 45'35" | ~17.1 km, ~+1258 m | Tour de France stage 6 (Cyclingnews); a later 43'12" is reported without a confirmed date |
+
+No record yet for the Galibier, the Izoard, La Planche des Belles Filles (its 2020 time-trial split is not
+published on its own) and the Madeleine: add one only with a time from a reliable source.
+
 ## Riding
 
 `le-mollet serve` loads every `courses/*.json`; the web UI lets the rider pick a profile, then a course.

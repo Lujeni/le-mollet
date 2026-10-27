@@ -80,6 +80,29 @@ h1 { font-size:32px; line-height:1.1 } h2 { font-size:21px }
 .who-card .avatar { width:54px; height:54px; font-size:26px; background:var(--c) }
 .who-card strong { font:700 19px var(--font); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .who-card small { color:var(--muted); font-size:12.5px }
+.rider-card { --c:#c91a09; display:grid; grid-template-columns:auto 1fr auto; gap:6px 14px; align-items:center; padding:16px; border-radius:20px; color:#fff;
+  background:linear-gradient(150deg, var(--c), color-mix(in srgb, var(--c) 45%, #11151c)); box-shadow:inset 0 -6px 0 rgba(0,0,0,.25), 0 10px 26px rgba(0,0,0,.25) }
+.rider-card .avatar { width:52px; height:52px; font-size:26px; background:rgba(255,255,255,.18) }
+.rider-card .who b { display:block; font:700 20px var(--font) } .rider-card .who small { opacity:.85 }
+.rider-card .ovr { display:grid; place-items:center; width:64px; height:64px; border-radius:16px; background:#f2cd37; color:#1b2a34; font:800 30px var(--font); box-shadow:inset 0 -4px 0 rgba(0,0,0,.2) }
+.rider-card .ovr small { display:block; font:700 9px var(--font); letter-spacing:1px; margin-top:-6px }
+.rider-card .rates { grid-column:1 / -1; display:grid; grid-template-columns:1fr 1fr; gap:6px 18px; margin-top:6px }
+.rider-card .rate { display:grid; grid-template-columns:1fr auto; gap:2px 8px; font-size:12.5px; font-weight:600 }
+.rider-card .rate b { font:700 15px var(--font) }
+.rider-card .rate i { grid-column:1 / -1; height:6px; border-radius:3px; background:rgba(0,0,0,.25); overflow:hidden }
+.rider-card .rate i::after { content:''; display:block; height:100%; width:var(--w); background:#f2cd37; border-radius:3px }
+.rider-card .note { grid-column:1 / -1; font-size:11.5px; opacity:.8; margin:4px 0 0 }
+.rider-card-box { margin:14px 0 }
+.stat.energy b { color:var(--e) }
+.stat.energy::after { content:''; display:block; height:5px; margin-top:4px; border-radius:3px; background:linear-gradient(90deg, var(--e) var(--pct), rgba(255,255,255,.15) var(--pct)) }
+.magnet-wrap { position:relative }
+.duel { position:absolute; right:-6px; top:-10px; z-index:2; padding:5px 9px; border:0; border-radius:10px; background:#f2cd37; color:#1b2a34; font:700 12px var(--font); cursor:pointer; transform:rotate(6deg); box-shadow:0 4px 0 rgba(0,0,0,.25) }
+.duel:hover { transform:rotate(0) scale(1.06) }
+.duel-dialog { max-width:520px; border:0; color:var(--ink) }
+.duel-dialog::backdrop { background:rgba(0,0,0,.5) }
+.duel-levels { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:14px 0 }
+.duel-levels button { display:flex; flex-direction:column; align-items:flex-start; gap:2px; padding:10px 12px; text-align:left }
+.duel-levels small { font-weight:500; opacity:.8 }
 .who-stats { display:flex; flex-wrap:wrap; align-items:center; gap:4px }
 .who-card .del { position:absolute; top:8px; right:8px; opacity:0; transition:opacity .15s }
 .who-card:hover .del, .who-card:focus-within .del { opacity:.8 }
@@ -629,6 +652,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         </div>
       </form>
       <p class="ident" id="profileIdent"></p>
+      <section class="rider-card-box" id="profileCard"></section>
       <section class="account" id="account">
         <h2>Compte</h2>
         <p class="muted" id="accountState"></p>
@@ -697,6 +721,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
           <div class="form-kpis" id="formKpis"></div><canvas id="histForm" aria-label="Forme, fatigue et charge des 90 derniers jours"></canvas></section>
         <section><h2>Records de puissance</h2><div class="records" id="powerRecords"></div></section>
       </div>
+      <section class="rider-card-box" id="histCard"></section>
       <section class="hist-badges"><h2 id="histBadgesTitle">Badges</h2><div class="badge-wall" id="histBadges"></div></section>
       <div class="seg hist-filters" id="histFilters"></div>
       <div class="hist-body">
@@ -757,6 +782,12 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     </div>
   </main>
 
+  <dialog id="duelDialog" class="block panel duel-dialog" aria-labelledby="duelTitle">
+    <h2 id="duelTitle"></h2>
+    <p id="duelText"></p>
+    <div class="duel-levels" id="duelLevels"></div>
+    <button class="btn" id="duelClose">Annuler</button>
+  </dialog>
   <main id="eventsScreen" hidden>
     <div class="block panel">
       <div class="ride-head">
@@ -1439,6 +1470,7 @@ function showProfileEdit() {
   const f = $('#editProfile').elements;
   [f.name.value, f.weight.value, f.ftp.value, f.country.value] = [current.name, current.weightKg, current.ftp, current.country ?? ''];
   const since = new Date(current.createdAt).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+  $('#profileCard').replaceChildren(riderCardEl());
   $('#profileIdent').replaceChildren('Identifiant unique : ', h('code', {}, current.id), h('br'), `Créé le ${since}. Le nom est libre et peut être partagé, l'identifiant ne change jamais.`);
 }
 
@@ -1765,6 +1797,7 @@ function showCourses() {
   $('#courseList').replaceChildren(...ride.list.courses.map((c, i) => {
     const theme = MAGNET_THEMES[i % MAGNET_THEMES.length], cv = h('canvas', { 'aria-hidden':'true' });
     const avg = ((c.profile.at(-1) - c.profile[0]) / c.length * 100).toFixed(1);
+    const rec = RECORDS[c.id];
     const card = h('button', {
         class:'magnet', style:`--r:${((hash(i, 7, 3) - 0.5) * 9).toFixed(1)}deg`,
         'aria-label':`${c.name}, ${(c.length / 1000).toFixed(1)} km, ${avg} % de moyenne`,
@@ -1775,7 +1808,7 @@ function showCourses() {
       h('span', { class:'ribbon', style:`background:${theme.ribbon}` }, c.name,
         h('small', {}, `${(c.length / 1000).toFixed(1)} km · +${c.gain} m · ${avg} %${current?.ghosts?.[c.id] ? ` · record ${hms(current.ghosts[c.id].elapsed)}` : ''}`)));
     requestAnimationFrame(() => magnetArt(cv, c.profile, theme));
-    return card;
+    return rec ? h('div', { class:'magnet-wrap' }, card, h('button', { class:'duel', title:`Défier le record de ${rec.year} (${chrono(rec.time)})`, onclick: () => showDuel(c) }, `⚔ Record ${rec.year}`)) : card;
   }));
 }
 
@@ -1902,6 +1935,7 @@ function drawSteps(cv, steps, t, pad = { l:0, r:0, t:2, b:0 }) {
 function openWorkout(w) {
   ride.ended = false;
   ride.samples = [];
+  ride.energy = null; // full reserve at the start
   ride.full = []; // one sample a second, for the FIT export
   ride.windows = [];
   amb.ctx ??= new AudioContext();
@@ -1927,6 +1961,7 @@ function openWorkout(w) {
   ride.events = new EventSource(`/events?${which}&ftp=${current.ftp}&mass=${current.weightKg + 8}&session=${ride.session}`);
   ride.events.onmessage = e => {
     ride.state = JSON.parse(e.data);
+    trackEnergy();
     recordSample();
     recordFull();
     if (ride.auto && ride.state.workout?.target > 0 && Math.round(ride.state.workout.target) !== +$('#watts').value) setPower(ride.state.workout.target);
@@ -1961,6 +1996,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
   const zombie = kind === 'zombie';
   ride.ended = false;
   ride.samples = [];
+  ride.energy = null; // full reserve at the start
   ride.full = []; // one sample a second, for the FIT export
   ride.windows = [];
   ride.routed = false;
@@ -2000,7 +2036,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -2186,11 +2222,20 @@ function renderStats() {
   const t = Math.floor(s.elapsed), hms = `${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
   // key: what the rider can hide from the HUD (⚙)
   const stat = (key, label, value, unit) => hud().hide.includes(key) ? '' : h('div', { class:'stat', 'data-key':key }, h('small', {}, label), h('b', {}, value), h('i', {}, unit));
+  // Energy reserve: green, then yellow, red when an attack would blow you up.
+  const energy = () => {
+    const e = ride.energy;
+    if (!e || hud().hide.includes('energy')) return '';
+    const pct = Math.round(e.bal / e.w * 100), color = pct > 60 ? '#5bd36a' : pct > 25 ? '#f2cd37' : '#ff5a4a';
+    return h('div', { class:'stat energy', 'data-key':'energy', style:`--pct:${pct}%;--e:${color}`, title:`Réserve au-dessus de ta FTP : ${(e.bal / 1000).toFixed(1)} / ${(e.w / 1000).toFixed(1)} kJ` },
+      h('small', {}, 'Réserve'), h('b', {}, pct), h('i', {}, `% · ${Math.round(e.bal / (0.2 * current.ftp))} s à 120 %`));
+  };
   if (ride.mode === 'workout') {
     const w = s.workout ?? { target:0, step_left:ride.workout.steps[0].secs, done:false };
     const total = ride.workout.steps.reduce((a, st) => a + st.secs, 0);
     $('#stats').replaceChildren(
       stat('power', 'Puissance', Math.round(s.power), 'W'),
+      energy(),
       ride.workout.steps[w.step ?? 0]?.from < 0 ? stat('target', 'Cible', ride.workout.id === 'test-ftp' ? 'À fond !' : 'Libre', '') : stat('target', 'Cible', Math.round(w.target), 'W'),
       ...(s.hr ? [stat('hr', 'Cardio', Math.round(s.hr), 'bpm')] : []), ...(s.cadence != null ? [stat('cadence', 'Cadence', Math.round(s.cadence), 'rpm')] : []),
       stat('interval', 'Intervalle', mmss(w.step_left), ''),
@@ -2222,6 +2267,7 @@ function renderStats() {
   const total = ride.course.points.at(-1).d;
   $('#stats').replaceChildren(
     stat('power', 'Puissance', Math.round(s.power), 'W'),
+    energy(),
     ...(s.hr ? [stat('hr', 'Cardio', Math.round(s.hr), 'bpm')] : []), ...(s.cadence != null ? [stat('cadence', 'Cadence', Math.round(s.cadence), 'rpm')] : []),
     stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
     stat('grade', 'Pente', s.grade.toFixed(1), '%'),
@@ -2248,10 +2294,10 @@ const HUD_PRESETS = {
 };
 const HUD_WIDGETS = { stats:'Chiffres', controls:'Commandes', power:'Puissance (démo)', map:'Profil / carte', mirror:'Rétro (zombies)' };
 const STAT_KEYS = {
-  workout:['power', 'target', 'hr', 'cadence', 'interval', 'session', 'speed', 'distance'], zombie:['power', 'speed', 'gap', 'wave', 'time', 'sprints'],
-  ride:['power', 'hr', 'cadence', 'speed', 'grade', 'draft', 'distance', 'ele', 'time', 'ghost'],
+  workout:['power', 'energy', 'target', 'hr', 'cadence', 'interval', 'session', 'speed', 'distance'], zombie:['power', 'speed', 'gap', 'wave', 'time', 'sprints'],
+  ride:['power', 'energy', 'hr', 'cadence', 'speed', 'grade', 'draft', 'distance', 'ele', 'time', 'ghost'],
 };
-const STAT_NAMES = { power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints', ghost:'Fantôme', hr:'Cardio', cadence:'Cadence', draft:'Aspiration' };
+const STAT_NAMES = { power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints', ghost:'Fantôme', hr:'Cardio', cadence:'Cadence', draft:'Aspiration', energy:'Réserve' };
 const defaultHud = () => structuredClone(HUD_PRESETS[innerWidth <= 700 ? 'phone' : 'cockpit']);
 const hud = () => current?.hud ?? defaultHud();
 
@@ -2329,6 +2375,8 @@ function startGhost(id) {
   ride.trace = { pts:[], jumped:false };
   ride.ghostResult = null;
   ride.ghost = climb() ? current.ghosts?.[id] ?? null : null;
+  if (climb() && ride.duel && RECORDS[id]) ride.ghost = legendGhost(id, ride.duel.pct); // a duel: the record rides instead
+  ride.duel = null;
 }
 function recordGhost() {
   const s = ride.state, T = ride.trace;
@@ -2364,7 +2412,8 @@ function keepGhost(r) {
 function ghostModel() {
   const g = new THREE.Group(), bike = riderModel(current.bike, current.rider);
   bike.traverse(o => { if (o.isMesh) o.material = Object.assign(o.material.clone(), { transparent:true, opacity:0.35, depthWrite:false }) });
-  g.add(bike, nameTag(`Record ${hms(ride.ghost.elapsed)}`));
+  const L = ride.ghost.legend;
+  g.add(bike, nameTag(L ? `Record ${L.year}${L.pct < 100 ? ` · ${L.pct} %` : ''}` : `Record ${hms(ride.ghost.elapsed)}`));
   g.userData.bike = bike;
   return g;
 }
@@ -4453,6 +4502,7 @@ function renderHistoryPage() {
     kpi(Object.keys(current.ghosts ?? {}).length, 'fantômes'));
   renderRecords(all);
   renderPower(all);
+  $('#histCard').replaceChildren(riderCardEl());
   renderBadges();
   requestAnimationFrame(() => drawForm($('#histForm'), formSeries(all)));
   requestAnimationFrame(() => drawWeeks($('#histWeeks'), all));
@@ -5102,6 +5152,94 @@ function recordsLine() {
   $('#menuStats').append(h('div', { class:'award' }, ...ride.newRecords.map(([label, w]) => h('div', { class:'badge-won' }, h('span', {}, '⚡'), h('b', {}, `Record ${label} : ${w} W`), h('small', {}, `${(w / current.weightKg).toFixed(1)} W/kg`)))));
 }
 
+// ---------- rider card: ratings like Pro Cycling Manager's, from the rider's own power and rides ----------
+// Each rating maps a real figure onto 50 (a beginner) to 85 (a strong amateur), clamped to 40..85.
+const rating = (v, lo, hi) => Math.round(Math.max(40, Math.min(85, 50 + (v - lo) / (hi - lo) * 35)));
+const RATINGS = [['climb', 'Montagne'], ['tt', 'Contre-la-montre'], ['punch', 'Puncheur'], ['sprint', 'Sprint'], ['endurance', 'Endurance'], ['recovery', 'Récupération']];
+const RIDER_TYPES = { climb:'Grimpeur', tt:'Rouleur', punch:'Puncheur', sprint:'Sprinteur', endurance:'Baroudeur', recovery:'Régulier' };
+function riderCard(p = current) {
+  const all = p.history ?? [], best = allBests(all), kg = p.weightKg, w = d => best[d]?.w;
+  const longest = Math.max(0, ...all.map(r => r.elapsed / 3600)), fitness = formSeries(all).at(-1)?.ctl ?? 0;
+  // Without a record yet, a figure is estimated from the FTP (typical ratios).
+  const r = {
+    climb: rating((w(1200) ?? p.ftp * 1.05) / kg, 2.5, 6),     // 20 min, per kilo
+    tt: rating(w(1200) ?? p.ftp * 1.05, 200, 450),              // 20 min, absolute watts
+    punch: rating((w(60) ?? p.ftp * 1.6) / kg, 5, 11),           // 1 min, per kilo
+    sprint: rating((w(5) ?? p.ftp * 2.6) / kg, 10, 20),          // 5 s, per kilo
+    endurance: rating(longest, 1, 5),                            // the longest ride, hours
+    recovery: rating(fitness, 20, 100),                          // fitness (42-day load)
+  };
+  const estimated = [1200, 60, 5].filter(d => !w(d)).length;
+  const type = Object.entries(r).filter(([k]) => k !== 'recovery').sort((a, b) => b[1] - a[1])[0][0];
+  return { r, type, overall:Math.round(Object.values(r).reduce((a, v) => a + v, 0) / 6), estimated };
+}
+function riderCardEl(p = current) {
+  const c = riderCard(p);
+  return h('div', { class:'rider-card', style:`--c:${p.rider?.jersey ?? p.bike.frame}` },
+    h('span', { class:'avatar' }, p.name[0].toUpperCase()),
+    h('span', { class:'who' }, h('b', {}, `${p.name}${p.country ? ` ${flag(p.country)}` : ''}`), h('small', {}, `${RIDER_TYPES[c.type]} · ${(p.ftp / p.weightKg).toFixed(1)} W/kg · catégorie ${CAT_OF(p.ftp / p.weightKg)}`)),
+    h('span', { class:'ovr' }, h('span', {}, c.overall, h('small', {}, 'GÉNÉRAL'))),
+    h('div', { class:'rates' }, ...RATINGS.map(([k, label]) => h('div', { class:'rate' }, h('span', {}, label), h('b', {}, c.r[k]), h('i', { style:`--w:${(c.r[k] - 40) / 45 * 100}%` })))),
+    h('p', { class:'note' }, c.estimated ? 'Certaines notes sont estimées depuis ta FTP : elles deviennent réelles avec tes records (5 s, 1 min, 20 min).' : 'Calculé sur tes records de puissance, ta plus longue sortie et ta forme.'));
+}
+
+// ---------- energy reserve: W' balance (Skiba). Above the FTP it drains; below, it refills toward full, faster
+// the easier you ride. The reserve's size comes from the 1 and 5 min records (critical power model).
+function wPrime(p = current) {
+  const b = allBests(p.history ?? []), [p1, p5] = [b[60]?.w, b[300]?.w];
+  const w = p1 && p5 && p1 > p5 ? (p1 - p5) / (1 / 60 - 1 / 300) : 20000;
+  return Math.max(8000, Math.min(35000, w)); // 8 to 35 kJ: a typical 20 kJ without records
+}
+function trackEnergy() {
+  const s = ride.state;
+  if (!s) return;
+  const e = ride.energy ??= { w:wPrime(), bal:null, t:s.elapsed };
+  e.bal ??= e.w;
+  const dt = Math.max(0, Math.min(5, s.elapsed - e.t)), cp = current.ftp;
+  e.t = s.elapsed;
+  e.bal = s.power > cp ? e.bal - (s.power - cp) * dt : e.bal + (e.w - e.bal) * (cp - s.power) / e.w * dt;
+  e.bal = Math.max(0, Math.min(e.w, e.bal));
+}
+
+// ---------- duel against a climb's record: its public time, ridden at even power on our road ----------
+// Times of the fastest ascents, measured on the race's own stretch (sources in docs/courses.md). No names: the
+// record of a year. The even power that rides that stretch in that time (67 kg with the bike), then the same
+// power on our profile, grade by grade.
+const RECORDS = {
+  'alpe-dhuez': { year:1997, time:37 * 60 + 35, km:14.5, gain:1130 },
+  'ventoux-bedoin': { year:2004, time:55 * 60 + 51, km:21.6, gain:1610 },
+  'tourmalet-sainte-marie': { year:2023, time:45 * 60 + 35, km:17.1, gain:1258 },
+};
+const LEGEND_KG = 67;
+const chrono = t => `${Math.floor(t / 60)}'${String(t % 60).padStart(2, '0')}"`; // 37'35", the way climb records are written
+const rhoAt = alt => 1.225 * (1 - 2.25577e-5 * alt) ** 4.2559;
+const powerFor = (v, grade, alt, kg) => { const th = Math.atan(grade); return (kg * 9.81 * (Math.sin(th) + 0.004 * Math.cos(th)) + 0.5 * rhoAt(alt) * 0.32 * v * v) * v / 0.976 };
+const speedFor = (P, grade, alt, kg) => { let [lo, hi] = [0.2, 30]; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; powerFor(m, grade, alt, kg) > P ? hi = m : lo = m } return (lo + hi) / 2 };
+const legendPower = rec => powerFor(rec.km * 1000 / rec.time, rec.gain / (rec.km * 1000), 1200, LEGEND_KG);
+function legendGhost(id, pct) {
+  const rec = RECORDS[id], P = legendPower(rec) * pct / 100, pts = ride.course.points, L = pts.at(-1).d, trace = [[0, 0]];
+  let [t, d, i] = [0, 0, 0];
+  while (d < L && t < 6 * 3600) {
+    while (i < pts.length - 2 && pts[i + 1].d <= d) i++;
+    const grade = (pts[i + 1].ele - pts[i].ele) / ((pts[i + 1].d - pts[i].d) || 1);
+    [t, d] = [t + 2, Math.min(L, d + speedFor(P, grade, pts[i].ele, LEGEND_KG) * 2)];
+    trace.push([t, Math.round(d)]);
+  }
+  return { elapsed:t, trace, legend:{ ...rec, pct, watts:Math.round(P) } };
+}
+function showDuel(c) {
+  const rec = RECORDS[c.id], wkg = legendPower(rec) / (LEGEND_KG - 7), mine = current.ftp / current.weightKg;
+  const fair = Math.max(30, Math.min(100, Math.round(mine / wkg * 100 / 5) * 5)); // the record at your FTP
+  $('#duelTitle').textContent = `⚔ ${c.name} : le record de ${rec.year}`;
+  $('#duelText').textContent = `${chrono(rec.time)} sur ${rec.km.toString().replace('.', ',')} km, soit environ ${wkg.toFixed(1).replace('.', ',')} W/kg pendant toute la montée. Toi : ${mine.toFixed(1).replace('.', ',')} W/kg à ta FTP. Le record roule devant toi en fantôme, à la puissance choisie.`;
+  const go = pct => { $('#duelDialog').close(); ride.duel = { pct }; openRide(c.id, c.terrain) };
+  $('#duelLevels').replaceChildren(...[[fair, 'À ta mesure', 'Le record à ta FTP : duel serré'], [100, 'Le vrai record', 'Bon courage'], [85, 'Record à 85 %', 'Très costaud'], [70, 'Record à 70 %', 'Un bon défi']]
+    .filter(([p], k, a) => a.findIndex(([q]) => q === p) === k)
+    .map(([p, label, sub]) => h('button', { class:'btn' + (p === fair ? ' primary' : ''), onclick: () => go(p) }, h('b', {}, `${label} · ${p} %`), h('small', {}, sub))));
+  $('#duelDialog').showModal();
+}
+$('#duelClose').addEventListener('click', () => $('#duelDialog').close());
+
 // ---------- training plans: weeks of sessions on set days, counted from the day the plan starts ----------
 // A session is a built-in workout (w) or a free ride of `ride` minutes, on day `d` (0 to 6) of its week.
 const wk = (d, w) => ({ d, w }), free = (d, min) => ({ d, ride:min });
@@ -5510,6 +5648,7 @@ function summary(s = ride.state ?? {}) {
     date: new Date().toISOString(),
     kind: ride.mode,
     ...(ride.mode === 'workout' && { workoutId:ride.workout.id }),
+    ...(ride.ghost?.legend && { duel:{ year:ride.ghost.legend.year, pct:ride.ghost.legend.pct, record:ride.ghost.elapsed } }),
     ...(ride.lastEvent && { event:{ id:ride.lastEvent.id, kind:ride.lastEvent.kind, finish:ride.lastEvent.finish ?? null } }),
     name: ride.lastEvent ? `${ride.lastEvent.kind === 'race' ? 'Course' : 'Sortie de groupe'} · ${ride.lastEvent.name}${ride.lastEvent.finish ? ` · ${ride.lastEvent.finish[0]}e` : ''}`
       : ride.mode === 'workout' ? ride.workout.name
@@ -5579,6 +5718,15 @@ function openMenu(mode) {
 // The race against the ghost, under the summary: at the finish, and once saved.
 function ghostLine(mode, r) {
   if (!climb() || !r.completed) return;
+  const L = ride.ghost?.legend;
+  if (L) { // a duel: against the record, then (once saved) the rider's own best as usual
+    const d = r.elapsed - ride.ghost.elapsed, who = `le record ${L.year}${L.pct < 100 ? ` à ${L.pct} %` : ''}`;
+    $('#menuStats').append(h('div', { class:'finish' }, d < 0 ? `Tu bats ${who} de ${hms(-d)} !` : `${who[0].toUpperCase() + who.slice(1)} t'a mis ${hms(d)}. Revanche ?`));
+    if (mode !== 'saved' || !ride.ghostResult) return;
+    const res = ride.ghostResult;
+    if (res.record) $('#menuStats').append(h('div', { class:'finish' }, 'Et nouveau record perso : ton fantôme roulera avec ce chrono.'));
+    return;
+  }
   const best = ride.ghost?.elapsed, res = mode === 'saved' ? ride.ghostResult : null;
   const text = res?.record ? 'Nouveau record : ton fantôme roulera avec ce chrono.'
     : res && !res.record ? (ride.trace?.jumped ? '' : `${signed(res.diff)} s sur ton record.`)
