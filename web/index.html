@@ -76,21 +76,36 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:-3px
 .sw { aspect-ratio:1; border:3px solid var(--line); cursor:pointer; box-shadow:inset -3px -3px 0 rgba(0,0,0,.3), inset 3px 3px 0 rgba(255,255,255,.25) }
 .sw.on { outline:3px solid var(--ink); outline-offset:1px }
 
-#ride { flex:1; display:flex; flex-direction:column; justify-content:space-between; gap:12px; padding:0 16px 16px; min-height:0 }
-.stats { display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; padding:14px 20px }
+#ride { flex:1; position:relative; margin:0 16px 16px; min-height:0 }
+/* HUD widgets float over the 3D; placeHud sets left/top from the rider's layout (fractions of the free space). */
+.hud { position:absolute; left:0; top:0; transform-origin:top left }
+.hud.panel { background:color-mix(in srgb, var(--panel) calc(var(--hud-alpha, .9) * 100%), transparent) }
+.hud.off, #ride.bare .hud { display:none }
+#ride.editing .hud { outline:3px dashed var(--accent); outline-offset:2px; cursor:grab; touch-action:none }
+#ride.editing .hud * { pointer-events:none }
+.hud-edit { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:min(380px, 100%); max-height:100%; overflow:auto; display:flex; flex-direction:column; gap:12px; z-index:2 }
+.hud-edit .muted { margin:0 }
+.checks { display:flex; flex-wrap:wrap; gap:6px 14px }
+.checks label { flex-direction:row; align-items:center; gap:6px; font-size:13px; color:var(--ink) }
+.checks input { width:auto }
+.stats { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(88px, max-content); gap:12px; padding:14px 20px }
+.stats.col .finish { grid-row:auto }
+.stats.col { grid-auto-flow:row; grid-auto-columns:auto; grid-template-columns:150px; gap:6px }
+.ctrl { display:flex; flex-direction:column; gap:8px; padding:12px 16px; width:min(380px, calc(100vw - 32px)) }
+.map { padding:10px; width:min(520px, calc(100vw - 32px)) }
+.hud.demo { padding:10px 14px; width:min(460px, calc(100vw - 32px)) }
 .stat small { display:block; font-family:Silkscreen, monospace; font-size:11px; color:var(--muted) }
 .stat b { font-family:Silkscreen, monospace; font-size:26px; font-weight:700 }
-.stat i { font-style:normal; font-size:12px; color:var(--muted); margin-left:4px }
-.finish { grid-column:1 / -1; font-family:Silkscreen, monospace; font-size:20px; color:var(--accent); text-align:center }
-.profile { display:flex; flex-direction:column; gap:8px; padding:14px 20px }
+.stat i { white-space:nowrap; font-style:normal; font-size:12px; color:var(--muted); margin-left:4px }
+.finish { grid-column:1 / -1; grid-row:2; max-width:min(700px, 90vw); font-family:Silkscreen, monospace; font-size:20px; color:var(--accent); text-align:center }
 .ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px }
 .ride-head h2 { margin:0 }
 #profileCanvas { width:100%; height:160px; display:block }
 #profileCanvas.seekable { cursor:pointer }
 #ride.world3d #profileCanvas { height:90px }
-.attrib { color:var(--muted); font-size:11px }
+.attrib { position:absolute; left:0; right:0; bottom:-14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#eef1f5; font-size:10px; text-shadow:1px 1px 0 #0b0d10; pointer-events:auto }
 #rideBtn { align-self:stretch }
-#mirror { align-self:flex-end; margin-bottom:auto; width:min(260px, 45vw); aspect-ratio:1.8; border:3px solid var(--line); outline:2px solid #fe8a18; position:relative }
+#mirror { width:min(260px, 45vw); aspect-ratio:1.8; border:3px solid var(--line); outline:2px solid #fe8a18; position:relative }
 #mirror small { position:absolute; left:4px; top:2px; font-family:Silkscreen, monospace; font-size:10px; color:#fe8a18 }
 #courses { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
 #courses .panel { width:min(560px, 100%); max-height:100%; overflow:auto }
@@ -187,10 +202,9 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   .history-row { flex-direction:column; gap:2px }
   .tile { min-height:0; flex-direction:row; align-items:center }
   .magnet { width:100%; max-width:300px }
-  .stats { grid-template-columns:repeat(3, 1fr); padding:12px 16px }
   .stat b { font-size:20px }
-  #ride { padding:0 0 0 }
-  #profileCanvas { height:120px }
+  #ride { margin:0 8px 16px }
+  .stats { gap:8px; padding:10px 12px }
   header { font-size:18px; padding:12px 16px }
   #garage { flex-direction:column; justify-content:flex-end; padding:0 }
   .garage-nav { flex-direction:row; align-self:stretch; margin:0; padding:8px 16px }
@@ -349,27 +363,40 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   </main>
 
   <main id="ride" hidden>
-    <div class="block panel stats" id="stats"></div>
-    <div id="mirror" hidden aria-hidden="true"><small>Rétro</small></div>
-    <div class="block panel profile">
+    <!-- HUD widgets: each one placed by the rider (⚙), see placeHud -->
+    <div class="block panel stats hud" id="stats" data-w="stats"></div>
+    <div class="block panel hud ctrl" data-w="controls">
       <div class="ride-head">
         <h2 id="courseName"></h2>
         <span>
+          <button class="btn" id="hudBtn" aria-label="Personnaliser l'affichage" title="Personnaliser l'affichage">⚙</button>
           <button class="btn" id="night" aria-label="Rouler de jour ou de nuit" hidden></button>
           <button class="btn" id="mute" aria-label="Couper ou remettre le son"></button>
           <button class="btn" id="leave">‹ Circuits</button>
         </span>
       </div>
-      <div class="demo" id="demo" hidden>
-        <button class="btn" data-dw="-25" aria-label="Moins 25 watts">−</button>
-        <input type="range" id="watts" min="0" max="2000" step="5" aria-label="Puissance en watts">
-        <button class="btn" data-dw="25" aria-label="Plus 25 watts">+</button>
-        <output id="wattsOut" for="watts"></output>
-        <button class="btn" id="autoBtn" hidden aria-pressed="false" title="La puissance suit la cible de la séance">Auto</button>
-      </div>
       <div class="junction" id="junction" hidden aria-live="polite"></div>
-      <canvas id="profileCanvas"></canvas>
-      <small class="attrib" id="attrib"></small>
+    </div>
+    <div class="block panel hud demo" id="demo" data-w="power" hidden>
+      <button class="btn" data-dw="-25" aria-label="Moins 25 watts">−</button>
+      <input type="range" id="watts" min="0" max="2000" step="5" aria-label="Puissance en watts">
+      <button class="btn" data-dw="25" aria-label="Plus 25 watts">+</button>
+      <output id="wattsOut" for="watts"></output>
+      <button class="btn" id="autoBtn" hidden aria-pressed="false" title="La puissance suit la cible de la séance">Auto</button>
+    </div>
+    <div class="block panel hud map" data-w="map"><canvas id="profileCanvas"></canvas></div>
+    <div id="mirror" class="hud" data-w="mirror" hidden aria-hidden="true"><small>Rétro</small></div>
+    <small class="attrib" id="attrib"></small>
+    <div class="block panel hud-edit" id="hudEdit" hidden role="dialog" aria-labelledby="hudEditTitle">
+      <h2 id="hudEditTitle">Ton affichage</h2>
+      <p class="muted">Glisse les panneaux où tu veux. Touche H pour tout masquer en roulant.</p>
+      <div class="seg" id="hudPresets"></div>
+      <fieldset class="opt"><legend>Panneaux</legend><div class="checks" id="hudWidgets"></div></fieldset>
+      <fieldset class="opt"><legend>Chiffres</legend><div class="checks" id="hudStats"></div>
+        <div class="seg" id="hudDir"><button data-col="0">En ligne</button><button data-col="1">En colonne</button></div></fieldset>
+      <label>Taille<input type="range" id="hudScale" min="0.6" max="1.4" step="0.05"></label>
+      <label>Opacité des panneaux<input type="range" id="hudAlpha" min="0.15" max="1" step="0.05"></label>
+      <div class="menu-actions"><button class="btn" id="hudReset">Réinitialiser</button><button class="btn primary" id="hudDone">Terminé</button></div>
     </div>
   </main>
   <div class="modal" id="menu" hidden role="dialog" aria-modal="true" aria-labelledby="menuTitle">
@@ -897,11 +924,8 @@ function resize() {
   // Center the bike between the left menu and the options panel (stacked at the bottom on narrow screens).
   if (side && narrow) camera.zoom *= 0.6; // only the strip above the bottom sheet is left for the bike
   if (side) camera.setViewOffset(W, H, narrow ? 0 : (side.width - nav.width) / 2, narrow ? (side.height + nav.height) / 2 : 0, W, H);
-  else if (!$('#ride').hidden) {
-    const [top, bottom] = [$('#stats'), $('.profile')].map(e => e.getBoundingClientRect().height);
-    camera.setViewOffset(W, H, 0, (bottom - top) / 2, W, H);
-  } else camera.clearViewOffset();
-  if (!$('#ride').hidden && ride.course) drawProfile();
+  else camera.clearViewOffset(); // the ride HUD floats over the 3D: nothing to center around
+  placeHud();
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
@@ -940,6 +964,8 @@ function h(tag, props = {}, ...kids) {
 const SCREENS = ['#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#courses', '#free', '#training', '#ride'];
 function show(id) {
   if (id !== '#ride') {
+    $('#ride').classList.remove('editing', 'bare');
+    $('#hudEdit').hidden = true;
     exit3d();
     ride.events?.close();
     stopAmbience();
@@ -1536,19 +1562,21 @@ function zombieNews() {
 }
 
 function renderStats() {
+  queueMicrotask(placeHud); // stats change size: keep every widget where the rider put it
   const s = ride.state ?? { power:0, speed_kmh:0, grade:0, distance:0, ele:ride.course?.points[0].ele ?? 0, elapsed:0 };
   const t = Math.floor(s.elapsed), hms = `${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
-  const stat = (label, value, unit) => h('div', { class:'stat' }, h('small', {}, label), h('b', {}, value), h('i', {}, unit));
+  // key: what the rider can hide from the HUD (⚙)
+  const stat = (key, label, value, unit) => hud().hide.includes(key) ? '' : h('div', { class:'stat', 'data-key':key }, h('small', {}, label), h('b', {}, value), h('i', {}, unit));
   if (ride.mode === 'workout') {
     const w = s.workout ?? { target:0, step_left:ride.workout.steps[0].secs, done:false };
     const total = ride.workout.steps.reduce((a, st) => a + st.secs, 0);
     $('#stats').replaceChildren(
-      stat('Puissance', Math.round(s.power), 'W'),
-      stat('Cible', Math.round(w.target), 'W'),
-      stat('Intervalle', mmss(w.step_left), ''),
-      stat('Séance', mmss(Math.min(s.elapsed, total)), `/ ${mmss(total)}`),
-      stat('Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
-      stat('Distance', (s.distance / 1000).toFixed(2), 'km'),
+      stat('power', 'Puissance', Math.round(s.power), 'W'),
+      stat('target', 'Cible', Math.round(w.target), 'W'),
+      stat('interval', 'Intervalle', mmss(w.step_left), ''),
+      stat('session', 'Séance', mmss(Math.min(s.elapsed, total)), `/ ${mmss(total)}`),
+      stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
+      stat('distance', 'Distance', (s.distance / 1000).toFixed(2), 'km'),
       ...(w.done ? [h('div', { class:'finish' }, 'Séance terminée, bravo !')] : s.elapsed === 0 ? [h('div', { class:'finish' }, 'Pédale pour lancer la séance')] : []),
     );
     return;
@@ -1561,31 +1589,112 @@ function renderStats() {
       : s.elapsed === 0 ? 'Pédale, la horde arrive !'
       : `Prochain sprint dans ${Math.max(0, Math.ceil(z.next_sprint - s.elapsed))} s`;
     $('#stats').replaceChildren(
-      stat('Puissance', Math.round(s.power), 'W'),
-      stat('Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
-      stat('Horde', Math.round(z.gap), `m${z.shield ? ' 🛡' : ''}${z.boost_left > 0 ? ' ⚡' : ''}`),
-      stat(`Vague ${z.wave}`, Math.round(z.horde_kmh), 'km/h'),
-      stat('Survie', hms, ''),
-      stat('Sprints', z.sprints_won, `/ ${z.sprints}`),
+      stat('power', 'Puissance', Math.round(s.power), 'W'),
+      stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
+      stat('gap', 'Horde', Math.round(z.gap), `m${z.shield ? ' 🛡' : ''}${z.boost_left > 0 ? ' ⚡' : ''}`),
+      stat('wave', `Vague ${z.wave}`, Math.round(z.horde_kmh), 'km/h'),
+      stat('time', 'Survie', hms, ''),
+      stat('sprints', 'Sprints', z.sprints_won, `/ ${z.sprints}`),
       h('div', { class:`finish zombie-hud${z.sprint ? ' sprint' : ''}`, 'aria-live':'polite' }, line),
     );
     return;
   }
   const total = ride.course.points.at(-1).d;
   $('#stats').replaceChildren(
-    stat('Puissance', Math.round(s.power), 'W'),
-    stat('Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
-    stat('Pente', s.grade.toFixed(1), '%'),
+    stat('power', 'Puissance', Math.round(s.power), 'W'),
+    stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
+    stat('grade', 'Pente', s.grade.toFixed(1), '%'),
     ride.mode === 'city'
-      ? stat('Distance', (s.ridden / 1000).toFixed(2), 'km')
+      ? stat('distance', 'Distance', (s.ridden / 1000).toFixed(2), 'km')
       :     ride.course.looped
-      ? stat(`Tour ${(s.laps ?? 0) + 1}`, (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`)
-      : stat('Distance', (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`),
-    stat('Altitude', Math.round(s.ele), 'm'),
-    stat('Temps', hms, ''),
+      ? stat('distance', `Tour ${(s.laps ?? 0) + 1}`, (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`)
+      : stat('distance', 'Distance', (s.distance / 1000).toFixed(2), `/ ${(total / 1000).toFixed(1)} km`),
+    stat('ele', 'Altitude', Math.round(s.ele), 'm'),
+    stat('time', 'Temps', hms, ''),
     ...(s.finished ? [h('div', { class:'finish' }, `Arrivée en ${hms} !`)] : []),
   );
 }
+
+// ---------- customizable ride HUD: presets, drag and drop, what to show, size and opacity (saved per profile) ----------
+// Widget x, y are fractions of the free space (0 left/top, 1 right/bottom), so a layout fits any screen.
+const HUD_PRESETS = {
+  cockpit: { name:'Cockpit', stats:{ x:0, y:0 }, controls:{ x:1, y:0 }, power:{ x:0, y:1 }, map:{ x:1, y:1 }, mirror:{ x:0, y:0 }, col:false, hide:[], scale:1, alpha:0.85 },
+  sides: { name:'Côtés', stats:{ x:0, y:0.3 }, controls:{ x:1, y:0 }, power:{ x:0.5, y:1 }, map:{ x:1, y:0.55 }, mirror:{ x:0.5, y:0 }, col:true, hide:[], scale:1, alpha:0.85 },
+  minimal: { name:'Minimal', stats:{ x:0, y:0 }, controls:{ x:1, y:0 }, power:{ x:0, y:1 }, map:{ x:0.5, y:1, off:true }, mirror:{ x:1, y:0.2 }, col:true, hide:['distance', 'ele', 'time', 'session', 'wave', 'sprints'], scale:0.85, alpha:0.4 },
+  phone: { name:'Mobile', stats:{ x:0, y:0.22 }, controls:{ x:0.5, y:0 }, power:{ x:0.5, y:1 }, map:{ x:0.5, y:0.8 }, mirror:{ x:1, y:0.16 }, col:true, hide:['ele'], scale:0.9, alpha:0.85 },
+};
+const HUD_WIDGETS = { stats:'Chiffres', controls:'Commandes', power:'Puissance (démo)', map:'Profil / carte', mirror:'Rétro (zombies)' };
+const STAT_KEYS = {
+  workout:['power', 'target', 'interval', 'session', 'speed', 'distance'], zombie:['power', 'speed', 'gap', 'wave', 'time', 'sprints'],
+  ride:['power', 'speed', 'grade', 'distance', 'ele', 'time'],
+};
+const STAT_NAMES = { power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints' };
+const defaultHud = () => structuredClone(HUD_PRESETS[innerWidth <= 700 ? 'phone' : 'cockpit']);
+const hud = () => current?.hud ?? defaultHud();
+
+function placeHud() {
+  if ($('#ride').hidden) return;
+  const L = hud(), box = $('#ride').getBoundingClientRect();
+  document.documentElement.style.setProperty('--hud-alpha', L.alpha);
+  $('#stats').classList.toggle('col', L.col);
+  for (const el of document.querySelectorAll('#ride .hud')) {
+    const c = L[el.dataset.w] ?? { x:0, y:0 };
+    el.classList.toggle('off', !!c.off && el.dataset.w !== 'controls'); // pause and turns must stay reachable
+    el.style.transform = `scale(${L.scale})`;
+    const r = el.getBoundingClientRect();
+    el.style.left = `${c.x * Math.max(0, box.width - r.width)}px`;
+    el.style.top = `${c.y * Math.max(0, box.height - r.height)}px`;
+  }
+  if (ride.course) drawProfile();
+}
+
+function editHud(on) {
+  if (on && !current.hud) current.hud = defaultHud();
+  $('#ride').classList.toggle('editing', on);
+  $('#hudEdit').hidden = !on;
+  if (!on) { persist(); return }
+  const L = current.hud, check = (label, checked, onchange) => h('label', {}, h('input', { type:'checkbox', ...(checked && { checked:'' }), onchange }), label);
+  $('#hudPresets').replaceChildren(...Object.entries(HUD_PRESETS).map(([k, p]) => h('button', { onclick: () => { current.hud = structuredClone(p); editHud(true); placeHud(); renderStats() } }, p.name)));
+  $('#hudWidgets').replaceChildren(...Object.entries(HUD_WIDGETS).filter(([k]) => k !== 'controls').map(([k, name]) =>
+    check(name, !L[k]?.off, e => { L[k].off = !e.target.checked; placeHud() })));
+  const keys = STAT_KEYS[ride.mode === 'workout' || ride.mode === 'zombie' ? ride.mode : 'ride'];
+  $('#hudStats').replaceChildren(...keys.map(k => check(STAT_NAMES[k], !L.hide.includes(k), e => {
+    L.hide = e.target.checked ? L.hide.filter(x => x !== k) : [...L.hide, k];
+    renderStats();
+  })));
+  for (const b of document.querySelectorAll('#hudDir button')) b.classList.toggle('on', +b.dataset.col === +L.col);
+  [$('#hudScale').value, $('#hudAlpha').value] = [L.scale, L.alpha];
+}
+$('#hudBtn').addEventListener('click', () => editHud(true));
+$('#hudDone').addEventListener('click', () => editHud(false));
+$('#hudReset').addEventListener('click', () => { current.hud = defaultHud(); editHud(true); renderStats() });
+for (const b of document.querySelectorAll('#hudDir button')) b.addEventListener('click', () => { current.hud.col = !!+b.dataset.col; editHud(true); placeHud() });
+$('#hudScale').addEventListener('input', e => { current.hud.scale = +e.target.value; placeHud() });
+$('#hudAlpha').addEventListener('input', e => { current.hud.alpha = +e.target.value; placeHud() });
+
+// Drag a widget while editing; it snaps to the edges and the center.
+let hudDrag = null;
+$('#ride').addEventListener('pointerdown', e => {
+  const el = $('#ride').classList.contains('editing') && e.target.closest('.hud');
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  hudDrag = { el, dx:e.clientX - r.left, dy:e.clientY - r.top };
+  el.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+$('#ride').addEventListener('pointermove', e => {
+  if (!hudDrag) return;
+  const box = $('#ride').getBoundingClientRect(), r = hudDrag.el.getBoundingClientRect(), snap = v => [0, 0.5, 1].find(s => Math.abs(v - s) < 0.03) ?? v;
+  const frac = (p, free) => free > 0 ? snap(Math.max(0, Math.min(1, p / free))) : 0;
+  Object.assign(current.hud[hudDrag.el.dataset.w], { x:frac(e.clientX - box.left - hudDrag.dx, box.width - r.width), y:frac(e.clientY - box.top - hudDrag.dy, box.height - r.height) });
+  placeHud();
+});
+addEventListener('pointerup', () => { hudDrag = null });
+// H: hide or show the whole HUD while riding.
+addEventListener('keydown', e => {
+  if (e.key.toLowerCase() !== 'h' || $('#ride').hidden || !$('#menu').hidden || e.target.matches?.('input, textarea')) return;
+  $('#ride').classList.toggle('bare');
+});
 
 let profileLayout = null;
 function drawProfile() {
