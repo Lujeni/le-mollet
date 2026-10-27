@@ -105,7 +105,8 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .chip { padding:4px 10px; border-radius:999px; background:var(--glass-hi2); font:600 12.5px var(--font); color:var(--ink) }
 .chip b { color:var(--accent-ink) }
 .tiles { display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:22px 16px }
-.tiles .tile.me { grid-column:span 2; flex-direction:row; align-items:center; gap:14px }
+.tiles .tile.me, .tiles .hist-tile { min-height:118px }
+.tile.hist-tile { --c:#e9781a }
 .tiles .tile.ride { grid-row:span 2; justify-content:flex-end; min-height:230px; background:linear-gradient(160deg, #ff5a3c, #d0230f 50%, #8f1406) }
 .tiles .tile.ride b { font-size:38px }
 .tiles .tile.ride svg { width:72px; height:72px; position:absolute; top:22px; right:22px; opacity:.9 }
@@ -133,6 +134,46 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .dest#goCircuits { --c:#d0230f } .dest#goFree { --c:#1595ad } .dest#goCity { --c:#1c3f8f } .dest#goIsland { --c:#e9781a }
 .ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px }
 .ride-head h1, .ride-head h2 { margin:0 }
+
+/* History page */
+#historyScreen { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
+.hist { width:min(1120px, 100%); max-height:100%; overflow:auto; padding:28px }
+.kpis { display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; margin-bottom:18px }
+.kpi { padding:12px 14px; border-radius:16px; background:var(--glass-hi); border:1px solid var(--edge) }
+.kpi b { display:block; font:700 24px var(--font); font-variant-numeric:tabular-nums }
+.kpi small { color:var(--muted); font-size:12.5px }
+.hist-top { display:grid; grid-template-columns:1.35fr 1fr; gap:18px; margin-bottom:18px }
+.hist-top h2 { font-size:17px; margin:0 0 8px }
+.hist-sub { display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap }
+.hist-sub .muted { margin:0; font-size:12px }
+#histWeeks { width:100%; height:190px; display:block; border-radius:16px; background:var(--glass-hi) }
+.records { display:grid; grid-template-columns:1fr 1fr; gap:8px }
+.record { padding:10px 12px; border-radius:14px; background:var(--glass-hi); border:1px solid var(--edge); display:flex; flex-direction:column; min-width:0 }
+.record small { color:var(--muted); font-size:11.5px }
+.record b { font:700 19px var(--font) }
+.record span { font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.record.ghost b { color:var(--accent-ink) }
+.hist-filters { margin-bottom:14px } .hist-filters button { flex:none }
+.hist-body { display:grid; grid-template-columns:minmax(260px, 0.9fr) 1.5fr; gap:18px; align-items:start }
+.hist-list { display:flex; flex-direction:column; gap:6px; max-height:520px; overflow:auto; padding-right:4px }
+.hist-list h3 { margin:10px 0 2px; font:700 12px var(--font); letter-spacing:1.5px; text-transform:uppercase; color:var(--accent-ink) }
+.hist-item { display:flex; align-items:center; gap:12px; padding:10px 12px; text-align:left; cursor:pointer; color:var(--ink); font:inherit; background:var(--glass-hi); border:1px solid var(--edge); border-radius:14px; transition:background .12s, transform .12s }
+.hist-item:hover { background:var(--glass-hi2); transform:translateX(3px) }
+.hist-item.on { background:var(--glass-hi2); box-shadow:inset 3px 0 0 var(--accent) }
+.brick { --c:#d0230f; flex:none; width:22px; height:16px; border-radius:4px; background:var(--c); position:relative; box-shadow:inset 0 -3px 0 rgba(0,0,0,.25) }
+.brick::before { content:''; position:absolute; top:-4px; left:2px; right:2px; height:5px; background:radial-gradient(circle at 4px 3px, var(--c) 3px, transparent 3.5px) 0 0 / 9px 5px repeat-x }
+.hist-main { flex:1; min-width:0; display:flex; flex-direction:column }
+.hist-main strong { font:600 15px var(--font); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.hist-main small { color:var(--muted); font-size:12px }
+.hist-num { text-align:right } .hist-num b { display:block; font:700 18px var(--font) } .hist-num small { color:var(--muted); font-size:11px }
+.hist-detail { padding:18px; border-radius:18px; background:var(--glass-hi); border:1px solid var(--edge); min-height:300px }
+.hist-head { display:flex; flex-direction:column; gap:4px; margin-bottom:12px }
+.hist-head h2 { margin:0; font-size:24px }
+.hist-head small { color:var(--muted) }
+.hist-head .tag { align-self:flex-start; padding:3px 10px; border-radius:999px; background:var(--c); color:#fff; font:700 11px var(--font); letter-spacing:1px; text-transform:uppercase }
+.badges { display:flex; gap:6px; margin-top:4px } .badges i { font-style:normal; padding:3px 9px; border-radius:999px; background:var(--glass-hi2); font:600 12px var(--font) }
+.badges .ok { background:#2d8a48; color:#fff } .badges .rec { background:var(--accent); color:#1b2a34 }
+.hist-trace { width:100%; height:170px; display:block; margin:6px 0 14px; border-radius:14px; background:var(--glass-hi) }
 
 /* Start picker: the map with numbered pins, the list beside it */
 #startPick { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
@@ -257,6 +298,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   .pick-body { grid-template-columns:1fr } #pickMap { height:38vh } .pick { padding:20px }
   .tiles { grid-template-columns:1fr }
   .tiles .tile.me { grid-column:auto }
+  .kpis { grid-template-columns:repeat(3, 1fr) } .hist-top, .hist-body { grid-template-columns:1fr } .hist { padding:20px } .hist-list { max-height:none }
   .tiles .tile.ride { grid-row:auto; min-height:150px }
   .tiles .tile.ride b { font-size:30px }
   .dests { grid-template-columns:1fr }
@@ -325,6 +367,10 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <button class="tile me" id="goProfile">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M4 1h4v1h1v3H8v1H4V5H3V2h1zM2 7h8v1h1v3H1V8h1z"/></svg>
           <b>Profil</b><small>Poids, FTP, nationalité</small>
+        </button>
+        <button class="tile hist-tile" id="goHistory">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M1 1h10v1H1zM1 3h1v8H1zM10 3h1v8h-1zM2 10h8v1H2zM3 7h1v2H3zM5 5h1v4H5zM7 6h1v3H7zM8 4h1v5H8z"/></svg>
+          <b>Sorties</b><small id="goHistorySub">Ton historique et tes records</small>
         </button>
         <button class="tile zombie" id="goZombie">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#bbe90b" d="M3 1h6v1h1v4H9v1H3V6H2V2h1zM4 3v2h1V3zM7 3v2h1V3zM4 8h4v1h4v1H8v2H7v-2H5v2H4v-2H0V9h4z"/></svg>
@@ -398,6 +444,25 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         </button>
       </div>
       <p class="muted" id="modeHint"></p>
+    </div>
+  </main>
+
+  <main id="historyScreen" hidden>
+    <div class="block panel hist">
+      <div class="ride-head">
+        <div><p class="kicker">Historique</p><h1>Tes sorties</h1></div>
+        <button class="btn" id="histBack">‹ Accueil</button>
+      </div>
+      <div class="kpis" id="histKpis"></div>
+      <div class="hist-top">
+        <section class="hist-weeks"><div class="hist-sub"><h2>12 dernières semaines</h2><small class="muted" id="histWeekSub"></small></div><canvas id="histWeeks" aria-label="Kilomètres par semaine"></canvas></section>
+        <section><h2>Tes records</h2><div class="records" id="histRecords"></div></section>
+      </div>
+      <div class="seg hist-filters" id="histFilters"></div>
+      <div class="hist-body">
+        <div class="hist-list" id="histList"></div>
+        <div class="hist-detail" id="histDetail"></div>
+      </div>
     </div>
   </main>
 
@@ -1049,7 +1114,7 @@ function h(tag, props = {}, ...kids) {
 }
 
 // One screen at a time. Leaving the ride stops its stream, sound and 3D world.
-const SCREENS = ['#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
+const SCREENS = ['#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
 function show(id) {
   if (id !== '#ride') {
     $('#ride').classList.remove('editing', 'bare');
@@ -1107,6 +1172,7 @@ $('#deleteProfile').addEventListener('click', () => {
 });
 $('#profileBack').addEventListener('click', () => showHome());
 $('#goProfile').addEventListener('click', showProfileEdit);
+$('#goHistory').addEventListener('click', () => showHistory());
 
 function showProfiles() {
   current = null;
@@ -1128,6 +1194,8 @@ function showHome(p = current) {
   $('#goRideSub').textContent = `${n} col${n > 1 ? 's' : ''} mythique${n > 1 ? 's' : ''} et le monde ouvert`;
   $('#goTrainSub').textContent = `${ride.workouts?.length ?? 0} séances calées sur ta FTP`;
   renderHistory();
+  const rides = p.history?.length ?? 0;
+  $('#goHistorySub').textContent = rides ? `${rides} sortie${rides > 1 ? 's' : ''}, tes records` : 'Ton historique et tes records';
   $('#homeMode').textContent = !ride.list ? '' : ride.list.trainer
     ? `Home trainer connecté : ${ride.list.trainer}`
     : 'Mode démo : pas de home trainer, tu règles les watts avec un curseur.';
@@ -1481,6 +1549,7 @@ function drawSteps(cv, steps, t, pad = { l:0, r:0, t:2, b:0 }) {
 
 function openWorkout(w) {
   ride.ended = false;
+  ride.samples = [];
   amb.ctx ??= new AudioContext();
   amb.ctx.resume();
   ride.mode = 'workout';
@@ -1502,6 +1571,7 @@ function openWorkout(w) {
   ride.events = new EventSource(`/events?workout=${w.id}&ftp=${current.ftp}&mass=${current.weightKg + 8}&session=${ride.session}`);
   ride.events.onmessage = e => {
     ride.state = JSON.parse(e.data);
+    recordSample();
     if (ride.auto && ride.state.workout && Math.round(ride.state.workout.target) !== +$('#watts').value) setPower(ride.state.workout.target);
     renderStats(); drawProfile(); mixAmbience(); checkEnd();
   };
@@ -1528,6 +1598,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
   $('.map').classList.toggle('round', kind === 'city'); // open worlds get the round minimap
   const zombie = kind === 'zombie';
   ride.ended = false;
+  ride.samples = [];
   ride.routed = false;
   amb.ctx ??= new AudioContext(); // created inside the click so autoplay policies allow sound
   amb.ctx.resume();
@@ -1565,7 +1636,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); recordSample(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -3862,6 +3933,150 @@ renderMute();
 const hms = s => { s = Math.floor(s); return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` };
 
 // Totals come from the Rust ride (energy, max power, climbing); averages derive from them.
+// ---------- ride history: a page of its own ----------
+// Kinds of rides, their label and brick color.
+const CATS = { climb:['Montées', '#d0230f'], loop:['Boucles', '#1595ad'], world:['Monde ouvert', '#e9781a'], workout:['Training', '#0b5ed0'], zombie:['Zombie', '#6b2a72'] };
+const catOf = r => r.kind === 'workout' ? 'workout' : r.kind === 'zombie' ? 'zombie' : r.kind === 'city' ? 'world' : r.looped || /^Boucle/.test(r.name) ? 'loop' : 'climb';
+const hist = { filter:'all', open:null };
+
+// Every 5 s of riding: elapsed, power, speed, elevation, for the curves in the history.
+function recordSample() {
+  const s = ride.state, last = ride.samples?.at(-1);
+  if (!s || !ride.samples || (last && s.elapsed - last[0] < 5)) return;
+  ride.samples.push([Math.round(s.elapsed), Math.round(s.power), Math.round(s.speed_kmh * 10) / 10, Math.round(s.ele ?? 0)]);
+}
+// At most n points, evenly picked: a long ride stays light in the browser's storage.
+const thin = (pts, n) => pts.length <= n ? pts : Array.from({ length:n }, (_, i) => pts[Math.round(i * (pts.length - 1) / (n - 1))]);
+
+function showHistory() {
+  show('#historyScreen');
+  let fixed = false;
+  for (const r of current.history ?? []) if (!r.id) { r.id = newId(); fixed = true } // older rides had no id
+  if (fixed) persist();
+  hist.open = current.history?.[0]?.id ?? null;
+  renderHistoryPage();
+}
+
+function renderHistoryPage() {
+  const all = current.history ?? [], kpi = (v, label) => h('div', { class:'kpi' }, h('b', {}, v), h('small', {}, label));
+  const sum = k => all.reduce((a, r) => a + (r[k] ?? 0), 0), t = sum('elapsed');
+  $('#histKpis').replaceChildren(
+    kpi(all.length, 'sorties'), kpi(`${(sum('distance') / 1000).toFixed(0)} km`, 'parcourus'), kpi(`${Math.round(sum('climbed')).toLocaleString('fr')} m`, 'de dénivelé'),
+    kpi(`${Math.floor(t / 3600)} h ${String(Math.floor(t / 60) % 60).padStart(2, '0')}`, 'en selle'), kpi(Math.round(sum('energyKj')).toLocaleString('fr'), 'kcal brûlées'),
+    kpi(Object.keys(current.ghosts ?? {}).length, 'fantômes'));
+  renderRecords(all);
+  requestAnimationFrame(() => drawWeeks($('#histWeeks'), all));
+  const counts = Object.fromEntries(Object.keys(CATS).map(k => [k, all.filter(r => catOf(r) === k).length]));
+  $('#histFilters').replaceChildren(...[['all', `Tout · ${all.length}`], ...Object.entries(CATS).filter(([k]) => counts[k]).map(([k, [n]]) => [k, `${n} · ${counts[k]}`])].map(([k, label]) =>
+    h('button', { class:hist.filter === k ? 'on' : '', 'aria-pressed':hist.filter === k, onclick: () => { hist.filter = k; renderHistoryPage() } }, label)));
+  const shown = all.filter(r => hist.filter === 'all' || catOf(r) === hist.filter);
+  if (!shown.some(r => r.id === hist.open)) hist.open = shown[0]?.id ?? null;
+  const groups = [];
+  for (const r of shown) {
+    const m = new Date(r.date).toLocaleDateString('fr-FR', { month:'long', year:'numeric' });
+    if (groups.at(-1)?.[0] !== m) groups.push([m, []]);
+    groups.at(-1)[1].push(r);
+  }
+  $('#histList').replaceChildren(...(groups.length ? groups.flatMap(([m, rs]) => [h('h3', {}, m), ...rs.map(r => {
+    const [, color] = CATS[catOf(r)];
+    return h('button', { class:'hist-item' + (r.id === hist.open ? ' on' : ''), onclick: () => { hist.open = r.id; renderHistoryPage() } },
+      h('span', { class:'brick', style:`--c:${color}` }),
+      h('span', { class:'hist-main' }, h('strong', {}, r.name), h('small', {}, `${new Date(r.date).toLocaleDateString('fr-FR', { weekday:'short', day:'numeric', month:'short' })} · ${hms(r.elapsed)}`)),
+      h('span', { class:'hist-num' }, h('b', {}, `${(r.distance / 1000).toFixed(1)}`), h('small', {}, 'km')));
+  })]) : [h('p', { class:'muted' }, 'Aucune sortie ici pour l\'instant.')]));
+  renderDetail(all.find(r => r.id === hist.open));
+}
+
+// Personal bests across all rides, and the best time on each climb (the ghosts).
+function renderRecords(all) {
+  const best = (k, min = () => true) => all.filter(min).reduce((a, r) => (r[k] ?? 0) > (a?.[k] ?? -1) ? r : a, null);
+  const card = (label, v, r) => r ? h('div', { class:'record' }, h('small', {}, label), h('b', {}, v), h('span', {}, r.name)) : '';
+  const long = best('distance'), climb = best('climbed'), max = best('maxPower'), avg = best('avgPower', r => r.elapsed >= 1200);
+  const ghosts = Object.entries(current.ghosts ?? {}).map(([id, g]) => [ride.list?.courses?.find(c => c.id === id)?.name ?? id, g.elapsed]);
+  $('#histRecords').replaceChildren(
+    card('Plus longue sortie', `${((long?.distance ?? 0) / 1000).toFixed(1)} km`, long),
+    card('Plus gros dénivelé', `${Math.round(climb?.climbed ?? 0)} m`, climb),
+    card('Puissance max', `${Math.round(max?.maxPower ?? 0)} W`, max),
+    card('Meilleure moyenne (20 min +)', `${Math.round(avg?.avgPower ?? 0)} W`, avg),
+    ...ghosts.map(([name, t]) => h('div', { class:'record ghost' }, h('small', {}, 'Record · fantôme'), h('b', {}, hms(t)), h('span', {}, name))));
+}
+
+// One brick per few km, stacked per week, colored by what was ridden most that week; studs on the top brick.
+function drawWeeks(cv, all) {
+  const [ctx, W, H] = thumbCanvas(cv), monday = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x.getTime() };
+  const now = monday(Date.now()), weeks = Array.from({ length:12 }, (_, i) => ({ start:now - (11 - i) * 7 * 864e5, km:0, by:{} }));
+  for (const r of all) {
+    const w = weeks[11 - Math.round((now - monday(r.date)) / (7 * 864e5))]; // rounded: summer time shifts a week by an hour
+    if (w) { w.km += r.distance / 1000; w.by[catOf(r)] = (w.by[catOf(r)] ?? 0) + r.distance }
+  }
+  const top = Math.max(10, ...weeks.map(w => w.km)), step = [2, 5, 10, 20, 50, 100].find(s => top / s <= 9) ?? 200;
+  const bw = W / 12, bh = (H - 34) / Math.ceil(top / step + 0.5);
+  $('#histWeekSub').textContent = `1 brique = ${step} km · ${weeks.reduce((a, w) => a + w.km, 0).toFixed(0)} km en 12 semaines`;
+  weeks.forEach((w, i) => {
+    const color = CATS[Object.entries(w.by).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'climb'][1], n = w.km / step, x = i * bw + bw * 0.18, wd = bw * 0.64;
+    for (let k = 0; k < Math.ceil(n); k++) {
+      const hgt = bh * Math.min(1, n - k), y = H - 20 - (k + 1) * bh + (bh - hgt);
+      ctx.fillStyle = color; ctx.fillRect(x, y + 1, wd, hgt - 2);
+      ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(x, y + hgt - 4, wd, 3);
+      if (k === Math.ceil(n) - 1) { ctx.fillStyle = color; for (const sx of [0.3, 0.7]) { ctx.beginPath(); ctx.ellipse(x + wd * sx, y, wd * 0.14, 3.5, 0, 0, 7); ctx.fill() } }
+    }
+    if (w.km) { ctx.fillStyle = getComputedStyle(document.body).color; ctx.font = '700 11px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(w.km.toFixed(0), x + wd / 2, H - 26 - n * bh) }
+    ctx.fillStyle = 'rgba(128,140,155,.9)'; ctx.font = '600 10px Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(new Date(w.start).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }).replace('.', ''), x + wd / 2, H - 5);
+  });
+}
+
+function renderDetail(r) {
+  if (!r) { $('#histDetail').replaceChildren(h('p', { class:'muted' }, 'Choisis une sortie pour la voir en détail.')); return }
+  const [cat, color] = CATS[catOf(r)], stat = (label, v, u) => h('div', { class:'stat' }, h('small', {}, label), h('b', {}, v), h('i', {}, u));
+  const same = (current.history ?? []).filter(o => o.name === r.name && o.completed && catOf(o) === 'climb');
+  const best = same.reduce((a, o) => Math.min(a, o.elapsed), Infinity);
+  const canRide = r.courseId && (ride.list?.courses?.some(c => c.id === r.courseId) || ride.list?.cities?.some(c => c.id === r.courseId));
+  const cv = h('canvas', { class:'hist-trace', 'aria-label':'Altitude et puissance pendant la sortie' });
+  $('#histDetail').replaceChildren(
+    h('div', { class:'hist-head', style:`--c:${color}` }, h('span', { class:'tag' }, cat), h('h2', {}, r.name),
+      h('small', {}, new Date(r.date).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })),
+      h('span', { class:'badges' }, r.completed ? h('i', { class:'ok' }, 'Terminé') : h('i', {}, 'Interrompu'), r.record ? h('i', { class:'rec' }, 'Record') : '', r.completed && same.length > 1 && r.elapsed === best ? h('i', { class:'rec' }, 'Meilleur temps') : '')),
+    h('div', { class:'summary' },
+      stat('Durée', hms(r.elapsed), ''), stat('Distance', (r.distance / 1000).toFixed(2), 'km'), stat('Dénivelé', Math.round(r.climbed), 'm'),
+      stat('Vitesse moy.', r.avgSpeed.toFixed(1), 'km/h'), stat('Puissance moy.', Math.round(r.avgPower), 'W'), stat('Puissance max', Math.round(r.maxPower), 'W'),
+      stat('W/kg moy.', (r.avgPower / current.weightKg).toFixed(2), ''), stat('Énergie', Math.round(r.energyKj), 'kcal'),
+      r.kind === 'zombie' ? stat('Vague', r.wave, `· ${r.sprintsWon}/${r.sprints} sprints`) : stat('Sorties ici', Math.max(1, same.length), same.length > 1 ? `· record ${hms(best)}` : '')),
+    r.trace?.length > 1 ? cv : h('p', { class:'muted' }, 'Les courbes d\'altitude et de puissance s\'enregistrent à partir de tes prochaines sorties.'),
+    h('div', { class:'form-actions' },
+      canRide ? h('button', { class:'btn primary', onclick: () => rideAgain(r) }, 'Rouler à nouveau') : h('span'),
+      h('button', { class:'btn danger', onclick: () => {
+        if (!confirm(`Supprimer la sortie « ${r.name} » ?`)) return;
+        current.history = current.history.filter(o => o !== r);
+        persist();
+        renderHistoryPage();
+      } }, 'Supprimer')));
+  if (r.trace?.length > 1) requestAnimationFrame(() => drawTrace(cv, r.trace));
+}
+
+// Elevation as a filled gray area, power as a yellow line, over the ride's time.
+function drawTrace(cv, pts) {
+  const [ctx, W, H] = thumbCanvas(cv), T = pts.at(-1)[0] || 1, pad = 18;
+  const [elo, ehi] = [Math.min(...pts.map(p => p[3])), Math.max(...pts.map(p => p[3]))], pmax = Math.max(100, ...pts.map(p => p[1]));
+  const x = t => pad + t / T * (W - pad * 2), ye = e => H - pad - (e - elo) / (ehi - elo || 1) * (H - pad * 2) * 0.6, yp = w => H - pad - w / pmax * (H - pad * 2);
+  ctx.beginPath(); ctx.moveTo(x(0), H - pad);
+  for (const p of pts) ctx.lineTo(x(p[0]), ye(p[3]));
+  ctx.lineTo(x(T), H - pad); ctx.closePath(); ctx.fillStyle = 'rgba(128,140,155,.35)'; ctx.fill();
+  ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(x(p[0]), yp(p[1])) : ctx.moveTo(x(p[0]), yp(p[1])));
+  ctx.strokeStyle = '#f2cd37'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.fillStyle = 'rgba(128,140,155,.95)'; ctx.font = '600 10px Inter, sans-serif';
+  ctx.textAlign = 'left'; ctx.fillText(`${Math.round(pmax)} W`, pad, 12); ctx.fillText(`${Math.round(ehi)} m`, pad + 60, 12);
+  ctx.textAlign = 'right'; ctx.fillText(hms(T), W - pad, H - 3);
+}
+
+function rideAgain(r) {
+  const city = ride.list.cities?.find(c => c.id === r.courseId);
+  if (city) return openWorld(city);
+  const c = ride.list.courses.find(c => c.id === r.courseId);
+  if (c) openRide(c.id, c.terrain);
+}
+$('#histBack').addEventListener('click', () => showHome());
+
 function summary(s = ride.state ?? {}) {
   const t = s.elapsed ?? 0, z = s.zombie;
   return {
@@ -3879,6 +4094,8 @@ function summary(s = ride.state ?? {}) {
     avgSpeed: t ? (s.ridden ?? 0) / t * 3.6 : 0,
     energyKj: s.energy_kj ?? 0,
     completed: ride.mode === 'workout' ? !!s.workout?.done : !!s.finished,
+    ...((ride.mode === 'course' || ride.mode === 'city') && { courseId:ride.id, looped:!!ride.course?.looped }),
+    trace: thin(ride.samples ?? [], 240), // [elapsed s, W, km/h, m]
   };
 }
 
@@ -3951,6 +4168,7 @@ function checkEnd() {
 function saveRide() {
   const r = summary();
   ride.ghostResult = keepGhost(r);
+  r.record = !!ride.ghostResult?.record;
   current.history = [r, ...(current.history ?? [])].slice(0, 200);
   persist();
   ride.events?.close();
@@ -3963,7 +4181,7 @@ function renderHistory() {
   if (!list.length) { $('#history').replaceChildren(); return }
   const km = list.reduce((a, r) => a + r.distance, 0) / 1000, up = list.reduce((a, r) => a + r.climbed, 0);
   $('#history').replaceChildren(
-    h('h2', {}, `Tes sorties · ${list.length} · ${km.toFixed(0)} km · +${Math.round(up)} m`),
+    h('div', { class:'hist-sub' }, h('h2', {}, `Tes sorties · ${list.length} · ${km.toFixed(0)} km · +${Math.round(up)} m`), h('button', { class:'btn', onclick:showHistory }, 'Tout voir ›')),
     h('div', { class:'history-rows' }, ...list.slice(0, 8).map(r => h('div', { class:'history-row' },
       h('span', {}, new Date(r.date).toLocaleDateString('fr-FR', { weekday:'short', day:'numeric', month:'short' }), r.completed ? h('span', { class:'done' }, ' · terminé') : ''),
       h('strong', {}, r.name),
