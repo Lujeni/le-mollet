@@ -32,6 +32,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 <td><img src="docs/screenshots/history.jpg" alt="Ride history: totals, weekly bricks, records, ride details"><br><sub><b>History.</b> Totals, weekly bricks, records, curves and FIT export.</sub></td>
 <td><img src="docs/screenshots/equipment.jpg" alt="Equipment step: connect the trainer and heart rate strap"><br><sub><b>Equipment.</b> Connect your trainer and heart rate strap from the browser.</sub></td>
 </tr>
+<tr>
+<td><img src="docs/screenshots/badges.jpg" alt="Badge wall: 27 badges, earned ones lit"><br><sub><b>Badges.</b> 27 to earn, levels unlock garage pieces.</sub></td>
+<td><img src="docs/screenshots/training.jpg" alt="Training: structured sessions and .zwo import"><br><sub><b>Training.</b> Sessions on your FTP, import Zwift .zwo files, FTP test.</sub></td>
+</tr>
 </table>
 
 ## Ride
@@ -81,6 +85,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 - **Garage**, bike and rider apart: the bike (road, aero, gravel or vintage frame, colors, rims, handlebars) on
   its trainer, and your Lego minifig standing on its plate (jersey and its pattern, shorts, shoes, helmet,
   glasses, face, hair, skin). The same rider pedals in every ride. Feeling lucky? "Surprise me".
+- **Progression**: XP for every km, workout minute and segment, levels, 27 badges (Everest, Gran fondo, all the
+  climbs, the volcano, a perfect week…). Levels unlock garage pieces: aero, gravel and vintage frames, deep rims,
+  TT bars, glasses, jersey patterns up to the world champion's rainbow, gold paint; the polka-dot jersey is won as
+  King of the Mountains.
 - **Ride history**: a page of its own with totals, weekly bricks, personal records and each ride's power and
   elevation curves. Export any ride as a **.fit** file for Strava, Garmin Connect or intervals.icu.
 

@@ -135,6 +135,25 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px }
 .ride-head h1, .ride-head h2 { margin:0 }
 
+/* Progression: XP bar, level on the avatar, awards, badge wall, locked garage pieces */
+.xp-bar { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; max-width:420px }
+.xp-bar .lvl { font:700 13px var(--font); color:var(--accent-ink) } .xp-bar small { color:var(--muted); white-space:nowrap }
+.xp-bar .bar { flex:1; height:8px; border-radius:4px; background:var(--glass-hi2); overflow:hidden } .xp-bar .bar i { display:block; height:100%; background:linear-gradient(90deg, #f2cd37, #fe8a18) }
+.hello .avatar { position:relative }
+.hello .avatar[data-level]::after { content:attr(data-level); position:absolute; right:-8px; bottom:-8px; min-width:26px; height:26px; padding:0 5px; border-radius:13px; display:grid; place-items:center; background:var(--accent); color:#1b2a34; font:700 13px var(--font); box-shadow:0 2px 0 var(--accent-deep) }
+.award { grid-column:1 / -1; display:flex; flex-direction:column; align-items:center; gap:8px; padding:12px; border-radius:16px; background:var(--glass-hi) }
+.xp-gain { font:700 28px var(--font); color:var(--accent-ink) }
+.level-up { display:flex; flex-direction:column; align-items:center; font:700 22px var(--font); padding:6px 18px; border-radius:14px; background:var(--accent); color:#1b2a34; box-shadow:0 4px 0 var(--accent-deep); animation:pop .4s cubic-bezier(.3,.7,.4,1.5) }
+.level-up small { font:600 12px var(--font) }
+.badge-won { display:flex; align-items:center; gap:8px; font-size:14px } .badge-won span { font-size:22px } .badge-won small { color:var(--accent-ink); font-weight:700 }
+.hist-badges { margin-bottom:18px } .hist-badges h2 { font-size:17px; margin:0 0 8px }
+.badge-wall { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px }
+.badge { display:flex; flex-direction:column; align-items:center; text-align:center; gap:2px; padding:10px 8px; border-radius:14px; background:var(--glass-hi); border:1px solid var(--edge); opacity:.5; filter:grayscale(1) }
+.badge.on { opacity:1; filter:none; border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent) }
+.badge .icon { font-size:28px } .badge b { font:600 13px var(--font) } .badge small { color:var(--muted); font-size:11px }
+.seg button.locked, .sw.locked { opacity:.45; cursor:not-allowed }
+.sw.locked { background-image:repeating-linear-gradient(45deg, rgba(0,0,0,.25) 0 3px, transparent 3px 7px) !important }
+
 /* Imported workouts, emotes, toasts */
 .import-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 14px } .import-row .muted { margin:0; font-size:12px }
 .tag-imported { margin-left:8px; padding:2px 8px; border-radius:999px; background:var(--accent); color:#1b2a34; font:700 11px var(--font); vertical-align:middle }
@@ -414,7 +433,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 
   <main id="home" hidden>
     <div class="block panel">
-      <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1 id="homeHello"></h1><div class="chips" id="homeStats"></div></div></div>
+      <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1 id="homeHello"></h1><div class="chips" id="homeStats"></div><div id="homeLevel"></div></div></div>
       <div class="dev-status"><span id="homeDevices"></span><button class="btn" id="goDevices">Équipements</button></div>
       <div class="tiles">
         <button class="tile ride" id="goRide">
@@ -523,6 +542,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <section class="hist-weeks"><div class="hist-sub"><h2>12 dernières semaines</h2><small class="muted" id="histWeekSub"></small></div><canvas id="histWeeks" aria-label="Kilomètres par semaine"></canvas></section>
         <section><h2>Tes records</h2><div class="records" id="histRecords"></div></section>
       </div>
+      <section class="hist-badges"><h2 id="histBadgesTitle">Badges</h2><div class="badge-wall" id="histBadges"></div></section>
       <div class="seg hist-filters" id="histFilters"></div>
       <div class="hist-body">
         <div class="hist-list" id="histList"></div>
@@ -667,7 +687,7 @@ const OPTIONS = [
   { tab:'bike', group:'Poste de pilotage', key:'bars', label:'Cintre', choices:[['drop', 'Route'], ['flat', 'Plat'], ['aero', 'Chrono']] },
   { tab:'bike', group:'Poste de pilotage', key:'saddle', label:'Selle', colors:true },
   { tab:'rider', group:'Maillot', key:'jersey', label:'Couleur', colors:true },
-  { tab:'rider', group:'Maillot', key:'pattern', label:'Motif', choices:[['plain', 'Uni'], ['band', 'Bande'], ['dots', 'Pois'], ['stripes', 'Rayures']] },
+  { tab:'rider', group:'Maillot', key:'pattern', label:'Motif', choices:[['plain', 'Uni'], ['band', 'Bande'], ['dots', 'Pois'], ['stripes', 'Rayures'], ['rainbow', 'Arc-en-ciel']] },
   { tab:'rider', group:'Maillot', key:'pattern2', label:'Couleur du motif', colors:true, when:r => r.pattern !== 'plain' },
   { tab:'rider', group:'Tenue', key:'shorts', label:'Cuissard', colors:true },
   { tab:'rider', group:'Tenue', key:'shoes', label:'Chaussures', colors:true },
@@ -888,6 +908,7 @@ function legoRider(r) {
     c.fillStyle = a.pattern2;
     if (a.pattern === 'band') c.fillRect(0, 34, w, 26);
     if (a.pattern === 'stripes') for (let x = 0; x < w; x += 32) c.fillRect(x, 0, 12, h);
+    if (a.pattern === 'rainbow') [LC.blue, LC.red, LC.black, LC.yel, LC.grn].forEach((col, k) => { c.fillStyle = col; c.fillRect(0, 30 + k * 7, w, 7) }); // world champion's bands
     if (a.pattern === 'dots') for (let y = 12; y < h; y += 28) for (let x = (y / 28 % 2) * 16 + 8; x < w; x += 32) { c.beginPath(); c.arc(x, y, 7, 0, 7); c.fill() }
     c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(127, 0, 2, 60); // zip
   });
@@ -1268,6 +1289,10 @@ function showHome(p = current) {
   $('#goTrainSub').textContent = `${ride.workouts?.length ?? 0} séances calées sur ta FTP`;
   renderHistory();
   renderSensors();
+  initProgress(p);
+  const L = levelOf(p.xp ?? 0);
+  $('#homeAvatar').dataset.level = L.level;
+  $('#homeLevel').replaceChildren(xpBar(L));
   const rides = p.history?.length ?? 0;
   $('#goHistorySub').textContent = rides ? `${rides} sortie${rides > 1 ? 's' : ''}, tes records` : 'Ton historique et tes records';
   $('#homeMode').textContent = !ride.list ? '' : ride.list.trainer
@@ -1354,19 +1379,23 @@ function renderOptions() {
     ...shown.filter(o => o.group === name).map(o => h('fieldset', { class:'opt' },
       h('legend', {}, o.label),
       o.colors
-        ? h('div', { class:'swatches' }, ...Object.entries(o.colors === true ? PALETTE : o.colors).map(([name, hex]) => h('button', {
-            class: 'sw' + (v[o.key] === hex ? ' on' : ''), style:`background:${hex}`,
-            title:name, 'aria-label':`${o.label} : ${name}`, 'aria-pressed': v[o.key] === hex,
-            onclick: () => set(o.key, hex),
-          })))
-        : h('div', { class:'seg' }, ...o.choices.map(([val, label]) => h('button', {
-            class: v[o.key] === val ? 'on' : '', 'aria-pressed': v[o.key] === val,
-            onclick: () => set(o.key, val),
-          }, label))),
+        ? h('div', { class:'swatches' }, ...swatchesOf(o).map(([name, hex]) => { const lock = v[o.key] !== hex && lockOf(o.key, hex); return h('button', {
+            class: 'sw' + (v[o.key] === hex ? ' on' : '') + (lock ? ' locked' : ''), style:`background:${hex}`,
+            title:lock ? `${name} : débloqué au ${lock}` : name, 'aria-label':`${o.label} : ${name}${lock ? ` (verrouillé, ${lock})` : ''}`, 'aria-pressed': v[o.key] === hex,
+            ...(lock ? { disabled:'' } : {}), onclick: () => set(o.key, hex),
+          }) }))
+        : h('div', { class:'seg' }, ...o.choices.map(([val, label]) => { const lock = v[o.key] !== val && lockOf(o.key, val); return h('button', {
+            class: (v[o.key] === val ? 'on' : '') + (lock ? ' locked' : ''), 'aria-pressed': v[o.key] === val, title:lock ? `Débloqué au ${lock}` : '',
+            ...(lock ? { disabled:'' } : {}), onclick: () => set(o.key, val),
+          }, lock ? `🔒 ${label}` : label) })),
     )))));
 }
 
+// Colors of an option; frame, jersey and helmet also come in gold, once earned.
+const swatchesOf = o => [...Object.entries(o.colors === true ? PALETTE : o.colors), ...(GOLD_KEYS.has(o.key) ? [['Or', GOLD]] : [])];
+
 function set(key, val) {
+  if (lockOf(key, val)) return;
   current[GARAGE[garageTab].obj][key] = val;
   persist();
   renderOptions();
@@ -1377,7 +1406,7 @@ function set(key, val) {
 $('#surprise').addEventListener('click', () => {
   const pick = list => list[Math.floor(Math.random() * list.length)];
   for (const o of OPTIONS.filter(o => o.tab === garageTab))
-    current[GARAGE[garageTab].obj][o.key] = o.colors ? pick(Object.values(o.colors === true ? PALETTE : o.colors)) : pick(o.choices)[0];
+    current[GARAGE[garageTab].obj][o.key] = pick((o.colors ? swatchesOf(o).map(([, hex]) => hex) : o.choices.map(([v]) => v)).filter(v => !lockOf(o.key, v)));
   persist();
   renderOptions();
   draw(current, garageTab);
@@ -1682,6 +1711,7 @@ async function openZombie() {
 async function openRide(id, hasTerrain, kind = 'course', start = null) {
   ride.start = start; // open world: index of the picked start place
   ride.rideOns = 0;
+  [ride.segCount, ride.rideOnsGiven] = [0, 0];
   $('#emotes').hidden = false;
   $('.map').classList.toggle('round', kind === 'city'); // open worlds get the round minimap
   const zombie = kind === 'zombie';
@@ -4059,6 +4089,7 @@ function renderHistoryPage() {
     kpi(`${Math.floor(t / 3600)} h ${String(Math.floor(t / 60) % 60).padStart(2, '0')}`, 'en selle'), kpi(Math.round(sum('energyKj')).toLocaleString('fr'), 'kcal brûlées'),
     kpi(Object.keys(current.ghosts ?? {}).length, 'fantômes'));
   renderRecords(all);
+  renderBadges();
   requestAnimationFrame(() => drawWeeks($('#histWeeks'), all));
   const counts = Object.fromEntries(Object.keys(CATS).map(k => [k, all.filter(r => catOf(r) === k).length]));
   $('#histFilters').replaceChildren(...[['all', `Tout · ${all.length}`], ...Object.entries(CATS).filter(([k]) => counts[k]).map(([k, [n]]) => [k, `${n} · ${counts[k]}`])].map(([k, label]) =>
@@ -4275,6 +4306,7 @@ setInterval(driveTrainer, 1000);
 // The devices step: connect, see the figures move, then go. Home keeps a status line.
 function showDevices(p = current) {
   current = p;
+  initProgress(p);
   show('#devicesScreen');
   draw(p);
   renderSensors();
@@ -4349,6 +4381,8 @@ function trackSegments() {
     clearTimeout(ride.toastTimer);
     ride.toastTimer = setTimeout(() => { t.hidden = true }, 7000);
     (current.segments ??= {})[r.name] = Math.min(current.segments[r.name] ?? Infinity, r.time);
+    ride.segCount = (ride.segCount ?? 0) + 1;
+    if (r.kind === 'kom' && r.rank.today === 1) current.komWins = (current.komWins ?? 0) + 1;
     persist();
   }
 }
@@ -4509,7 +4543,7 @@ function sendEmote(e) {
   if (e === 'rideon' && !to) return toast('Personne à encourager pour l\'instant.');
   fetch(`/emote?session=${ride.session}&course=${encodeURIComponent(ride.id)}&e=${e}${to ? `&to=${to.id}` : ''}`).catch(() => {});
   if (w3.bike) showBubble(w3.bike, e, 2.9 / BIKE_SCALE); // my own bubble, right away
-  if (to) toast(`👍 Ride On envoyé à ${to.name}`);
+  if (to) { toast(`👍 Ride On envoyé à ${to.name}`); ride.rideOnsGiven = (ride.rideOnsGiven ?? 0) + 1 }
 }
 function renderEmotes() {
   const to = nearestOther();
@@ -4554,6 +4588,135 @@ addEventListener('keydown', e => {
 
 $('#zwoFile').addEventListener('change', e => { importZwo([...e.target.files]); e.target.value = '' });
 
+// ---------- progression: XP, levels, badges, garage unlocks (kept in the profile) ----------
+// XP like Zwift: 20 per km ridden, 12 per minute of workout, 50 per segment finished, plus each badge's bonus.
+const XP = { km:20, workoutMin:12, segment:50 };
+// Each level asks a little more than the last: 500 XP to level 2, then +250 each time.
+function levelOf(xp) {
+  let [level, at, need] = [1, 0, 500];
+  while (xp >= at + need && level < 99) { at += need; level++; need = 500 + 250 * (level - 1) }
+  return { level, into:xp - at, need };
+}
+const rideXp = r => Math.round((r.kind === 'workout' ? r.elapsed / 60 * XP.workoutMin : r.distance / 1000 * XP.km) + (r.segments ?? 0) * XP.segment);
+
+// Longest run of consecutive days with a ride.
+function streakDays(H) {
+  const days = [...new Set(H.map(r => Math.floor((Date.parse(r.date) - new Date().getTimezoneOffset() * 6e4) / 864e5)))].sort((a, b) => a - b);
+  let [best, run] = [days.length ? 1 : 0, 1];
+  for (let i = 1; i < days.length; i++) { run = days[i] === days[i - 1] + 1 ? run + 1 : 1; best = Math.max(best, run) }
+  return best;
+}
+function progressStats(p = current) {
+  const H = p.history ?? [], max = xs => Math.max(0, ...xs), done = H.filter(r => r.completed);
+  return {
+    rides:H.length, km:H.reduce((a, r) => a + r.distance, 0) / 1000, climbed:H.reduce((a, r) => a + (r.climbed ?? 0), 0),
+    longestKm:max(H.map(r => r.distance / 1000)), longestH:max(H.map(r => r.elapsed / 3600)),
+    workouts:done.filter(r => r.kind === 'workout').length, ftpTest:done.some(r => r.kind === 'workout' && /Test FTP/.test(r.name)),
+    zombieWave:max(H.filter(r => r.kind === 'zombie').map(r => r.wave ?? 0)), zombieMin:max(H.filter(r => r.kind === 'zombie').map(r => r.elapsed / 60)),
+    climbs:new Set(done.filter(r => catOf(r) === 'climb').map(r => r.courseId ?? r.name)).size, allClimbs:Math.max(1, ride.list?.courses?.length ?? 6),
+    islandKm:max(H.filter(r => r.courseId === 'ile-des-briques').map(r => r.distance / 1000)), parisKm:max(H.filter(r => r.courseId === 'paris').map(r => r.distance / 1000)),
+    rideOns:H.reduce((a, r) => a + (r.rideOns ?? 0), 0), given:H.reduce((a, r) => a + (r.rideOnsGiven ?? 0), 0),
+    segments:Object.keys(p.segments ?? {}), komWins:p.komWins ?? 0, records:H.filter(r => r.record).length, streak:streakDays(H),
+  };
+}
+// [id, icon, name, what to do, XP bonus, progress (stats) -> [now, goal]]
+const BADGES = [
+  ['first', '🚲', 'Première sortie', 'Termine et enregistre une sortie', 100, s => [s.rides, 1]],
+  ['km100', '🛣️', '100 km', '100 km au compteur', 200, s => [s.km, 100]],
+  ['km500', '🗺️', '500 km', '500 km au compteur', 400, s => [s.km, 500]],
+  ['km1000', '🌍', '1 000 km', '1 000 km au compteur', 800, s => [s.km, 1000]],
+  ['km5000', '🚀', '5 000 km', '5 000 km au compteur', 2000, s => [s.km, 5000]],
+  ['up1000', '⛰️', '1 000 m', '1 000 m de dénivelé cumulé', 200, s => [s.climbed, 1000]],
+  ['everest', '🏔️', 'Everest', '8 848 m de dénivelé cumulé', 1000, s => [s.climbed, 8848]],
+  ['up25k', '🛰️', 'Stratosphère', '25 000 m de dénivelé cumulé', 2000, s => [s.climbed, 25000]],
+  ['fondo', '🏅', 'Gran fondo', '100 km en une sortie', 800, s => [s.longestKm, 100]],
+  ['twoh', '⏱️', 'Deux heures', '2 h en selle d\'un coup', 300, s => [s.longestH, 2]],
+  ['col', '🧗', 'Premier col', 'Monte un col jusqu\'en haut', 300, s => [s.climbs, 1]],
+  ['allcols', '👑', 'Tous les cols', 'Monte tous les cols jusqu\'en haut', 1500, s => [s.climbs, s.allClimbs]],
+  ['magmor', '🌋', 'Dompteur de volcan', 'Termine le KOM du Magmor', 500, s => [+s.segments.includes('KOM du Magmor'), 1]],
+  ['island', '🏝️', 'Tour de l\'île', '30 km sur l\'Île des Briques en une sortie', 500, s => [s.islandKm, 30]],
+  ['paris', '🗼', 'Parisien', '20 km dans Paris en une sortie', 400, s => [s.parisKm, 20]],
+  ['kom', '🔴', 'Roi de la montagne', 'Le meilleur temps du jour sur un KOM', 600, s => [s.komWins, 1]],
+  ['segs', '⚡', 'Chasseur de segments', 'Termine 5 segments différents', 400, s => [s.segments.length, 5]],
+  ['ghost', '👻', 'Plus fort que ton fantôme', 'Bats ton record sur un col', 400, s => [s.records, 1]],
+  ['wk1', '📈', 'Première séance', 'Termine une séance', 150, s => [s.workouts, 1]],
+  ['wk10', '🏋️', 'Assidu', 'Termine 10 séances', 600, s => [s.workouts, 10]],
+  ['ftp', '🧪', 'Testé', 'Termine un test FTP', 400, s => [+s.ftpTest, 1]],
+  ['zombie', '🧟', 'Survivant', 'Tiens 10 min face aux zombies', 300, s => [s.zombieMin, 10]],
+  ['wave5', '🎃', 'Vague 5', 'Atteins la vague 5 des zombies', 500, s => [s.zombieWave, 5]],
+  ['fair', '👍', 'Fair-play', 'Envoie 10 Ride On', 200, s => [s.given, 10]],
+  ['popular', '🌟', 'Populaire', 'Reçois 10 Ride On', 300, s => [s.rideOns, 10]],
+  ['streak3', '🔥', 'Trois jours de suite', 'Roule trois jours d\'affilée', 300, s => [s.streak, 3]],
+  ['streak7', '📅', 'Semaine parfaite', 'Roule sept jours d\'affilée', 800, s => [s.streak, 7]],
+].map(([id, icon, name, desc, xp, progress]) => ({ id, icon, name, desc, xp, progress }));
+const BADGE_BY_ID = Object.fromEntries(BADGES.map(b => [b.id, b]));
+
+// Garage pieces earned by level, or by a badge.
+const LOCKS = { frameType:{ aero:3, gravel:5, vintage:8 }, rimDepth:{ 3:4 }, bars:{ aero:6 }, glasses:{ on:3 },
+  pattern:{ band:2, stripes:4, dots:'kom', rainbow:12 }, frame:{ '#aa7f2e':10 }, jersey:{ '#aa7f2e':10 }, helmetColor:{ '#aa7f2e':10 } };
+const GOLD = '#aa7f2e', GOLD_KEYS = new Set(['frame', 'jersey', 'helmetColor']);
+function lockOf(key, val) {
+  const need = LOCKS[key]?.[val];
+  if (need == null) return null;
+  if (typeof need === 'string') return current.badges?.[need] ? null : `badge « ${BADGE_BY_ID[need].name} »`;
+  return levelOf(current.xp ?? 0).level >= need ? null : `niveau ${need}`;
+}
+
+// New badges for the stats now; their XP is added. Returns what was earned.
+function earnBadges(p = current) {
+  const s = progressStats(p), won = [];
+  p.badges ??= {};
+  for (const b of BADGES) {
+    const [now, goal] = b.progress(s);
+    if (!p.badges[b.id] && now >= goal) { p.badges[b.id] = new Date().toISOString(); p.xp = (p.xp ?? 0) + b.xp; won.push(b) }
+  }
+  return won;
+}
+// Profiles from before progression: XP and badges from their history, once.
+function initProgress(p = current) {
+  if (p.xp != null) return;
+  p.xp = (p.history ?? []).reduce((a, r) => a + rideXp(r), 0);
+  earnBadges(p);
+  persist();
+}
+// After a saved ride: XP for the ride, then any badge it unlocks.
+function awardRide(r) {
+  const before = levelOf(current.xp ?? 0).level, gained = rideXp(r);
+  current.xp = (current.xp ?? 0) + gained;
+  const badges = earnBadges();
+  persist();
+  return { gained:gained + badges.reduce((a, b) => a + b.xp, 0), badges, before, after:levelOf(current.xp).level };
+}
+function awardLine(a) {
+  if (!a) return;
+  const L = levelOf(current.xp);
+  $('#menuStats').append(h('div', { class:'award' },
+    h('b', { class:'xp-gain' }, `+${a.gained.toLocaleString('fr')} XP`),
+    a.after > a.before ? h('div', { class:'level-up' }, `Niveau ${a.after} !`, h('small', {}, unlockedAt(a.before, a.after))) : '',
+    xpBar(L),
+    ...a.badges.map(b => h('div', { class:'badge-won' }, h('span', {}, b.icon), h('b', {}, b.name), h('small', {}, `+${b.xp} XP`)))));
+}
+// What a level-up just made available in the garage.
+function unlockedAt(from, to) {
+  const names = { aero:'cadre aéro', gravel:'cadre gravel', vintage:'cadre vintage', 3:'jantes profondes', band:'maillot à bande', stripes:'maillot rayé', rainbow:'maillot arc-en-ciel', on:'lunettes', [GOLD]:'couleur Or' };
+  const got = new Set();
+  for (const [key, vals] of Object.entries(LOCKS)) for (const [v, need] of Object.entries(vals)) if (typeof need === 'number' && need > from && need <= to) got.add(key === 'bars' ? 'cintre chrono' : names[v] ?? v);
+  return got.size ? `Nouveau au garage : ${[...got].join(', ')}` : '';
+}
+const xpBar = L => h('div', { class:'xp-bar' }, h('span', { class:'lvl' }, `Niv. ${L.level}`), h('span', { class:'bar' }, h('i', { style:`width:${(L.into / L.need * 100).toFixed(1)}%` })),
+  h('small', {}, `${L.into.toLocaleString('fr')} / ${L.need.toLocaleString('fr')} XP`));
+
+// The badge wall, in the history page.
+function renderBadges() {
+  const s = progressStats(), got = BADGES.filter(b => current.badges?.[b.id]).length;
+  $('#histBadgesTitle').textContent = `Badges · ${got} / ${BADGES.length}`;
+  $('#histBadges').replaceChildren(...BADGES.map(b => {
+    const [now, goal] = b.progress(s), on = !!current.badges?.[b.id];
+    return h('div', { class:'badge' + (on ? ' on' : ''), title:`${b.desc} · +${b.xp} XP` }, h('span', { class:'icon' }, b.icon), h('b', {}, b.name),
+      h('small', {}, on ? `Obtenu le ${new Date(current.badges[b.id]).toLocaleDateString('fr-FR', { day:'numeric', month:'short' })}` : goal > 1 ? `${Math.min(Math.floor(now), goal).toLocaleString('fr')} / ${goal.toLocaleString('fr')}` : b.desc));
+  }));
+}
+
 function summary(s = ride.state ?? {}) {
   const t = s.elapsed ?? 0, z = s.zombie;
   return {
@@ -4572,6 +4735,8 @@ function summary(s = ride.state ?? {}) {
     energyKj: s.energy_kj ?? 0,
     completed: ride.mode === 'workout' ? !!s.workout?.done : !!s.finished,
     rideOns: ride.rideOns ?? 0,
+    rideOnsGiven: ride.rideOnsGiven ?? 0,
+    segments: ride.segCount ?? 0,
     ...((ride.mode === 'course' || ride.mode === 'city') && { courseId:ride.id, looped:!!ride.course?.looped }),
     trace: thin(ride.samples ?? [], 240), // [elapsed s, W, km/h, m]
   };
@@ -4609,6 +4774,7 @@ function openMenu(mode) {
   renderSummary(r);
   ghostLine(mode, r);
   ftpLine(mode);
+  if (mode === 'saved') awardLine(ride.award);
   renderBoards();
   $('#exportFit').hidden = !(ride.full?.length > 5);
   $('#resume').hidden = mode !== 'pause';
@@ -4651,7 +4817,7 @@ function saveRide() {
   ride.ghostResult = keepGhost(r);
   r.record = !!ride.ghostResult?.record;
   current.history = [r, ...(current.history ?? [])].slice(0, 200);
-  persist();
+  ride.award = awardRide(r);
   ride.events?.close();
   stopAmbience();
   openMenu('saved');
