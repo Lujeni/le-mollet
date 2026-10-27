@@ -21,6 +21,11 @@ pub struct City {
     pub island: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub props: Vec<Prop>,
+    /// Island thumbnail: one cover code per block, rows north to south, `preview_w` blocks wide (a = 0).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub preview: String,
+    #[serde(default)]
+    pub preview_w: usize,
     /// Junction -> streets leaving it, as (street, walked a -> b).
     #[serde(skip)]
     links: Vec<Vec<(usize, bool)>>,
@@ -93,7 +98,7 @@ impl City {
     }
 
     pub fn island(name: String, attribution: String, start: [f64; 2], streets: Vec<Street>, props: Vec<Prop>) -> Self {
-        let mut c = Self { name, attribution, start, streets, island: true, props, links: vec![] };
+        let mut c = Self { name, attribution, start, streets, island: true, props, preview: String::new(), preview_w: 0, links: vec![] };
         c.link();
         c
     }
@@ -346,6 +351,8 @@ pub fn build(name: &str, relation: u64, start: [f64; 2]) -> Result<(City, Terrai
         streets,
         island: false,
         props: vec![],
+        preview: String::new(),
+        preview_w: 0,
         links: vec![],
     };
     city.link();
@@ -393,6 +400,8 @@ mod tests {
             streets: vec![arm(1, 0.0, 0.0015), arm(2, 0.001, 0.0), arm(3, 0.0, -0.0015), arm(4, -0.001, 0.0)],
             island: false,
             props: vec![],
+            preview: String::new(),
+            preview_w: 0,
             links: vec![],
         };
         c.link();

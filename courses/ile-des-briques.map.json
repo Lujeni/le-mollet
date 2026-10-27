@@ -99,7 +99,7 @@
     { "name": "Route du Volcan", "from": "volcan_pied", "to": "cratere", "spiral": { "center": [1900, 900], "r1": 165, "turns": 2.5 } },
     { "name": "Route du Nord", "from": "moulin", "to": "nord", "via": [[2700, 1620]] },
     { "name": "Route du Château", "from": "nord", "to": "chateau_pied", "via": [[3050, 1050]] },
-    { "name": "Montée du Château", "from": "chateau_pied", "to": "chateau", "via": [[3330, 960], [3420, 900]] },
+    { "name": "Montée du Château", "from": "chateau_pied", "to": "chateau", "via": [[3330, 960], [3500, 985], [3605, 905], [3565, 838]] },
     { "name": "Piste du Nord", "from": "nord", "to": "desert_n", "via": [[3400, 1250]] },
     { "name": "Chemin de la Jungle", "from": "carrefour", "to": "jungle", "via": [[1900, 2300], [1600, 2150]] },
     { "name": "Sentier du Temple", "from": "jungle", "to": "temple", "via": [[1050, 1800], [850, 1680]], "half": 3 },

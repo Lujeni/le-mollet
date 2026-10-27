@@ -343,8 +343,28 @@ pub fn build(path: &str) -> Result<Island> {
         heights: height.iter().map(|&e| (e + SEA).max(0.0) as f32).collect(),
         cover,
     };
-    let city = City::island(map.name, "Île dessinée à la main pour le-mollet.".into(), geo(*start), streets, props);
+    let mut city = City::island(map.name, "Île dessinée à la main pour le-mollet.".into(), geo(*start), streets, props);
+    (city.preview, city.preview_w) = preview(&terrain.cover, w, h, 20);
     Ok(Island { city, terrain })
+}
+
+/// Thumbnail: the main ground of each `block`-cell square, roads first so they show; one letter per block.
+fn preview(cover: &[u8], w: usize, h: usize, block: usize) -> (String, usize) {
+    let (pw, ph) = (w / block, h / block);
+    let mut s = String::with_capacity(pw * ph);
+    for br in 0..ph {
+        for bc in 0..pw {
+            let mut count = [0usize; 16];
+            for r in br * block..(br + 1) * block {
+                for c in bc * block..(bc + 1) * block {
+                    count[cover[r * w + c] as usize & 15] += 1;
+                }
+            }
+            let main = if count[terrain::ROAD as usize] * 12 > block * block { terrain::ROAD } else { (0..16).max_by_key(|&k| count[k]).unwrap() as u8 };
+            s.push((b'a' + main) as char);
+        }
+    }
+    (s, pw)
 }
 
 fn apply_relief(rel: &Relief, height: &mut [f64], cover: &mut [u8], w: usize, h: usize, cell: f64) {

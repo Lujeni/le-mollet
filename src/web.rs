@@ -134,6 +134,7 @@ impl Track {
             "relief": self.relief.map(Relief::label), "riders": self.riders.lock().unwrap().len(),
             "city": self.city.as_ref().map(|c| c.streets.len()), "buildings": self.buildings.is_some(), "district": !self.district.is_empty(), "ortho": !self.ortho.is_empty(),
             "island": self.city.as_ref().is_some_and(|c| c.island), "props": self.city.as_ref().map(|c| &c.props),
+            "preview": self.city.as_ref().map(|c| &c.preview), "preview_w": self.city.as_ref().map(|c| c.preview_w),
         })
     }
 }

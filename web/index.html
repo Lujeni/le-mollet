@@ -11,71 +11,155 @@
 try { document.documentElement.dataset.theme = localStorage.getItem('lemollet.theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') } catch { document.documentElement.dataset.theme = 'dark' }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
-:root { --bg:#14171c; --panel:#1f242c; --panel-hi:#2b323d; --ink:#eef1f5; --muted:#9aa4b2; --accent:#f2cd37; --line:#0b0d10; }
-:root[data-theme=light] { --bg:#e9edf1; --panel:#f7f8fa; --panel-hi:#ffffff; --ink:#1b2a34; --muted:#5a6573; --accent:#f2cd37; --line:#1b2a34 }
+/* Look: frosted glass panels over the 3D world, chunky Lego-brick buttons with studs, a round game font. */
+:root {
+  --bg:#0e1116; --ink:#f3f5f8; --muted:#a9b3c1; --accent:#f2cd37; --accent-deep:#b8901a; --accent-ink:#f2cd37;
+  --glass:rgba(17,21,28,.66); --glass-hi:rgba(255,255,255,.07); --glass-hi2:rgba(255,255,255,.13); --edge:rgba(255,255,255,.12);
+  --panel:#141a22; --line:rgba(255,255,255,.14); --shadow:0 24px 60px rgba(0,0,0,.42); --r:22px;
+  --font:Fredoka, Inter, system-ui, sans-serif;
+}
+:root[data-theme=light] {
+  --bg:#e9eef3; --ink:#18222c; --muted:#5b6876; --glass:rgba(255,255,255,.74); --glass-hi:rgba(16,24,32,.05); --glass-hi2:rgba(16,24,32,.09);
+  --edge:rgba(16,24,32,.1); --accent-ink:#9a6f00; --panel:#f6f8fa; --line:rgba(16,24,32,.14); --shadow:0 24px 60px rgba(30,45,60,.22);
+}
 * { box-sizing:border-box }
 [hidden] { display:none !important }
-html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:15px/1.4 Inter, system-ui, sans-serif; overflow:hidden }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:15px/1.45 Inter, system-ui, sans-serif; overflow:hidden }
 #scene { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none }
 .ui { position:fixed; inset:0; pointer-events:none; display:flex; flex-direction:column }
-header { padding:16px; font-family:Silkscreen, monospace; font-size:22px; letter-spacing:1px; color:#eef1f5; text-shadow:3px 3px 0 #0b0d10; display:flex; align-items:center; justify-content:space-between }
-#theme { pointer-events:auto; font-size:12px; padding:6px 10px }
-header b { color:var(--accent) }
-.block { background:var(--panel); border:3px solid var(--line); box-shadow:inset -4px -4px 0 rgba(0,0,0,.35), inset 4px 4px 0 rgba(255,255,255,.08) }
-.panel { padding:20px; pointer-events:auto }
-h1, h2, legend { font-family:Silkscreen, monospace; font-weight:700; margin:0 0 12px }
-h1 { font-size:24px } h2 { font-size:18px }
+header { padding:18px 22px; display:flex; align-items:center; justify-content:space-between }
+.logo { display:flex; align-items:center; gap:10px; font-family:Silkscreen, monospace; font-size:22px; letter-spacing:1px; color:#fff; text-shadow:2px 2px 0 rgba(0,0,0,.45) }
+.logo b { color:var(--accent) }
+.logo i { width:30px; height:22px; border-radius:5px; background:var(--accent); position:relative; box-shadow:inset 0 -4px 0 rgba(0,0,0,.22) } /* a 2x1 brick */
+.logo i::before { content:''; position:absolute; top:-5px; left:4px; width:22px; height:6px; background:radial-gradient(circle at 4px 3px, #f7dc6a 3.5px, transparent 4px) 0 0 / 11px 6px repeat-x }
+#theme { pointer-events:auto; font-size:13px; padding:7px 12px }
+.block { background:var(--glass); backdrop-filter:blur(16px) saturate(1.35); -webkit-backdrop-filter:blur(16px) saturate(1.35); border:1px solid var(--edge); border-radius:var(--r); box-shadow:var(--shadow) }
+.panel { padding:24px; pointer-events:auto }
+h1, h2, legend { font-family:var(--font); font-weight:700; margin:0 0 12px; letter-spacing:.2px }
+h1 { font-size:32px; line-height:1.1 } h2 { font-size:21px }
 .muted { color:var(--muted); margin:0 0 16px }
+.kicker { margin:0 0 2px; font-family:var(--font); font-weight:600; font-size:13px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent-ink) }
+::-webkit-scrollbar { width:10px } ::-webkit-scrollbar-thumb { background:var(--glass-hi2); border-radius:10px }
 
-#profiles { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
-#profiles .panel { width:min(520px, 100%); max-height:100%; overflow:auto }
+/* Buttons: soft glass, the main action a yellow brick that presses down */
+.btn, .seg button { font-family:var(--font); font-weight:600; font-size:15px; color:var(--ink); background:var(--glass-hi); border:1px solid var(--edge); border-radius:12px; padding:9px 15px; white-space:nowrap; cursor:pointer; transition:background .15s, transform .1s, box-shadow .1s }
+.btn:hover, .seg button:hover { background:var(--glass-hi2) }
+.btn:focus-visible, .seg button:focus-visible, .sw:focus-visible { outline:3px solid var(--accent); outline-offset:2px }
+.primary, .seg button.on { background:var(--accent); color:#1b2a34; border-color:transparent; box-shadow:inset 0 -3px 0 rgba(0,0,0,.18), 0 4px 0 var(--accent-deep) }
+.primary:hover, .seg button.on:hover { background:#f7d84e }
+.primary:active { transform:translateY(3px); box-shadow:inset 0 -2px 0 rgba(0,0,0,.18), 0 1px 0 var(--accent-deep) }
+.danger { color:#ff8a7a }
+
+/* Lego brick cards: a colored brick, studs along the top, a dark lip below; it lifts on hover and presses down on click */
+.tile, .dest { --c:#c91a09; position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:8px; padding:20px; margin-top:8px; text-align:left; cursor:pointer; color:#fff; font:inherit;
+  background:linear-gradient(160deg, color-mix(in srgb, var(--c) 82%, #fff), var(--c) 45%, color-mix(in srgb, var(--c) 85%, #000));
+  border:0; border-radius:18px; box-shadow:inset 0 -7px 0 rgba(0,0,0,.2), inset 0 2px 0 rgba(255,255,255,.25), 0 7px 0 color-mix(in srgb, var(--c) 55%, #000), 0 16px 26px rgba(0,0,0,.3);
+  transition:transform .14s cubic-bezier(.3,.7,.4,1.4), box-shadow .14s }
+.tile::before, .dest::before { content:''; position:absolute; top:-7px; left:16px; right:16px; height:9px; pointer-events:none;
+  background:radial-gradient(ellipse 9px 6px at 50% 70%, color-mix(in srgb, var(--c) 80%, #fff) 7px, transparent 8px) 0 0 / 30px 9px repeat-x }
+.tile:hover, .tile:focus-visible, .dest:hover, .dest:focus-visible { transform:translateY(-5px) rotate(-.4deg); outline:none; box-shadow:inset 0 -7px 0 rgba(0,0,0,.2), inset 0 2px 0 rgba(255,255,255,.25), 0 12px 0 color-mix(in srgb, var(--c) 55%, #000), 0 26px 36px rgba(0,0,0,.36) }
+.tile:active, .dest:active { transform:translateY(5px); box-shadow:inset 0 -4px 0 rgba(0,0,0,.2), 0 2px 0 color-mix(in srgb, var(--c) 55%, #000), 0 8px 14px rgba(0,0,0,.3) }
+.tile b, .dest b { font-family:var(--font); font-weight:700; font-size:25px; line-height:1.1; text-shadow:0 2px 0 rgba(0,0,0,.2) }
+.tile small, .dest small { opacity:.92; font-size:13.5px }
+.tile svg { width:44px; height:44px; image-rendering:pixelated; filter:drop-shadow(0 2px 0 rgba(0,0,0,.25)) }
+.tile.ride { --c:#d0230f } .tile.train { --c:#0b5ed0 } .tile.garage { --c:#2d8a48 } .tile.me { --c:#8a1a85 }
+.tile.zombie { --c:#5b2a6e; grid-column:1 / -1; flex-direction:row; align-items:center; gap:16px;
+  background:linear-gradient(100deg, #2a1236, #6b2a72 45%, #e9781a); overflow:hidden }
+.tile.zombie::after { content:'ÉVÉNEMENT'; position:absolute; top:12px; right:-34px; transform:rotate(35deg); padding:3px 40px; background:#bbe90b; color:#1b2a34; font:700 11px var(--font); letter-spacing:1.5px }
+
+#profiles, #home, #profileEdit, #rideMenu, #free, #training, #courses { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
+#profiles .panel, #profileEdit .panel { width:min(540px, 100%); max-height:100%; overflow:auto }
+
+/* Profiles */
 .list { display:grid; gap:10px; margin-bottom:16px }
-.card { display:flex; align-items:center; gap:12px; padding:10px 12px; cursor:pointer; background:var(--panel-hi) }
-.card:hover, .card:focus-visible { outline:3px solid var(--accent); outline-offset:-3px }
-.avatar { width:44px; height:44px; flex:none; display:grid; place-items:center; font-family:Silkscreen, monospace; font-size:22px; color:#fff; text-shadow:2px 2px 0 rgba(0,0,0,.45); border:3px solid var(--line) }
+.card { display:flex; align-items:center; gap:14px; padding:12px 14px; cursor:pointer; background:var(--glass-hi); border:1px solid var(--edge); border-radius:16px; transition:background .15s, transform .12s }
+.card:hover, .card:focus-visible { background:var(--glass-hi2); transform:translateX(4px); outline:none }
+.avatar { width:46px; height:46px; flex:none; display:grid; place-items:center; font-family:var(--font); font-weight:700; font-size:22px; color:#fff; border-radius:14px;
+  text-shadow:0 2px 0 rgba(0,0,0,.3); box-shadow:inset 0 -4px 0 rgba(0,0,0,.22), inset 0 2px 0 rgba(255,255,255,.3) }
 .meta { flex:1; min-width:0; display:flex; flex-direction:column }
-.meta strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.meta strong { font-family:var(--font); font-weight:600; font-size:17px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .meta small { color:var(--muted) }
-.del { background:none; border:0; color:var(--muted); font-size:22px; cursor:pointer; padding:4px 8px }
-.del:hover, .del:focus-visible { color:#ff6b5b }
-.new { display:grid; grid-template-columns:1fr 1fr; gap:10px }
+.del { background:none; border:0; color:var(--muted); font-size:22px; cursor:pointer; padding:4px 8px; border-radius:10px }
+.del:hover, .del:focus-visible { color:#ff6b5b; background:var(--glass-hi) }
+.new { display:grid; grid-template-columns:1fr 1fr; gap:12px }
 .new .full { grid-column:1 / -1 }
-label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted) }
-input, select { font:inherit; color:var(--ink); background:var(--bg); border:3px solid var(--line); padding:8px 10px; width:100% }
-input:focus, select:focus { outline:3px solid var(--accent); outline-offset:-3px }
+label { display:flex; flex-direction:column; gap:5px; font-size:12.5px; font-weight:600; color:var(--muted) }
+input, select { font:inherit; color:var(--ink); background:var(--glass-hi); border:1px solid var(--edge); border-radius:12px; padding:10px 12px; width:100% }
+select option { color:#18222c }
+input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .inline { flex-direction:row; align-items:center; gap:8px; margin-top:6px }
 .inline select { width:auto; padding:4px 8px }
+.ident { margin:16px 0 0; padding:12px 14px; background:var(--glass-hi); border-radius:14px; font-size:12px; color:var(--muted); overflow-wrap:anywhere }
+.ident code { color:var(--ink) }
+.form-actions { grid-column:1 / -1; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:4px }
 
-.btn, .seg button { font-family:Silkscreen, monospace; font-size:14px; color:var(--ink); background:var(--panel-hi); border:3px solid var(--line); box-shadow:inset -3px -3px 0 rgba(0,0,0,.35), inset 3px 3px 0 rgba(255,255,255,.12); padding:8px 12px; cursor:pointer }
-.btn:active, .seg button:active { box-shadow:inset 3px 3px 0 rgba(0,0,0,.35) }
-.btn:focus-visible, .seg button:focus-visible, .sw:focus-visible { outline:3px solid var(--ink); outline-offset:1px }
-.primary, .seg button.on { background:var(--accent); color:#1b2a34 }
+/* Home: a column on the left, the rider in 3D on the right */
+#home { justify-content:flex-start }
+#home .panel { width:min(700px, 100%); max-height:100%; overflow:auto; padding:28px }
+.hello { display:flex; align-items:center; gap:16px; margin-bottom:22px }
+.hello .avatar { width:64px; height:64px; font-size:30px; border-radius:18px }
+.hello h1 { margin:0 }
+.chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px }
+.chip { padding:4px 10px; border-radius:999px; background:var(--glass-hi2); font:600 12.5px var(--font); color:var(--ink) }
+.chip b { color:var(--accent-ink) }
+.tiles { display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:22px 16px }
+.tiles .tile.me { grid-column:span 2; flex-direction:row; align-items:center; gap:14px }
+.tiles .tile.ride { grid-row:span 2; justify-content:flex-end; min-height:230px; background:linear-gradient(160deg, #ff5a3c, #d0230f 50%, #8f1406) }
+.tiles .tile.ride b { font-size:38px }
+.tiles .tile.ride svg { width:72px; height:72px; position:absolute; top:22px; right:22px; opacity:.9 }
+.tiles .tile.train, .tiles .tile.garage { min-height:118px }
+.home-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:18px; flex-wrap:wrap }
+.history { margin-top:24px }
+.history h2 { font-size:16px; margin-bottom:10px }
+.history-rows { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(190px, 1fr); gap:10px; overflow-x:auto; padding-bottom:4px }
+.history-row { display:flex; flex-direction:column; gap:3px; padding:12px 14px; background:var(--glass-hi); border:1px solid var(--edge); border-radius:16px; font-size:13px }
+.history-row strong { font-family:var(--font); font-weight:600; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.history-row span { color:var(--muted) }
+.history-row .done { color:#7fd36b; font-weight:700 }
 
-#garage { flex:1; display:flex; justify-content:flex-end; padding:0 16px 16px; min-height:0 }
-.side { width:330px; overflow:auto; display:flex; flex-direction:column; gap:16px }
-.side .btn { align-self:flex-start }
-.garage-nav { align-self:flex-start; margin-right:auto; display:flex; flex-direction:column; gap:8px; padding:12px }
+/* Ride menu: destination cards with a thumbnail */
+#rideMenu .panel { width:min(980px, 100%); max-height:100%; overflow:auto; padding:28px }
+.dests { display:grid; grid-template-columns:repeat(4, 1fr); gap:24px 16px; margin-bottom:24px }
+.dest { padding:0; overflow:visible; min-height:280px; justify-content:flex-start }
+.dest .thumb { width:100%; height:150px; display:block; border-radius:18px 18px 10px 10px; background:#0b1220 }
+.dest .dest-body { display:flex; flex-direction:column; gap:6px; padding:14px 16px 18px }
+.dest .tags { display:flex; flex-wrap:wrap; gap:5px; margin-top:2px }
+.dest .tags i { font-style:normal; padding:3px 8px; border-radius:999px; background:rgba(0,0,0,.22); font:600 11px var(--font); letter-spacing:.3px }
+.dest .ribbon-new { position:absolute; top:12px; left:-8px; padding:4px 12px; border-radius:8px; background:#bbe90b; color:#1b2a34; font:700 12px var(--font); letter-spacing:1.5px; box-shadow:0 3px 0 #6d8a00; transform:rotate(-6deg); animation:bob 2.4s ease-in-out infinite }
+@keyframes bob { 50% { transform:rotate(-6deg) translateY(-4px) } }
+@media (prefers-reduced-motion:reduce) { .dest .ribbon-new, .tile, .dest { animation:none; transition:none } }
+.dest#goCircuits { --c:#d0230f } .dest#goFree { --c:#1595ad } .dest#goCity { --c:#1c3f8f } .dest#goIsland { --c:#e9781a }
+.ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px }
+.ride-head h1, .ride-head h2 { margin:0 }
+
+/* Garage */
+#garage { flex:1; display:flex; justify-content:flex-end; padding:0 22px 22px; min-height:0 }
+.side { width:350px; overflow:auto; display:flex; flex-direction:column; gap:16px }
+.garage-nav { align-self:flex-start; margin-right:auto; display:flex; flex-direction:column; gap:10px; padding:14px }
 .garage-nav p { margin:4px 0 0; font-size:12px }
-.gtab { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:170px; padding:12px 14px; text-align:left; cursor:pointer; font:inherit; color:var(--ink); background:var(--panel-hi); border:3px solid var(--line); box-shadow:inset -3px -3px 0 rgba(0,0,0,.35), inset 3px 3px 0 rgba(255,255,255,.12) }
-.gtab b { font-family:Silkscreen, monospace; font-size:18px }
+.gtab { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:180px; padding:12px 14px; text-align:left; cursor:pointer; font:inherit; color:var(--ink); background:var(--glass-hi); border:1px solid var(--edge); border-radius:14px; transition:background .15s }
+.gtab:hover { background:var(--glass-hi2) }
+.gtab b { font-family:var(--font); font-weight:700; font-size:19px }
 .gtab small { font-size:12px; color:var(--muted) }
-.gtab.on { background:var(--accent); color:#1b2a34 } .gtab.on small { color:#1b2a34 }
-.gtab:focus-visible { outline:3px solid var(--ink); outline-offset:1px }
+.gtab.on { background:var(--accent); color:#1b2a34; border-color:transparent; box-shadow:0 4px 0 var(--accent-deep) } .gtab.on small { color:#1b2a34 }
+.gtab:focus-visible { outline:3px solid var(--accent); outline-offset:2px }
 .side-head { display:flex; align-items:center; justify-content:space-between; gap:8px }
 .side-head h2 { margin:0 }
-.ogroup { display:flex; flex-direction:column; gap:12px; padding-top:12px; border-top:3px solid var(--line) }
-.ogroup h3 { margin:0; font-family:Silkscreen, monospace; font-size:13px; color:var(--muted); text-transform:uppercase }
+.ogroup { display:flex; flex-direction:column; gap:12px; padding-top:14px; border-top:1px solid var(--edge) }
+.ogroup h3 { margin:0; font:700 12px var(--font); letter-spacing:1.5px; color:var(--accent-ink); text-transform:uppercase }
 #options { display:flex; flex-direction:column; gap:16px }
 .opt { border:0; padding:0; margin:0 }
-.opt legend { font-size:13px; margin-bottom:8px }
+.opt legend { font-size:14px; margin-bottom:8px }
 .seg { display:flex; gap:6px; flex-wrap:wrap }
 .seg button { flex:1 }
-.swatches { display:grid; grid-template-columns:repeat(6, 1fr); gap:6px }
-.sw { aspect-ratio:1; border:3px solid var(--line); cursor:pointer; box-shadow:inset -3px -3px 0 rgba(0,0,0,.3), inset 3px 3px 0 rgba(255,255,255,.25) }
-.sw.on { outline:3px solid var(--ink); outline-offset:1px }
+.swatches { display:grid; grid-template-columns:repeat(6, 1fr); gap:7px }
+.sw { aspect-ratio:1; border:0; border-radius:10px; cursor:pointer; box-shadow:inset 0 -3px 0 rgba(0,0,0,.25), inset 0 2px 0 rgba(255,255,255,.3); transition:transform .1s }
+.sw:hover { transform:translateY(-2px) }
+.sw.on { outline:3px solid var(--ink); outline-offset:2px }
 
+/* Ride HUD */
 #ride { flex:1; position:relative; margin:0 16px 16px; min-height:0 }
 /* HUD widgets float over the 3D; placeHud sets left/top from the rider's layout (fractions of the free space). */
 .hud { position:absolute; left:0; top:0; transform-origin:top left }
@@ -83,134 +167,98 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:-3px
 .hud.off, #ride.bare .hud { display:none }
 #ride.editing .hud { outline:3px dashed var(--accent); outline-offset:2px; cursor:grab; touch-action:none }
 #ride.editing .hud * { pointer-events:none }
-.hud-edit { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:min(380px, 100%); max-height:100%; overflow:auto; display:flex; flex-direction:column; gap:12px; z-index:2 }
+.hud-edit { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:min(400px, 100%); max-height:100%; overflow:auto; display:flex; flex-direction:column; gap:12px; z-index:2 }
 .hud-edit .muted { margin:0 }
 .checks { display:flex; flex-wrap:wrap; gap:6px 14px }
 .checks label { flex-direction:row; align-items:center; gap:6px; font-size:13px; color:var(--ink) }
 .checks input { width:auto }
-.stats { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(88px, max-content); gap:12px; padding:14px 20px }
+.stats { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(88px, max-content); gap:14px; padding:14px 22px }
 .stats.col .finish { grid-row:auto }
 .stats.col { grid-auto-flow:row; grid-auto-columns:auto; grid-template-columns:150px; gap:6px }
-.ctrl { display:flex; flex-direction:column; gap:8px; padding:12px 16px; width:min(380px, calc(100vw - 32px)) }
+.ctrl { display:flex; flex-direction:column; gap:8px; padding:12px 16px; width:min(400px, calc(100vw - 32px)) }
+.ctrl .ride-head { margin:0 } .ctrl .ride-head span { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end }
 .map { padding:10px; width:min(520px, calc(100vw - 32px)) }
 .hud.demo { padding:10px 14px; width:min(460px, calc(100vw - 32px)) }
-.stat small { display:block; font-family:Silkscreen, monospace; font-size:11px; color:var(--muted) }
-.stat b { font-family:Silkscreen, monospace; font-size:26px; font-weight:700 }
+.stat small { display:block; font:600 11px var(--font); letter-spacing:1px; text-transform:uppercase; color:var(--muted) }
+.stat b { font:700 28px var(--font); font-variant-numeric:tabular-nums }
 .stat i { white-space:nowrap; font-style:normal; font-size:12px; color:var(--muted); margin-left:4px }
-.finish { grid-column:1 / -1; grid-row:2; max-width:min(700px, 90vw); font-family:Silkscreen, monospace; font-size:20px; color:var(--accent); text-align:center }
-.ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px }
-.ride-head h2 { margin:0 }
-#profileCanvas { width:100%; height:160px; display:block }
+.finish { grid-column:1 / -1; grid-row:2; max-width:min(700px, 90vw); font:700 20px var(--font); color:var(--accent); text-align:center }
+#profileCanvas { width:100%; height:160px; display:block; border-radius:12px }
 #profileCanvas.seekable { cursor:pointer }
 #ride.world3d #profileCanvas { height:90px }
 .attrib { position:absolute; left:0; right:0; bottom:-14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#eef1f5; font-size:10px; text-shadow:1px 1px 0 #0b0d10; pointer-events:auto }
-#rideBtn { align-self:stretch }
-#mirror { width:min(260px, 45vw); aspect-ratio:1.8; border:3px solid var(--line); outline:2px solid #fe8a18; position:relative }
-#mirror small { position:absolute; left:4px; top:2px; font-family:Silkscreen, monospace; font-size:10px; color:#fe8a18 }
-#courses { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
-#courses .panel { width:min(560px, 100%); max-height:100%; overflow:auto }
-.course-card { display:flex; flex-direction:column; gap:6px; padding:12px; cursor:pointer; background:var(--panel-hi) }
-.course-card:hover, .course-card:focus-visible { outline:3px solid var(--accent); outline-offset:-3px }
-.course-card canvas { width:100%; height:48px; display:block }
-.course-card small { color:var(--muted) }
+#mirror { width:min(260px, 45vw); aspect-ratio:1.8; border:3px solid #0b0d10; border-radius:12px; outline:2px solid #fe8a18; position:relative }
+#mirror small { position:absolute; left:6px; top:3px; font:700 10px var(--font); color:#fe8a18 }
 .demo { display:flex; align-items:center; gap:10px }
-.demo label { flex-direction:row; align-items:center; gap:8px; font-family:Silkscreen, monospace; font-size:13px; color:var(--ink) }
-.demo output { font-family:Silkscreen, monospace; font-size:20px; min-width:84px; text-align:right }
-.demo .btn { padding:6px 10px }
+.demo output { font:700 20px var(--font); min-width:84px; text-align:right }
+.demo .btn { padding:6px 12px }
 input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; background:none; height:28px }
-
-/* Home */
-#home, #training { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
-#home .panel { width:min(860px, 100%); max-height:100%; overflow:auto }
-#profileEdit { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
-#profileEdit .panel { width:min(520px, 100%); max-height:100%; overflow:auto }
-.ident { margin:16px 0 0; padding:10px 12px; background:var(--bg); border:3px solid var(--line); font-size:12px; color:var(--muted); overflow-wrap:anywhere }
-.ident code { color:var(--ink) }
-.form-actions { grid-column:1 / -1; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:4px }
-.hello { display:flex; align-items:center; gap:14px; margin-bottom:18px }
-.hello .avatar { width:56px; height:56px; font-size:28px }
-.hello h1 { margin:0 }
-.tiles { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px }
-.tile { display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding:18px; min-height:170px; text-align:left; cursor:pointer; color:#eef1f5; font:inherit; border:3px solid var(--line); box-shadow:inset -5px -5px 0 rgba(0,0,0,.3), inset 5px 5px 0 rgba(255,255,255,.15) }
-.tile:hover, .tile:focus-visible { outline:3px solid var(--ink); outline-offset:2px; transform:translateY(-2px) }
-.tile b { font-family:Silkscreen, monospace; font-size:22px }
-.tile small { opacity:.85 }
-.tile svg { width:48px; height:48px; image-rendering:pixelated }
-.tile.ride { background:#c91a09 } .tile.train { background:#0055bf } .tile.garage { background:#237841 } .tile.me { background:#81007b }
-/* Game mode: a full-width Halloween banner under the four tiles */
-.tile.zombie { grid-column:1 / -1; min-height:0; flex-direction:row; align-items:center; background:linear-gradient(90deg, #3a1a4a, #fe8a18) }
+.junction { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:0 0 8px }
+.junction .btn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px }
+.junction .btn.on { background:var(--accent); color:#1b2a34 }
+.junction small { color:var(--muted); width:100% }
 .zombie-hud { color:#bbe90b }
 .zombie-hud.sprint { color:var(--accent); animation:blink .6s steps(2) infinite }
 @keyframes blink { 50% { opacity:.55 } }
 @media (prefers-reduced-motion:reduce) { .zombie-hud.sprint { animation:none } }
-.home-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; flex-wrap:wrap }
+#autoBtn.on { background:var(--accent); color:#1b2a34 }
 
 /* Fridge door with course magnets */
-#courses .panel { width:min(860px, 100%); max-height:100%; overflow:auto }
-.fridge { padding:28px 20px; display:flex; flex-wrap:wrap; gap:34px 28px; justify-content:center; border:3px solid var(--line);
-  background:linear-gradient(180deg, #e9edf1, #c9d0d6), repeating-linear-gradient(90deg, rgba(255,255,255,.18) 0 2px, transparent 2px 5px); background-blend-mode:overlay }
+#courses .panel { width:min(900px, 100%); max-height:100%; overflow:auto }
+.fridge { padding:30px 20px; display:flex; flex-wrap:wrap; gap:34px 28px; justify-content:center; border-radius:18px;
+  background:linear-gradient(180deg, #eef2f5, #cdd4da), repeating-linear-gradient(90deg, rgba(255,255,255,.18) 0 2px, transparent 2px 5px); background-blend-mode:overlay }
 .magnet { position:relative; width:230px; height:180px; padding:0; border:4px solid #fff; border-radius:16px; overflow:hidden; cursor:pointer;
   transform:rotate(var(--r)); box-shadow:0 5px 0 rgba(0,0,0,.18), 0 12px 20px rgba(0,0,0,.35); transition:transform .15s, box-shadow .15s; background:#fff }
 .magnet:hover, .magnet:focus-visible { transform:rotate(0) translateY(-6px) scale(1.04); box-shadow:0 8px 0 rgba(0,0,0,.15), 0 22px 30px rgba(0,0,0,.4); outline:none }
 .magnet canvas { position:absolute; inset:0; width:100%; height:100% }
-.magnet .ribbon { position:absolute; left:0; right:0; bottom:0; padding:8px 10px 9px; font-family:Silkscreen, monospace; font-size:15px; font-weight:700; color:#fff; text-shadow:2px 2px 0 rgba(0,0,0,.4); text-align:left }
+.magnet .ribbon { position:absolute; left:0; right:0; bottom:0; padding:8px 10px 9px; font:700 17px var(--font); color:#fff; text-shadow:0 2px 0 rgba(0,0,0,.35); text-align:left }
 .magnet .ribbon small { display:block; font-family:Inter, sans-serif; font-weight:600; font-size:11px; text-shadow:none; opacity:.9 }
 .magnet .badge { position:absolute; top:8px; right:8px; width:58px; height:58px; border-radius:50%; display:grid; place-items:center; text-align:center;
-  background:#f2cd37; color:#1b2a34; border:3px solid #fff; font-family:Silkscreen, monospace; font-size:12px; line-height:1.05; transform:rotate(12deg); box-shadow:0 3px 0 rgba(0,0,0,.2) }
+  background:#f2cd37; color:#1b2a34; border:3px solid #fff; font:700 12px var(--font); line-height:1.05; transform:rotate(12deg); box-shadow:0 3px 0 rgba(0,0,0,.2) }
 
-/* Open worlds */
-#rideMenu, #free { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px 16px; min-height:0 }
-#rideMenu .panel { width:min(620px, 100%); max-height:100%; overflow:auto }
-#free .panel { width:min(720px, 100%); max-height:100%; overflow:auto }
-.tiles.two { grid-template-columns:repeat(2, 1fr); margin-bottom:14px }
-.tile.free { background:#36aebf } .tile.island { background:#fe8a18 }
-.tile.city { background:#002654; grid-column:1 / -1; min-height:0; flex-direction:row; align-items:center }
-.junction { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:0 0 8px }
-.junction .btn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px }
-.junction .btn.on { background:var(--accent); color:#1b2a34 }
-.junction small { color:var(--muted); width:100% }
-.online { color:#5d9b3a; font-weight:600 }
-
-/* Training */
-#training .panel { width:min(720px, 100%); max-height:100%; overflow:auto }
-.workout-card { display:flex; flex-direction:column; gap:6px; padding:12px; cursor:pointer; background:var(--panel-hi) }
-.workout-card:hover, .workout-card:focus-visible { outline:3px solid var(--accent); outline-offset:-3px }
+/* Free worlds, training */
+#free .panel, #training .panel { width:min(760px, 100%); max-height:100%; overflow:auto }
+.online { color:#7fd36b; font-weight:600 }
+.course-card, .workout-card { display:flex; flex-direction:column; gap:6px; padding:14px 16px; cursor:pointer; background:var(--glass-hi); border:1px solid var(--edge); border-radius:16px; transition:background .15s, transform .12s }
+.course-card:hover, .course-card:focus-visible, .workout-card:hover, .workout-card:focus-visible { background:var(--glass-hi2); transform:translateY(-2px); outline:none }
+.workout-card strong, .course-card strong { font-family:var(--font); font-weight:600; font-size:17px }
 .workout-card .row { display:flex; justify-content:space-between; gap:12px; align-items:baseline }
-.workout-card small { color:var(--muted) }
-.workout-card canvas { width:100%; height:44px; display:block }
-#autoBtn.on { background:var(--accent); color:#1b2a34 }
+.workout-card small, .course-card small { color:var(--muted) }
+.workout-card canvas, .course-card canvas { width:100%; height:46px; display:block }
 
 /* Pause / end-of-ride menu */
-.modal { position:fixed; inset:0; z-index:10; display:grid; place-items:center; padding:16px; background:rgba(11,13,16,.6); pointer-events:auto }
-.modal .panel { width:min(520px, 100%); max-height:100%; overflow:auto }
-.summary { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin:8px 0 18px }
-.summary .stat b { font-size:22px }
+.modal { position:fixed; inset:0; z-index:10; display:grid; place-items:center; padding:16px; background:rgba(8,10,14,.5); backdrop-filter:blur(4px); pointer-events:auto }
+.modal .panel { width:min(540px, 100%); max-height:100%; overflow:auto }
+.summary { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin:8px 0 18px }
+.summary .stat b { font-size:24px }
 .menu-actions { display:flex; flex-direction:column; gap:10px }
-.menu-actions .btn { text-align:center }
-.danger { color:#ff8a7a }
-/* Ride history on the home screen */
-.history { margin-top:18px }
-.history h2 { font-size:14px; margin-bottom:8px }
-.history-row { display:flex; justify-content:space-between; gap:10px; padding:8px 10px; background:var(--panel-hi); border:3px solid var(--line); margin-top:6px; font-size:13px }
-.history-row span { color:var(--muted) }
+.menu-actions .btn { text-align:center; padding:12px 15px }
 
-@media (max-width:900px) and (min-width:701px) { .tiles { grid-template-columns:repeat(2, 1fr) } }
-@media (max-width:700px) { .tiles.two { grid-template-columns:1fr } }
+@media (max-width:1000px) { .dests { grid-template-columns:repeat(2, 1fr) } }
+@media (max-width:900px) { #home { justify-content:center } }
 @media (max-width:700px) {
   .tiles { grid-template-columns:1fr }
+  .tiles .tile.me { grid-column:auto }
+  .tiles .tile.ride { grid-row:auto; min-height:150px }
+  .tiles .tile.ride b { font-size:30px }
+  .dests { grid-template-columns:1fr }
+  .dest { min-height:0 }
+  .dest .thumb { height:120px }
   .summary { grid-template-columns:repeat(2, 1fr) }
-  .history-row { flex-direction:column; gap:2px }
   .tile { min-height:0; flex-direction:row; align-items:center }
   .magnet { width:100%; max-width:300px }
-  .stat b { font-size:20px }
+  .stat b { font-size:21px }
+  h1 { font-size:26px }
   #ride { margin:0 8px 16px }
   .stats { gap:8px; padding:10px 12px }
-  header { font-size:18px; padding:12px 16px }
+  header { padding:12px 16px } .logo { font-size:18px }
+  #profiles, #home, #profileEdit, #rideMenu, #free, #training, #courses { padding:0 10px 10px }
+  #home .panel, #rideMenu .panel { padding:20px }
   #garage { flex-direction:column; justify-content:flex-end; padding:0 }
-  .garage-nav { flex-direction:row; align-self:stretch; margin:0; padding:8px 16px }
+  .garage-nav { flex-direction:row; align-self:stretch; margin:0; padding:8px 16px; border-radius:0 }
   .garage-nav .btn, .gtab { flex:1; width:auto } .garage-nav p { display:none }
   .gtab small { display:none }
-  .side { width:100%; max-height:48vh; padding:16px }
+  .side { width:100%; max-height:48vh; padding:16px; border-radius:var(--r) var(--r) 0 0 }
 }
 </style>
 <script type="importmap">
@@ -223,7 +271,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 <body>
 <canvas id="scene"></canvas>
 <div class="ui">
-  <header><span>LE <b>MOLLET</b></span><button class="btn" id="theme" aria-label="Basculer thème clair ou sombre"></button></header>
+  <header><span class="logo"><i></i>LE <b>MOLLET</b></span><button class="btn" id="theme" aria-label="Basculer thème clair ou sombre"></button></header>
 
   <main id="profiles">
     <div class="block panel">
@@ -242,7 +290,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 
   <main id="home" hidden>
     <div class="block panel">
-      <div class="hello"><span class="avatar" id="homeAvatar"></span><div><h1 id="homeHello"></h1><small class="muted" id="homeStats"></small></div></div>
+      <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1 id="homeHello"></h1><div class="chips" id="homeStats"></div></div></div>
       <div class="tiles">
         <button class="tile ride" id="goRide">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M0 11h12v1H0zM1 10h10v1H1zM2 9h3V8h1V6h1v1h1v1h1v1h1v1H2zM5 5h2v1H5zM6 4h1v1H6z"/></svg>
@@ -309,25 +357,26 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   <main id="rideMenu" hidden>
     <div class="block panel">
       <div class="ride-head">
-        <h1>Où veux-tu rouler ?</h1>
+        <div><p class="kicker">Rouler</p><h1>Où on va aujourd'hui ?</h1></div>
         <button class="btn" id="rideMenuBack">‹ Accueil</button>
       </div>
-      <div class="tiles two">
-        <button class="tile ride" id="goCircuits">
-          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M0 11h12v1H0zM1 10h10v1H1zM2 9h3V8h1V6h1v1h1v1h1v1h1v1H2zM5 5h2v1H5zM6 4h1v1H6z"/></svg>
-          <b>Circuits</b><small id="goCircuitsSub">Les cols mythiques, en vrai relief</small>
+      <div class="dests">
+        <button class="dest" id="goCircuits">
+          <canvas class="thumb" id="thumbCircuits" aria-hidden="true"></canvas>
+          <span class="dest-body"><b>Circuits</b><small id="goCircuitsSub">Les cols mythiques, en vrai relief</small><span class="tags"><i>Montées</i><i>Fantôme</i></span></span>
         </button>
-        <button class="tile free" id="goFree">
-          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M3 1h6v1h1v1h1v6h-1v1H9v1H3v-1H2V9H1V3h1V2h1zM3 3v6h6V3zM8 0h2v1H8zM10 1h1v2h-1z"/></svg>
-          <b>Free</b><small id="goFreeSub">Boucles ouvertes à tous</small>
+        <button class="dest" id="goIsland" hidden>
+          <span class="ribbon-new">NOUVEAU</span>
+          <canvas class="thumb" id="thumbIsland" aria-hidden="true"></canvas>
+          <span class="dest-body"><b id="goIslandName">Île</b><small>Volcan, désert, port pirate, jungle : une île Lego dessinée à la main</small><span class="tags"><i>Monde ouvert</i><i>Carrefours</i></span></span>
         </button>
-        <button class="tile city" id="goCity" hidden>
-          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M5 0h2v2H5zM5 2h2v3H5zM4 5h4v1H4zM4 6h1v2H4zM7 6h1v2H7zM3 8h6v1H3zM2 9h2v3H2zM8 9h2v3H8zM4 9h4v1H4z"/></svg>
-          <b id="goCityName">Ville</b><small id="goCitySub">Toutes les rues, choisis ta route à chaque carrefour</small>
+        <button class="dest" id="goCity" hidden>
+          <canvas class="thumb" id="thumbCity" aria-hidden="true"></canvas>
+          <span class="dest-body"><b id="goCityName">Ville</b><small id="goCitySub">Toutes les rues, choisis ta route à chaque carrefour</small><span class="tags"><i>Ville</i><i>Carrefours</i></span></span>
         </button>
-        <button class="tile island" id="goIsland" hidden>
-          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M5 1h2v1h1v1h1v1H3V3h1V2h1zM6 4h1v5H6zM2 9h8v1h1v1H1v-1h1z"/></svg>
-          <b id="goIslandName">Île</b><small>Une île Lego dessinée à la main : volcan, désert, port pirate, jungle</small>
+        <button class="dest" id="goFree">
+          <canvas class="thumb" id="thumbFree" aria-hidden="true"></canvas>
+          <span class="dest-body"><b>Free</b><small id="goFreeSub">Boucles ouvertes à tous</small><span class="tags"><i>Multijoueur</i><i>Boucle du jour</i></span></span>
         </button>
       </div>
       <p class="muted" id="modeHint"></p>
@@ -928,6 +977,7 @@ function resize() {
   // Center the bike between the left menu and the options panel (stacked at the bottom on narrow screens).
   if (side && narrow) camera.zoom *= 0.6; // only the strip above the bottom sheet is left for the bike
   if (side) camera.setViewOffset(W, H, narrow ? 0 : (side.width - nav.width) / 2, narrow ? (side.height + nav.height) / 2 : 0, W, H);
+  else if (!$('#home').hidden && !narrow && W > 900) camera.setViewOffset(W, H, -$('#home .panel').getBoundingClientRect().right / 2, 0, W, H); // home: the rider beside the menu
   else camera.clearViewOffset(); // the ride HUD floats over the 3D: nothing to center around
   placeHud();
   camera.updateProjectionMatrix();
@@ -1038,7 +1088,8 @@ function showHome(p = current) {
   $('#homeAvatar').textContent = p.name[0].toUpperCase();
   $('#homeAvatar').style.background = p.bike.frame;
   $('#homeHello').textContent = `Salut ${p.name} !${p.country ? ` ${flag(p.country)}` : ''}`;
-  $('#homeStats').textContent = `${p.weightKg} kg · FTP ${p.ftp} W · ${(p.ftp / p.weightKg).toFixed(1)} W/kg`;
+  const km = (p.history ?? []).reduce((a, r) => a + r.distance, 0) / 1000, chip = (v, u) => h('span', { class:'chip' }, h('b', {}, v), ` ${u}`);
+  $('#homeStats').replaceChildren(chip(p.ftp, 'W FTP'), chip((p.ftp / p.weightKg).toFixed(1), 'W/kg'), chip(p.weightKg, 'kg'), chip(Math.round(km), 'km roulés'));
   const n = ride.list?.courses.length ?? 0;
   $('#goRideSub').textContent = `${n} col${n > 1 ? 's' : ''} mythique${n > 1 ? 's' : ''} et le monde ouvert`;
   $('#goTrainSub').textContent = `${ride.workouts?.length ?? 0} séances calées sur ta FTP`;
@@ -1183,10 +1234,79 @@ function showRideMenu() {
     $('#goCityName').textContent = city.name;
     $('#goCitySub').textContent = `${city.city.toLocaleString('fr')} rues : choisis ta route à chaque carrefour`;
   }
+  requestAnimationFrame(() => { // layout first: thumbnails need their size
+    drawClimbsThumb($('#thumbCircuits'), ride.list?.courses ?? []);
+    drawLoopThumb($('#thumbFree'));
+    if (city) drawCityThumb($('#thumbCity'));
+    if (island?.preview) drawIslandThumb($('#thumbIsland'), island);
+  });
   fetch('/worlds').then(r => r.json()).then(worlds => {
     const online = worlds.reduce((a, w) => a + w.riders, 0);
     $('#goFreeSub').textContent = `${worlds.length} boucle${worlds.length > 1 ? 's' : ''} ouverte${worlds.length > 1 ? 's' : ''} · ${online} cycliste${online > 1 ? 's' : ''} en ligne`;
   }).catch(() => {});
+}
+
+// ---------- destination thumbnails, drawn on canvases ----------
+function thumbCanvas(cv) {
+  const dpr = Math.min(devicePixelRatio, 2), [W, H] = [cv.clientWidth, cv.clientHeight];
+  [cv.width, cv.height] = [W * dpr, H * dpr];
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return [ctx, W, H];
+}
+// A row of round studs over a colored plate, like the island's ground.
+function studs(ctx, x, y, s, hex) {
+  ctx.fillStyle = hex; ctx.fillRect(x, y, s + 0.5, s + 0.5);
+  ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.arc(x + s * 0.55, y + s * 0.58, s * 0.3, 0, 7); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.beginPath(); ctx.arc(x + s * 0.48, y + s * 0.45, s * 0.3, 0, 7); ctx.fill();
+}
+const THUMB = ['#4b9f4a', '#237841', '#2f7fe0', '#e4cd9e', '#958a73', '#6c6e68', '#a0a5a9', '#e4cd9e', '#fe8a18', '#a5ca18', '#7c503a', '#4a4c4e', '#184632'];
+// Island: a Lego mosaic of the real map, one stud per 100 m square.
+function drawIslandThumb(cv, c) {
+  const [ctx, W, H] = thumbCanvas(cv), pw = c.preview_w, ph = c.preview.length / pw, k = 2;
+  const [bw, bh] = [Math.floor(pw / k), Math.floor(ph / k)], s = Math.max(W / bw, H / bh), [ox, oy] = [(W - bw * s) / 2, (H - bh * s) / 2];
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const code = c.preview.charCodeAt((y * k) * pw + x * k) - 97;
+    studs(ctx, ox + x * s, oy + y * s, s, THUMB[code] ?? THUMB[2]);
+  }
+}
+// Circuits: three mountain ridges from real climb profiles, snow on top, a warm sky.
+function drawClimbsThumb(cv, courses) {
+  const [ctx, W, H] = thumbCanvas(cv), sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#ff9a5a'); sky.addColorStop(1, '#ffd88a');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#fff3c4'; ctx.beginPath(); ctx.arc(W * 0.78, H * 0.3, 18, 0, 7); ctx.fill();
+  courses.slice(0, 3).forEach((c, i) => {
+    const p = c.profile, lo = Math.min(...p), hi = Math.max(...p), base = H * (0.55 + i * 0.16), amp = H * (0.42 - i * 0.08);
+    const y = j => base - (p[j] - lo) / (hi - lo || 1) * amp;
+    ctx.beginPath(); ctx.moveTo(0, H);
+    p.forEach((_, j) => ctx.lineTo(j / (p.length - 1) * W, y(j)));
+    ctx.lineTo(W, H); ctx.closePath();
+    ctx.fillStyle = ['#8a7f9e', '#3f7a52', '#237841'][i]; ctx.fill();
+    if (i === 0) { ctx.save(); ctx.clip(); ctx.fillStyle = '#f4f4f4'; ctx.fillRect(0, 0, W, base - amp * 0.75); ctx.restore() }
+  });
+}
+// Free: a loop of road over rolling green hills, riders on it.
+function drawLoopThumb(cv) {
+  const [ctx, W, H] = thumbCanvas(cv);
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#8ad3ec'); g.addColorStop(0.45, '#bde8f5'); g.addColorStop(0.46, '#6cc04a'); g.addColorStop(1, '#3f9a3a');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#4b9f4a'; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.ellipse(W * (0.15 + i * 0.25), H * 0.48, W * 0.18, H * 0.12, 0, Math.PI, 0); ctx.fill() }
+  ctx.lineWidth = 12; ctx.strokeStyle = '#595d60'; ctx.beginPath(); ctx.ellipse(W / 2, H * 0.72, W * 0.36, H * 0.17, 0, 0, 7); ctx.stroke();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = '#fff'; ctx.setLineDash([6, 6]); ctx.stroke(); ctx.setLineDash([]);
+  [[0.2, '#f2cd37'], [1.3, '#c91a09'], [2.4, '#0055bf'], [4.1, '#f4f4f4']].forEach(([a, col]) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(W / 2 + Math.cos(a) * W * 0.36, H * 0.72 + Math.sin(a) * H * 0.17, 4.5, 0, 7); ctx.fill() });
+}
+// City: night skyline, lit windows, the tower.
+function drawCityThumb(cv) {
+  const [ctx, W, H] = thumbCanvas(cv), g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#0a1440'); g.addColorStop(1, '#3a3f8f');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#fff'; for (let i = 0; i < 30; i++) ctx.fillRect(hash(i, 1, 90) * W, hash(i, 2, 90) * H * 0.5, 1.5, 1.5);
+  for (let x = 0; x < W; x += 22) { const bh = 30 + hash(x, 3, 90) * 40; ctx.fillStyle = '#141a3a'; ctx.fillRect(x, H - bh, 20, bh);
+    for (let wy = H - bh + 6; wy < H - 6; wy += 9) for (let wx = x + 3; wx < x + 18; wx += 6) if (hash(wx, wy, 91) < 0.4) { ctx.fillStyle = '#ffd36b'; ctx.fillRect(wx, wy, 3, 4) } }
+  const tx = W * 0.62, ty = H * 0.12; ctx.fillStyle = '#e9b44c';
+  ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx + 26, H); ctx.lineTo(tx + 14, H); ctx.lineTo(tx, H * 0.6); ctx.lineTo(tx - 14, H); ctx.lineTo(tx - 26, H); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#0a1440'; ctx.beginPath(); ctx.arc(tx, H, 10, Math.PI, 0); ctx.fill(); ctx.fillRect(tx - 15, H * 0.62, 30, 3);
 }
 
 function showFree() {
@@ -3789,9 +3909,10 @@ function renderHistory() {
   const km = list.reduce((a, r) => a + r.distance, 0) / 1000, up = list.reduce((a, r) => a + r.climbed, 0);
   $('#history').replaceChildren(
     h('h2', {}, `Tes sorties · ${list.length} · ${km.toFixed(0)} km · +${Math.round(up)} m`),
-    ...list.slice(0, 5).map(r => h('div', { class:'history-row' },
-      h('strong', {}, `${new Date(r.date).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' })} · ${r.name}${r.completed ? ' ✓' : ''}`),
-      h('span', {}, `${hms(r.elapsed)} · ${(r.distance / 1000).toFixed(1)} km · ${Math.round(r.avgPower)} W moy.`))),
+    h('div', { class:'history-rows' }, ...list.slice(0, 8).map(r => h('div', { class:'history-row' },
+      h('span', {}, new Date(r.date).toLocaleDateString('fr-FR', { weekday:'short', day:'numeric', month:'short' }), r.completed ? h('span', { class:'done' }, ' · terminé') : ''),
+      h('strong', {}, r.name),
+      h('span', {}, `${hms(r.elapsed)} · ${(r.distance / 1000).toFixed(1)} km · ${Math.round(r.avgPower)} W`)))),
   );
 }
 
