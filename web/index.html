@@ -135,6 +135,14 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px }
 .ride-head h1, .ride-head h2 { margin:0 }
 
+/* Access token (RBAC) */
+.account { display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin-top:18px; padding-top:14px; border-top:1px solid var(--edge) }
+.account h2 { margin:0; font-size:17px } .account .muted { margin:0 }
+.btn.strava { background:#fc4c02; color:#fff; border-color:transparent; text-decoration:none } .btn.strava:hover { background:#e34402 }
+#signOut { text-decoration:none }
+.role-chip { margin-left:8px; padding:2px 10px; border-radius:999px; background:#81007b; color:#fff; font:700 12px var(--font); vertical-align:middle }
+.board .reset { margin-left:auto; padding:2px 8px; font-size:11px }
+
 /* Progression: XP bar, level on the avatar, awards, badge wall, locked garage pieces */
 .xp-bar { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; max-width:420px }
 .xp-bar .lvl { font:700 13px var(--font); color:var(--accent-ink) } .xp-bar small { color:var(--muted); white-space:nowrap }
@@ -433,7 +441,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 
   <main id="home" hidden>
     <div class="block panel">
-      <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1 id="homeHello"></h1><div class="chips" id="homeStats"></div><div id="homeLevel"></div></div></div>
+      <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1><span id="homeHello"></span><span id="homeRole"></span></h1><div class="chips" id="homeStats"></div><div id="homeLevel"></div></div></div>
       <div class="dev-status"><span id="homeDevices"></span><button class="btn" id="goDevices">Équipements</button></div>
       <div class="tiles">
         <button class="tile ride" id="goRide">
@@ -486,6 +494,12 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         </div>
       </form>
       <p class="ident" id="profileIdent"></p>
+      <section class="account" id="account">
+        <h2>Compte</h2>
+        <p class="muted" id="accountState"></p>
+        <a class="btn strava" id="stravaIn" href="/auth/strava" hidden>Se connecter avec Strava</a>
+        <a class="btn" id="signOut" href="/auth/logout" hidden>Se déconnecter</a>
+      </section>
     </div>
   </main>
 
@@ -4396,7 +4410,8 @@ async function renderBoards() {
   const mine = current.id;
   box.replaceChildren(h('h3', {}, 'Classements'), ...list.map(sg => {
     const rows = (sg.today.length ? sg.today : sg.all).slice(0, 5);
-    return h('div', { class:'board' }, h('strong', {}, `${sg.kind === 'kom' ? '⛰' : '⚡'} ${sg.name}`, h('small', {}, sg.today.length ? ' · du jour' : ' · général')),
+    return h('div', { class:'board' }, h('strong', { style:'display:flex;align-items:center;gap:6px' }, `${sg.kind === 'kom' ? '⛰' : '⚡'} ${sg.name}`, h('small', {}, sg.today.length ? ' · du jour' : ' · général'),
+        can('moderate') && sg.all.length ? h('button', { class:'btn reset', onclick: async () => { if (!confirm(`Effacer tous les temps de « ${sg.name} » ?`)) return; await authed(`/admin/segments/reset?id=${encodeURIComponent(ride.id)}&name=${encodeURIComponent(sg.name)}`); renderBoards() } }, 'Remettre à zéro') : ''),
       ...(rows.length ? rows.map((e, i) => h('div', { class:'board-row' + (e.who === mine ? ' me' : '') },
         h('span', { class:'jersey ' + (i === 0 ? sg.kind : '') }, String(i + 1)), h('i', { style:`background:${e.color}` }), h('span', {}, e.name), h('b', {}, hms(e.time))))
         : [h('small', { class:'muted' }, 'Personne encore : à toi de jouer !')]));
@@ -4587,6 +4602,30 @@ addEventListener('keydown', e => {
 });
 
 $('#zwoFile').addEventListener('change', e => { importZwo([...e.target.files]); e.target.value = '' });
+
+// ---------- account and access (RBAC), see docs/rbac.md ----------
+// Riding needs no account. Signing in with Strava (a cookie the server sets) gives an identity, and the
+// server's roles.json may make it organizer or admin. The account belongs to the browser, not to a profile.
+const auth = { me:{ role:'rider', perms:['ride', 'create_world'], strava:false } };
+const can = p => auth.me.perms.includes(p);
+const authed = (path, opts = {}) => fetch(path, { credentials:'same-origin', ...opts });
+const ROLE_NAMES = { rider:'Cycliste', organizer:'Organisateur', admin:'Admin' };
+async function whoami() {
+  auth.me = await authed('/whoami').then(r => r.json()).catch(() => auth.me);
+  const { me } = auth, signed = !!me.athlete;
+  $('#account').hidden = !me.strava && !signed; // no Strava app on this server: nothing to sign in to
+  $('#accountState').textContent = signed ? `Connecté avec Strava : ${me.name} (athlète ${me.athlete}) · ${ROLE_NAMES[me.role]}`
+    : 'Pas besoin de compte pour rouler. Avec Strava, tu gardes ton identité sur ce serveur (et bientôt, tes sorties partent sur Strava).';
+  $('#stravaIn').hidden = signed || !me.strava;
+  $('#signOut').hidden = !signed;
+  $('#homeRole').replaceChildren(...(me.role !== 'rider' ? [h('span', { class:'role-chip' }, ROLE_NAMES[me.role])] : []));
+}
+whoami();
+// Back from Strava: say how it went, then clean the address bar.
+{
+  const back = new URLSearchParams(location.search).get('signin');
+  if (back) { history.replaceState(null, '', location.pathname); if (back === 'failed') setTimeout(() => alert('Connexion Strava annulée ou refusée.'), 300) }
+}
 
 // ---------- progression: XP, levels, badges, garage unlocks (kept in the profile) ----------
 // XP like Zwift: 20 per km ridden, 12 per minute of workout, 50 per segment finished, plus each badge's bonus.

@@ -114,6 +114,7 @@ Always build it with `--release`: Bevy is too slow unoptimized.
 | `stats <course.json>` | validation figures of a course |
 | `terrain <course.json>` | (re)build the 3D terrain of a course |
 | `city <name> -o <file> --relation <osm id> --start <lat,lon>` | build an open city, see [city.md](city.md) |
+| `role set <athlete> <role>` | give a Strava athlete a role, see [rbac.md](rbac.md) |
 | `island <map.json>` | build the hand-made Lego island, see [island.md](island.md) |
 
 `cargo run -- <command> --help` lists every option. Adding a course step by step:
@@ -144,6 +145,7 @@ Layout:
 | `courses/` | course files, see its AGENTS.md |
 | `docs/courses.md` | how real roads become courses |
 | `src/city.rs`, `docs/city.md` | open city: street graph, turns, growing route |
+| `src/auth.rs`, `src/strava.rs`, `docs/rbac.md` | roles and permissions, sign in with Strava |
 | `src/island.rs`, `docs/island.md` | hand-made Lego island: map file to roads, terrain and decor |
 
 ## Troubleshooting

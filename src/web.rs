@@ -17,6 +17,12 @@
 //!   GET /events?course=<id>&mode=zombie&ftp=<W>&...           same, chased by a zombie horde
 //!   GET /power?session=<n>&w=<W>[&cad=&hr=&src=bt]  the rider's power: demo slider, or the browser's own trainer
 //!   GET /segments?id=<id>                      KOM and sprint leaderboards of a course or open world
+//!   GET /whoami                                the caller's identity, role and permissions (docs/rbac.md)
+//!   GET /auth/strava, /auth/strava/callback    sign in with Strava (OAuth 2); /auth/logout signs out
+//!   GET /admin/segments/reset?id=<id>&name=<segment>  wipe a leaderboard (moderate)
+//!
+//! Access: anyone rides without an account (Rider). Signing in with Strava sets an `lm_session` cookie; the
+//! athlete's role comes from roles.json. Endpoints check `Perm`s, never roles.
 //!   GET /emote?session=<n>&course=<id>&e=<rideon|wave|fire|laugh|party>[&to=<rider id>]  a bubble over my rider; a Ride On to someone
 //!   GET /seek?session=<n>&d=<m>                demo mode: teleport the rider along the course
 //!   GET /pause?session=<n>&on=<0|1>            freeze or resume a ride (menu open)
@@ -26,6 +32,8 @@
 //! latest ride drives), else the demo slider. Pace partners ride every course and open world around the clock.
 
 use le_mollet::Trainer;
+use le_mollet::auth::{Identity, Perm, Roles};
+use le_mollet::strava::{self, Strava};
 use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
 use le_mollet::physics;
@@ -200,6 +208,15 @@ pub struct App {
     sensors: Mutex<HashMap<u64, Sensors>>,
     boards: Mutex<Boards>,
     boards_path: String,
+    roles_path: String,
+    /// The server's Strava app, when configured (LE_MOLLET_STRAVA_CLIENT_ID / _SECRET).
+    strava: Option<Strava>,
+    /// Signed-in browsers: session cookie -> who.
+    sessions: Mutex<HashMap<String, Session>>,
+    /// OAuth states handed out and not used yet, with when: a callback must bring one back (CSRF).
+    oauth_states: Mutex<HashMap<String, std::time::Instant>>,
+    /// Strava tokens by athlete, to upload rides on their behalf later.
+    strava_tokens_path: String,
     demo_seek: Mutex<HashMap<u64, f32>>,
     paused: Mutex<HashSet<u64>>,
     /// Open city: turn each session asked for at its next junction.
@@ -212,7 +229,8 @@ pub struct App {
 
 impl App {
     /// Load every `*.json` course in `dir` (the id is the file stem) and open today's world.
-    pub fn new(dir: &str, trainer: Option<Trainer>, difficulty: f32) -> anyhow::Result<Self> {
+    pub fn new(dir: &str, trainer: Option<Trainer>, difficulty: f32, roles: &str) -> anyhow::Result<Self> {
+        Roles::load(roles)?; // a broken roles file stops the server now, not at the first admin call
         let mut paths: Vec<_> = std::fs::read_dir(dir)
             .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json") && !p.to_string_lossy().ends_with(".map.json")).collect())
             .unwrap_or_default();
@@ -252,6 +270,11 @@ impl App {
             sensors: Mutex::new(HashMap::new()),
             boards: Mutex::new(Boards::load(&format!("{dir}/leaderboards.json"))),
             boards_path: format!("{dir}/leaderboards.json"),
+            roles_path: roles.to_owned(),
+            strava: Strava::from_env()?,
+            sessions: Mutex::new(HashMap::new()),
+            oauth_states: Mutex::new(HashMap::new()),
+            strava_tokens_path: std::path::Path::new(roles).with_file_name("strava-tokens.json").to_string_lossy().into_owned(),
             demo_seek: Mutex::new(HashMap::new()),
             paused: Mutex::new(HashSet::new()),
             turns: Mutex::new(HashMap::new()),
@@ -266,6 +289,32 @@ impl App {
 
     fn track(&self, id: &str) -> Option<Arc<Track>> {
         self.tracks.read().unwrap().iter().find(|t| t.id == id).cloned()
+    }
+
+    /// Who sent a request, from its session cookie. Only signed-in requests read the roles file, so
+    /// `le-mollet role` takes effect at once without a restart.
+    /// ponytail: one small file read per signed-in request; cache by mtime if it ever shows up in a profile
+    fn identify(&self, cookie: Option<&str>) -> Identity {
+        let Some(s) = cookie.and_then(|c| self.sessions.lock().unwrap().get(c).filter(|s| s.expires > std::time::SystemTime::now()).cloned()) else {
+            return Identity::ANONYMOUS;
+        };
+        let role = Roles::load(&self.roles_path).map_or(le_mollet::auth::Role::Rider, |r| r.role_of(s.athlete));
+        Identity { role, name: Some(s.name), athlete: Some(s.athlete) }
+    }
+
+    /// A fresh OAuth state; old unused ones are dropped after 10 minutes.
+    fn new_state(&self, state: String) {
+        let mut states = self.oauth_states.lock().unwrap();
+        states.retain(|_, t| t.elapsed().as_secs() < 600);
+        states.insert(state, std::time::Instant::now());
+    }
+
+    fn save_strava_tokens(&self, athlete: u64, t: strava::Tokens) {
+        let path = &self.strava_tokens_path;
+        let mut all: HashMap<u64, strava::Tokens> = std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        all.insert(athlete, t);
+        let res = serde_json::to_string(&all).map_err(std::io::Error::other).and_then(|s| write_private(path, &s));
+        if let Err(e) = res { eprintln!("{path}: {e}") }
     }
 
     fn worlds_json(&self) -> String {
@@ -372,6 +421,16 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
     let track = param(query, "id").or(param(query, "course")).and_then(|id| app.track(id));
     let session: Option<u64> = param(query, "session").and_then(|s| s.parse().ok());
+    let who = app.identify(cookie(&req, SESSION_COOKIE));
+    // The one gate: a permission per endpoint that is not plain riding.
+    let needs = match path {
+        "/worlds/new" => Some(Perm::CreateWorld),
+        p if p.starts_with("/admin/") => Some(Perm::Moderate),
+        _ => None,
+    };
+    if let Some(p) = needs.filter(|p| !who.can(*p)) {
+        return reply(&mut sock, "403 Forbidden", "text/plain", format!("needs {p:?}").as_bytes()).await;
+    }
     match (path, track) {
         ("/", _) => reply(&mut sock, "200 OK", "text/html; charset=utf-8", PAGE.as_bytes()).await,
         (p, _) if p.starts_with("/audio/") => match AUDIO.iter().find(|a| a.0 == p) {
@@ -380,6 +439,59 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         },
         ("/workouts", _) => reply(&mut sock, "200 OK", "application/json", app.workouts_json.as_bytes()).await,
         ("/courses", _) => reply(&mut sock, "200 OK", "application/json", app.list_json.as_bytes()).await,
+        ("/whoami", _) => {
+            let body = json!({ "role": who.role, "name": who.name, "athlete": who.athlete, "perms": who.role.perms(), "strava": app.strava.is_some() }).to_string();
+            reply(&mut sock, "200 OK", "application/json", body.as_bytes()).await
+        }
+        ("/auth/strava", _) => match &app.strava {
+            Some(s) => {
+                let (url, state) = s.authorize_url();
+                app.new_state(state);
+                redirect(&mut sock, &url, None).await
+            }
+            None => reply(&mut sock, "404 Not Found", "text/plain", b"no Strava app on this server (docs/rbac.md)").await,
+        },
+        ("/auth/strava/callback", _) => {
+            // The state must be one we handed out (and is used once): otherwise this is not our sign-in.
+            let state_ok = param(query, "state").is_some_and(|st| app.oauth_states.lock().unwrap().remove(&decode(st)).is_some_and(|t| t.elapsed().as_secs() < 600));
+            let (Some(s), Some(code), true) = (app.strava.as_ref(), param(query, "code"), state_ok) else {
+                return redirect(&mut sock, "/?signin=failed", None).await; // refused on Strava, expired or forged
+            };
+            let code = decode(code);
+            match tokio::task::block_in_place(|| s.exchange(&code)) {
+                Ok((athlete, mut tokens)) => {
+                    // Strava tells which scopes were granted on the callback, not in the token response.
+                    tokens.scope = param(query, "scope").map(decode).unwrap_or_default();
+                    let id = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
+                    let name = athlete.name();
+                    app.sessions.lock().unwrap().insert(id.clone(), Session { athlete: athlete.id, name: name.clone(), expires: std::time::SystemTime::now() + SESSION_TTL });
+                    app.save_strava_tokens(athlete.id, tokens);
+                    eprintln!("signed in: {name} (Strava athlete {})", athlete.id);
+                    let secure = if std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("https://")) { "; Secure" } else { "" };
+                    let cookie = format!("{SESSION_COOKIE}={id}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}{secure}", SESSION_TTL.as_secs());
+                    redirect(&mut sock, "/?signin=strava", Some(&cookie)).await
+                }
+                Err(e) => {
+                    eprintln!("Strava sign-in failed: {e:#}");
+                    redirect(&mut sock, "/?signin=failed", None).await
+                }
+            }
+        }
+        ("/auth/logout", _) => {
+            if let Some(c) = cookie(&req, SESSION_COOKIE) { app.sessions.lock().unwrap().remove(c); }
+            redirect(&mut sock, "/", Some(&format!("{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"))).await
+        }
+        ("/admin/segments/reset", Some(t)) => {
+            let name = param(query, "name").map(decode).unwrap_or_default();
+            let done = {
+                let mut boards = app.boards.lock().unwrap();
+                let done = boards.reset(&format!("{}:{name}", t.id));
+                if done && let Err(e) = boards.save(&app.boards_path) { eprintln!("leaderboards: {e}") }
+                done
+            };
+            if done { eprintln!("{} reset the leaderboard {}:{name}", who.name.as_deref().unwrap_or("?"), t.id) }
+            reply(&mut sock, if done { "204 No Content" } else { "404 Not Found" }, "text/plain", b"").await
+        }
         ("/emote", Some(t)) => {
             let e = param(query, "e").and_then(|e| EMOTES.iter().find(|x| **x == e).copied());
             let to = param(query, "to").and_then(|v| v.parse::<u64>().ok());
@@ -811,6 +923,40 @@ async fn ride_session(
     }
 }
 
+/// Sign-in sessions: an HttpOnly cookie naming an entry of `App::sessions`.
+/// ponytail: sessions live in memory, a restart signs everyone out; persist them if that gets annoying
+const SESSION_COOKIE: &str = "lm_session";
+const SESSION_TTL: Duration = Duration::from_secs(30 * 86_400);
+
+#[derive(Clone)]
+struct Session {
+    athlete: u64,
+    name: String,
+    expires: std::time::SystemTime,
+}
+
+/// A cookie's value from the request head.
+fn cookie<'a>(req: &'a str, name: &str) -> Option<&'a str> {
+    req.lines().take_while(|l| !l.is_empty())
+        .filter_map(|l| l.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case("cookie")).map(|(_, v)| v))
+        .flat_map(|v| v.split(';'))
+        .find_map(|kv| kv.trim().split_once('=').filter(|(k, _)| *k == name).map(|(_, v)| v))
+}
+
+/// Tokens on disk, readable by the server's user only.
+fn write_private(path: &str, s: &str) -> std::io::Result<()> {
+    std::fs::write(path, s)?;
+    #[cfg(unix)]
+    std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
+    Ok(())
+}
+
+async fn redirect(sock: &mut TcpStream, to: &str, set_cookie: Option<&str>) -> std::io::Result<()> {
+    let cookie = set_cookie.map(|c| format!("Set-Cookie: {c}\r\n")).unwrap_or_default();
+    let head = format!("HTTP/1.1 302 Found\r\nLocation: {to}\r\n{cookie}Cache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    sock.write_all(head.as_bytes()).await
+}
+
 async fn reply(sock: &mut TcpStream, status: &str, ctype: &str, body: &[u8]) -> std::io::Result<()> {
     let head = format!("HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
     sock.write_all(head.as_bytes()).await?;
@@ -833,6 +979,14 @@ mod tests {
 
     fn rider(id: u64, distance: f32) -> Presence {
         Presence { id, sid: id, emote: None, emote_at: None, name: String::new(), color: String::new(), frame: "road", country: None, distance, speed_kmh: 0.0, power: 0.0, pos: None, bot: false, pid: String::new() }
+    }
+
+    #[test]
+    fn cookies_are_read_from_the_head_only() {
+        let req = "GET / HTTP/1.1\r\nHost: x\r\nCookie: a=1; lm_session=abc123; b=2\r\n\r\nCookie: lm_session=body";
+        assert_eq!(cookie(req, "lm_session"), Some("abc123"));
+        assert_eq!(cookie(req, "missing"), None);
+        assert_eq!(cookie("GET / HTTP/1.1\r\n\r\n", "lm_session"), None);
     }
 
     #[test]

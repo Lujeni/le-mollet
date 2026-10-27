@@ -158,6 +158,11 @@ impl Boards {
         }
     }
 
+    /// Wipe a segment's times (moderation). Returns whether it had any.
+    pub fn reset(&mut self, key: &str) -> bool {
+        self.0.remove(key).is_some()
+    }
+
     /// The fastest `n` overall and today, for the menus.
     pub fn top(&self, key: &str, n: usize, now: u64) -> (Vec<Entry>, Vec<Entry>) {
         let list = self.0.get(key).map(Vec::as_slice).unwrap_or_default();

@@ -46,6 +46,23 @@ enum Cmd {
         /// Directory of course JSON files
         #[arg(long, default_value = "courses")]
         courses: String,
+        /// Access tokens and their roles (see `le-mollet token`, docs/rbac.md); missing = everyone rides, nobody administers
+        #[arg(long, default_value = "roles.json")]
+        roles: String,
+    },
+    /// Give roles to Strava athletes: set <athlete id> admin|organizer|rider [--note Julien], remove <id>, list
+    Role {
+        /// set, remove or list
+        action: String,
+        /// Strava athlete id (shown in the page once signed in, and in strava.com/athletes/<id>)
+        athlete: Option<u64>,
+        /// admin, organizer or rider
+        role: Option<String>,
+        /// A label for the list
+        #[arg(long, default_value = "")]
+        note: String,
+        #[arg(long, default_value = "roles.json")]
+        roles: String,
     },
     /// Build an open city (every street inside an OSM boundary) and its terrain, see docs/city.md
     City {
@@ -109,7 +126,27 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::Terrain { course } => tokio::task::spawn_blocking(move || build_terrain(&course)).await?,
-        Cmd::Serve { addr, trainer, difficulty, courses } => serve(&addr, trainer, difficulty, &courses).await,
+        Cmd::Serve { addr, trainer, difficulty, courses, roles } => serve(&addr, trainer, difficulty, &courses, &roles).await,
+        Cmd::Role { action, athlete, role, note, roles } => {
+            use le_mollet::auth::{Grant, Role, Roles};
+            let mut r = Roles::load(&roles)?;
+            match (action.as_str(), athlete, role) {
+                ("set", Some(id), Some(role)) => {
+                    let role = Role::parse(&role).context("role: admin, organizer or rider")?;
+                    r.grants.insert(id, Grant { role, note });
+                    r.save(&roles)?;
+                    println!("Strava athlete {id} is now {role:?} on this server (effective at once).");
+                }
+                ("remove", Some(id), _) => {
+                    anyhow::ensure!(r.grants.remove(&id).is_some(), "athlete {id} has no role");
+                    r.save(&roles)?;
+                    println!("Strava athlete {id} is a rider again.");
+                }
+                ("list", _, _) => r.grants.iter().for_each(|(id, g)| println!("{id:<12} {:<10} {}", format!("{:?}", g.role), g.note)),
+                _ => anyhow::bail!("usage: le-mollet role set <athlete id> admin|organizer|rider [--note X] | remove <athlete id> | list"),
+            }
+            Ok(())
+        }
         Cmd::District { city, bbox } => {
             let v: Vec<f64> = bbox.split(',').map(|x| x.trim().parse()).collect::<Result<_, _>>().context("bbox: expected south,west,north,east")?;
             let bbox: [f64; 4] = v.try_into().map_err(|_| anyhow::anyhow!("bbox: expected 4 numbers"))?;
@@ -199,7 +236,7 @@ async fn trainer_console(filter: Option<String>) -> anyhow::Result<()> {
     trainer.disconnect().await
 }
 
-async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &str) -> anyhow::Result<()> {
+async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &str, roles: &str) -> anyhow::Result<()> {
     let trainer = match filter {
         Some(f) => {
             eprintln!("scanning...");
@@ -209,7 +246,7 @@ async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &st
         }
         None => None,
     };
-    let app = Arc::new(web::App::new(courses, trainer, difficulty)?);
+    let app = Arc::new(web::App::new(courses, trainer, difficulty, roles)?);
     eprintln!("{} course(s) from {courses}/, {}", app.course_count(), if app.trainer.is_some() { "trainer mode" } else { "demo mode" });
     if let Some(t) = &app.trainer {
         let mut samples = t.samples().await?;

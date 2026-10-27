@@ -1,5 +1,6 @@
 //! le-mollet core: smart trainer engine over Bluetooth LE.
 
+pub mod auth;
 pub mod buildings;
 pub mod city;
 pub mod course;
@@ -10,6 +11,7 @@ pub mod physics;
 pub mod protocol;
 pub mod ride;
 pub mod segment;
+pub mod strava;
 pub mod terrain;
 pub mod workout;
 pub mod world;

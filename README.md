@@ -5,7 +5,8 @@
 A multiplayer, online indoor cycling training program. Open source, core in Rust.
 
 - **Free forever.** No subscription, no paywall, ever.
-- **No account required.** Want to just ride? Open it and train, no sign-up.
+- **No account required.** Want to just ride? Open it and train, no sign-up. Optionally sign in with Strava, and give
+  organizers and admins their rights ([accounts and roles](docs/rbac.md)).
 - **Self-hostable.** Run the whole thing at home, on your own machine or LAN.
 - **Highly modular.** Trainers, courses, terrain and UI are independent pieces you can swap or extend.
 - **Just a browser.** No heavy client to install: the UI runs in any modern web browser. An optional, experimental
@@ -122,6 +123,7 @@ Tested hardware:
 - [Getting started](docs/getting-started.md): run it locally, connect a trainer, play on the LAN, develop.
 - [Adding a course](courses/AGENTS.md): turn a real climb into a ridable course.
 - [How courses are built](docs/courses.md): data sources, smoothing, validation, recipes.
+- [Accounts and roles](docs/rbac.md): sign in with Strava, roles and permissions.
 - [Contributing](docs/CONTRIBUTING.md): principles, checks, commits, testing a trainer.
 
 ## Contributing
