@@ -47,6 +47,12 @@ This writes `<id>.json`, then downloads the 3D terrain into `<id>.terrain.bin`, 
 The OSM Overpass and IGN servers rate-limit, and the builder retries on 429/502/503/504. Re-running the
 command is safe.
 
+A loop mapped as an OpenStreetMap route relation (a cycling ring) builds with `--relation <id>` instead of
+`--road` and waypoints; give the start as the only waypoint. Add `--cell 2` for small bricks on a short loop.
+Then `cargo run --release -- decor courses/<id>.json` (ground mosaic and trees from the aerial photo, OSM
+benches, lamps, fences...) and `cargo run --release -- buildings courses/<id>.json` (real buildings). See
+"Loops" and "Decor" in [../docs/courses.md](../docs/courses.md).
+
 ### 4. Validate
 
 ```sh
@@ -95,7 +101,8 @@ The next person can then rebuild the course identically.
 
 - `git add courses/<id>.json docs/courses.md`. The terrain file stays out of git.
 - Restart `cargo run -- serve`. Courses are loaded at startup, and the new magnet appears on the fridge.
-- On another machine, rebuild the terrain with `cargo run -- terrain courses/<id>.json`.
+- On another machine, rebuild the terrain with `cargo run -- terrain courses/<id>.json`; a course with decor
+  then needs `decor` and `buildings` again (the terrain file carries the ground mosaic).
 
 ## Attribution
 

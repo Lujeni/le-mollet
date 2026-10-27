@@ -16,7 +16,7 @@ pub struct Point {
     pub ele: f32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Course {
     pub name: String,
     pub attribution: String,
@@ -28,6 +28,15 @@ pub struct Course {
     /// Closed loop: riders go round and round, no finish line.
     #[serde(default)]
     pub looped: bool,
+    /// OpenStreetMap route relation a loop was built from (`build_ring`), kept for rebuilds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation: Option<u64>,
+    /// Terrain cell size, m, when finer than the default 5 m (short loops get small bricks).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell_m: Option<f64>,
+    /// Decor read from the aerial photo and OpenStreetMap (`le-mollet decor`, see docs/courses.md).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub props: Vec<crate::city::Prop>,
     pub points: Vec<Point>,
 }
 
@@ -90,7 +99,7 @@ impl Course {
     /// Flat straight road, for workouts: grade is always 0.
     pub fn flat(length_m: f32) -> Self {
         let p = |d| Point { d, lat: 0.0, lon: 0.0, ele: 0.0 };
-        Self { name: "Route plate".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points: vec![p(0.0), p(length_m)] }
+        Self { name: "Route plate".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points: vec![p(0.0), p(length_m)], ..Default::default() }
     }
 
     pub fn load(path: &str) -> Result<Self> {
@@ -106,6 +115,91 @@ impl Course {
         if waypoints.len() < 2 { bail!("need at least start and finish waypoints") }
         let line = route_osm(waypoints, roads)?;
         let samples = resample(&line, STEP_M);
+        let ele = smooth(&elevations(&samples)?, SMOOTH_SIGMA_PTS);
+        Ok(Self { waypoints: waypoints.to_vec(), roads: roads.to_vec(), ..Self::from_samples(name, &samples, ele) })
+    }
+
+    /// Build a closed loop from an OpenStreetMap route relation (a cycling ring): its ways chained in order,
+    /// ridden the way its one-way members go, from the point nearest `start`. Elevation is smoothed
+    /// round the loop, so the start is not a seam.
+    pub fn build_ring(name: &str, relation: u64, start: Option<[f64; 2]>) -> Result<Self> {
+        let query = format!("[out:json][timeout:90];rel({relation});out geom;way(r);out tags;");
+        let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &query)]))?;
+        let els = r["elements"].as_array().context("Overpass: no elements")?;
+        let rel = els.iter().find(|e| e["type"] == "relation").with_context(|| format!("no relation {relation}"))?;
+        let oneway: HashSet<i64> = els.iter().filter(|e| e["type"] == "way" && e["tags"]["oneway"] == "yes").filter_map(|e| e["id"].as_i64()).collect();
+        let ways: Vec<(i64, Vec<[f64; 2]>)> = rel["members"].as_array().into_iter().flatten()
+            .filter(|m| m["type"] == "way")
+            .map(|m| (m["ref"].as_i64().unwrap_or(0), m["geometry"].as_array().into_iter().flatten().filter_map(|p| Some([p["lat"].as_f64()?, p["lon"].as_f64()?])).collect::<Vec<_>>()))
+            .filter(|(_, g)| g.len() >= 2)
+            .collect();
+        let ring = chain_ring(&ways, &oneway).with_context(|| format!("relation {relation}"))?;
+        let ring = match start {
+            Some(s) => {
+                let i = (0..ring.len() - 1).min_by(|&a, &b| haversine_m(ring[a], s).total_cmp(&haversine_m(ring[b], s))).unwrap();
+                ring[i..].iter().chain(&ring[1..=i]).copied().collect()
+            }
+            None => ring,
+        };
+        let samples = resample(&ring, STEP_M);
+        let mut ele = elevations(&samples)?;
+        // The last sample is the start again: smooth the loop without it, then close it.
+        ele.pop();
+        let mut ele = smooth_loop(&ele, SMOOTH_SIGMA_PTS);
+        ele.push(ele[0]);
+        Ok(Self { waypoints: vec![ring[0]], relation: Some(relation), looped: true, ..Self::from_samples(name, &samples, ele) })
+    }
+
+    fn from_samples(name: &str, samples: &[(f64, [f64; 2])], ele: Vec<f32>) -> Self {
+        let round = |x: f64| (x * 1e6).round() / 1e6;
+        let points = samples
+            .iter()
+            .zip(ele)
+            .map(|(&(d, [lat, lon]), e)| Point { d: d as f32, lat: round(lat), lon: round(lon), ele: (e * 10.0).round() / 10.0 })
+            .collect();
+        Self {
+            name: name.into(),
+            attribution: "Route © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).".into(),
+            points,
+            ..Default::default()
+        }
+    }
+}
+
+/// Ways of a route relation, in order, into one closed line (last point = first), oriented like most of its
+/// one-way members. Fails on a gap over 15 m between consecutive ways or between the end and the start.
+fn chain_ring(ways: &[(i64, Vec<[f64; 2]>)], oneway: &HashSet<i64>) -> Result<Vec<[f64; 2]>> {
+    const GAP_M: f64 = 15.0;
+    if ways.len() < 2 { bail!("a ring needs at least 2 ways") }
+    let mut ring: Vec<[f64; 2]> = vec![];
+    let (mut with, mut against) = (0, 0);
+    for (k, (id, g)) in ways.iter().enumerate() {
+        // Orient each way to start where the line so far ends; the first one toward the second way.
+        let flip = match ring.last() {
+            Some(&end) => haversine_m(end, g[g.len() - 1]) < haversine_m(end, g[0]),
+            None => {
+                let next = &ways[1].1;
+                let near = |p| haversine_m(p, next[0]).min(haversine_m(p, next[next.len() - 1]));
+                near(g[0]) < near(g[g.len() - 1])
+            }
+        };
+        let g: Vec<[f64; 2]> = if flip { g.iter().rev().copied().collect() } else { g.clone() };
+        if let Some(&end) = ring.last() && haversine_m(end, g[0]) > GAP_M {
+            bail!("gap of {:.0} m before way {id} (member {k})", haversine_m(end, g[0]));
+        }
+        if oneway.contains(id) { if flip { against += 1 } else { with += 1 } }
+        ring.extend(g.into_iter().skip(usize::from(!ring.is_empty())));
+    }
+    let (first, last) = (ring[0], ring[ring.len() - 1]);
+    if haversine_m(first, last) > GAP_M { bail!("not a closed ring: {:.0} m from the end back to the start", haversine_m(first, last)) }
+    ring.pop();
+    ring.push(first);
+    if against > with { ring.reverse() }
+    Ok(ring)
+}
+
+/// IGN RGE ALTI elevation at each sample.
+fn elevations(samples: &[(f64, [f64; 2])]) -> Result<Vec<f32>> {
         let mut ele = Vec::with_capacity(samples.len());
         // ponytail: 100 points per GET keeps URLs short; ~15 requests for a 14 km climb
         for chunk in samples.chunks(100) {
@@ -123,23 +217,7 @@ impl Course {
                 ele.push(z as f32);
             }
         }
-
-        let ele = smooth(&ele, SMOOTH_SIGMA_PTS);
-        let round = |x: f64| (x * 1e6).round() / 1e6;
-        let points = samples
-            .iter()
-            .zip(ele)
-            .map(|(&(d, [lat, lon]), e)| Point { d: d as f32, lat: round(lat), lon: round(lon), ele: (e * 10.0).round() / 10.0 })
-            .collect();
-        Ok(Self {
-            name: name.into(),
-            attribution: "Route © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).".into(),
-            waypoints: waypoints.to_vec(),
-            roads: roads.to_vec(),
-            looped: false,
-            points,
-        })
-    }
+        Ok(ele)
 }
 
 const DRIVABLE: &[&str] = &[
@@ -255,6 +333,13 @@ pub(crate) fn resample(line: &[[f64; 2]], step: f64) -> Vec<(f64, [f64; 2])> {
     out
 }
 
+/// Gaussian smoothing round a loop: both ends borrow from each other.
+pub(crate) fn smooth_loop(v: &[f32], sigma: f32) -> Vec<f32> {
+    let r = ((3.0 * sigma).ceil() as usize).min(v.len());
+    let padded: Vec<f32> = v[v.len() - r..].iter().chain(v).chain(&v[..r]).copied().collect();
+    smooth(&padded, sigma)[r..r + v.len()].to_vec()
+}
+
 /// Gaussian smoothing, `sigma` in points; weights renormalized at both ends.
 pub(crate) fn smooth(v: &[f32], sigma: f32) -> Vec<f32> {
     let r = (3.0 * sigma).ceil() as isize;
@@ -276,6 +361,27 @@ pub(crate) fn smooth(v: &[f32], sigma: f32) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ring_chains_ways_and_follows_one_ways() {
+        // A triangle in three ways, the middle one drawn backwards, the last one one-way against the order.
+        let (a, b, c) = ([48.0, 2.0], [48.0, 2.01], [48.01, 2.005]);
+        let ways = vec![(1, vec![a, b]), (2, vec![c, b]), (3, vec![c, a])];
+        let ring = chain_ring(&ways, &HashSet::new()).unwrap();
+        assert_eq!(ring, vec![a, b, c, a]);
+        let ring = chain_ring(&ways, &HashSet::from([3])).unwrap(); // way 3 goes c -> a, as chained: kept
+        assert_eq!(ring, vec![a, b, c, a]);
+        let ways = vec![(1, vec![a, b]), (2, vec![c, b]), (3, vec![a, c])];
+        let ring = chain_ring(&ways, &HashSet::from([3])).unwrap(); // way 3 goes a -> c: ridden the other way round
+        assert_eq!(ring, vec![a, c, b, a]);
+        assert!(chain_ring(&[(1, vec![a, b]), (2, vec![c, [48.02, 2.0]])], &HashSet::new()).is_err()); // gap
+        // Smoothing a loop: a bump at the start spreads to both ends, a constant stays constant.
+        let mut v = vec![0.0f32; 40];
+        v[0] = 10.0;
+        let s = smooth_loop(&v, 2.0);
+        assert!((s[1] - s[39]).abs() < 1e-4 && s[39] > 0.5 && s[20] < 1e-3);
+        assert!(smooth_loop(&[5.0; 30], 5.0).iter().all(|x| (x - 5.0).abs() < 1e-4));
+    }
 
     #[test]
     fn resample_straight_line() {
@@ -312,7 +418,7 @@ mod tests {
         let points = (0..=10)
             .map(|i| Point { d: i as f32 * 10.0, lat: 0.0, lon: 0.0, ele: i as f32 * 0.8 })
             .collect();
-        let c = Course { name: "8%".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points };
+        let c = Course { name: "8%".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points, ..Default::default() };
         assert!((c.grade_at(50.0) - 8.0).abs() < 1e-3);
         assert!((c.ele_at(55.0) - 4.4).abs() < 1e-3);
         assert!((c.elevation_gain() - 8.0).abs() < 1e-3);

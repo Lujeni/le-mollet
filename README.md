@@ -27,6 +27,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 <td><img src="docs/screenshots/start-picker.jpg" alt="Start picker: the island as a Lego mosaic with numbered pins"><br><sub><b>Pick a start.</b> The island as a Lego mosaic, a pin per place.</sub></td>
 </tr>
 <tr>
+<td><img src="docs/screenshots/longchamp.jpg" alt="Anneau de Longchamp: the road along the Étang des Tribunes, Lego trees and a ground mosaic read from the aerial photo"><br><sub><b>Anneau de Longchamp.</b> Ground and trees read from the IGN aerial photo, the Étang des Tribunes.</sub></td>
+<td><img src="docs/screenshots/longchamp-woods.jpg" alt="Anneau de Longchamp in the rain through the Bois de Boulogne"><br><sub><b>Bois de Boulogne.</b> Every tree where the photo shows one, here in the rain.</sub></td>
+</tr>
+<tr>
 <td><img src="docs/screenshots/climbs.jpg" alt="Climbs as fridge magnets"><br><sub><b>Climbs.</b> Legendary climbs as fridge magnets.</sub></td>
 <td><img src="docs/screenshots/garage.jpg" alt="Garage: the Lego minifig rider and its options"><br><sub><b>Garage.</b> Your minifig: jersey and pattern, helmet, glasses, face.</sub></td>
 </tr>
@@ -67,6 +71,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 - **Paris, every street.** All 1,790 km of Paris streets with real elevation: pick left, straight or right at
   each junction, a round Lego minimap shows where you go. Start from Notre-Dame, Concorde, Montmartre and more.
   Montmartre hurts.
+- **Anneau de Longchamp.** The Paris cyclists' ring around the racecourse, 3.5 km a lap, built from the real
+  place: the IGN aerial photo paints the ground as a Lego mosaic and finds every tree (6,000 of them, autumn
+  colors included), OpenStreetMap places the benches, lamps, white rails, hedges and the Moulin de Longchamp,
+  IGN the grandstands. Lap it in Free with everyone else.
 - **Île des Briques.** A Lego island drawn by hand: a volcano you climb in a spiral to its lava lake, a
   pirate port with ships in the bay, a desert with a pyramid and an oasis, a jungle temple and waterfall, farms
   with a windmill, a castle on its hill, thousands of Lego pieces. Pick a start place on its mosaic map, then

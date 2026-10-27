@@ -102,12 +102,17 @@ enum Cmd {
         #[arg(long)]
         bbox: String,
     },
+    /// Decor from the real place: aerial photo mosaic and trees, OpenStreetMap benches, lamps, fences... (docs/courses.md)
+    Decor {
+        /// Course file whose terrain file exists, e.g. courses/longchamp.json
+        course: String,
+    },
     /// Fetch the IGN aerial photo over a course or city terrain, for the realistic render
     Ortho {
         /// Course or city file whose terrain file exists, e.g. courses/alpe-dhuez.json
         course: String,
     },
-    /// Build a course file from waypoints, see docs/courses.md
+    /// Build a course file from waypoints, or a loop from an OSM route relation, see docs/courses.md
     Course {
         /// Display name, e.g. "Alpe d'Huez"
         name: String,
@@ -117,9 +122,14 @@ enum Cmd {
         /// Road ref to stick to, repeatable, e.g. --road "D 211" --road "D 211F"
         #[arg(long)]
         road: Vec<String>,
-        /// "lat,lon" waypoints: start, optional vias, finish
-        #[arg(required = true, num_args = 2..)]
+        /// "lat,lon" waypoints: start, optional vias, finish; with --relation, just the start (optional)
         waypoints: Vec<String>,
+        /// Loop from an OpenStreetMap route relation id instead, e.g. 163270 (Anneau cyclable de Longchamp)
+        #[arg(long)]
+        relation: Option<u64>,
+        /// Terrain cell size, m (default 5; 2 for small bricks on a short loop)
+        #[arg(long)]
+        cell: Option<f64>,
     },
 }
 
@@ -176,6 +186,7 @@ async fn main() -> anyhow::Result<()> {
             println!("{out}: {} roads, {} decor pieces; terrain {}x{} cells", i.city.streets.len(), i.city.props.len(), i.terrain.w, i.terrain.h);
             Ok(())
         }
+        Cmd::Decor { course } => tokio::task::spawn_blocking(move || build_decor(&course)).await?,
         Cmd::Buildings { city } => tokio::task::spawn_blocking(move || build_buildings(&city)).await?,
         Cmd::City { name, out, relation, start } => {
             let start = parse_latlon(&start)?;
@@ -190,9 +201,15 @@ async fn main() -> anyhow::Result<()> {
             println!("{out}: {} streets, ~{km:.0} km; terrain {}x{} cells", city.streets.len(), terrain.w, terrain.h);
             Ok(())
         }
-        Cmd::Course { name, out, road, waypoints } => {
+        Cmd::Course { name, out, road, waypoints, relation, cell } => {
             let wps = waypoints.iter().map(|w| parse_latlon(w)).collect::<anyhow::Result<Vec<[f64; 2]>>>()?;
-            let c = tokio::task::spawn_blocking(move || Course::build(&name, &wps, &road)).await??;
+            if relation.is_none() && wps.len() < 2 { anyhow::bail!("need a start and a finish waypoint, or --relation") }
+            let mut c = tokio::task::spawn_blocking(move || match relation {
+                Some(id) => Course::build_ring(&name, id, wps.first().copied()),
+                None => Course::build(&name, &wps, &road),
+            })
+            .await??;
+            c.cell_m = cell;
             std::fs::write(&out, serde_json::to_string(&c)?)?;
             let course_path = out.clone();
             tokio::task::spawn_blocking(move || build_terrain(&course_path)).await??;
@@ -293,7 +310,21 @@ fn build_terrain(course_path: &str) -> anyhow::Result<()> {
     let t = le_mollet::terrain::Terrain::build(&c)?;
     let out = terrain_path(course_path);
     std::fs::write(&out, t.to_bytes())?;
-    println!("{out}: {}x{} cells of {} m", t.w, t.h, le_mollet::terrain::CELL_M);
+    println!("{out}: {}x{} cells of {} m", t.w, t.h, c.cell_m.unwrap_or(le_mollet::terrain::CELL_M));
+    Ok(())
+}
+
+/// Paint the course's terrain from the aerial photo and place its decor, in place.
+fn build_decor(course_path: &str) -> anyhow::Result<()> {
+    let mut c = Course::load(course_path)?;
+    let tp = terrain_path(course_path);
+    let mut t = le_mollet::terrain::Terrain::from_bytes(&std::fs::read(&tp).with_context(|| format!("{course_path}: build its terrain first"))?)?;
+    le_mollet::decor::build(&mut c, &mut t)?;
+    std::fs::write(&tp, t.to_bytes())?;
+    std::fs::write(course_path, serde_json::to_string(&c)?)?;
+    let mut kinds = std::collections::BTreeMap::new();
+    for p in &c.props { *kinds.entry(p.k.as_str()).or_insert(0) += 1 }
+    println!("{course_path}: {} props {kinds:?}", c.props.len());
     Ok(())
 }
 

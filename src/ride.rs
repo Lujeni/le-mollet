@@ -130,7 +130,7 @@ mod tests {
     fn climbs_to_the_finish() {
         // 1 km at 8 %
         let points = (0..=100).map(|i| Point { d: i as f32 * 10.0, lat: 0.0, lon: 0.0, ele: i as f32 * 0.8 }).collect();
-        let mut c = Course { name: "8%".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points };
+        let mut c = Course { name: "8%".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points, ..Default::default() };
         let mut r = Ride::new(78.0);
         r.power = 250.0;
         for _ in 0..10_000 {
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn powerups_are_picked_under_the_arches_and_last() {
         let points = (0..=500).map(|i| Point { d: i as f32 * 10.0, lat: 0.0, lon: 0.0, ele: 0.0 }).collect();
-        let c = Course { name: "flat".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points };
+        let c = Course { name: "flat".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points, ..Default::default() };
         let mut r = Ride { powerups: true, power: 250.0, ..Ride::new(78.0) };
         while r.distance < 1100.0 { r.tick(&c, 0.1) }
         assert_eq!((r.held, r.active), (Some(PowerUp::Aero), None)); // arch 1

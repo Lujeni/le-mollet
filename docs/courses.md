@@ -36,6 +36,42 @@ Never use GPX elevation recorded by phones or GPS units: too noisy for grades. G
      elevation, banks clamped to 45° up to 25 m, shoulders cleared of trees and buildings.
    - Sizes: Alpe d'Huez 1198x1278 cells (4.6 MB), Ventoux 2815x1943 (16 MB).
 
+## Loops from an OSM route relation (`course --relation`)
+
+A cycling ring is often mapped as one route relation (`route=bicycle`, `roundtrip=yes`): its ways, in order.
+`le-mollet course "<Name>" -o courses/<id>.json --relation <id> [--cell 2] [<start>]` chains them into one closed
+line (a gap over 15 m between two ways fails the build), rides it the way most of its one-way members go, starts
+from the point nearest `<start>`, and smooths the elevation round the loop so the start is no seam. The course is
+`looped`: riders lap it, and the Free screen lists it with the open worlds rather than with the climbs.
+
+`--cell 2` builds the terrain in 2 m cells instead of 5 m: small bricks for a short loop (a 4 km box stays
+under IGN's 4096 px a request).
+
+## Decor from the real place (`le-mollet decor`)
+
+After `course` (or `terrain`), `le-mollet decor courses/<id>.json` reads the place and writes it in Lego:
+
+- **Ground**: the IGN aerial photo (BD ORTHO) at one pixel a cell; each ground cell takes the nearest official
+  Lego color (14 of them, `MOSAIC` in `src/decor.rs` and the page) after a saturation and brightness boost
+  (the photo is dull next to plastic); green-dominant cells stay among the greens (grass in the shade); a 3x3
+  majority filter twice turns the noise into a mosaic. Water, buildings and the road keep their codes.
+- **Woods away from the road** (over 150 m): dark green cells become `CANOPY`, raised 9 to 15 m by the page as a
+  lumpy canopy of bricks.
+- **Trees within 150 m**: the photo again at 50 cm a pixel. A crown is green and dark, or green and textured by
+  its own shadows (luminance deviation over ~4 m), or reddish and textured in autumn; the racecourse turf is green
+  too, but smooth. A majority filter drops lone cells and thin lines (turf edges). Each crown blob gets pieces
+  sized by how deep a cell sits in it (chamfer distance), the big ones first, kept apart; the variant carries the
+  size and the foliage color (green, dark, olive, yellow, orange, red-brown). Real size: 9 to 19 m tall.
+- **OpenStreetMap within 300 m**: trees with their species (conifers as pines), tree rows, benches (facing the
+  road), street lamps, fences (white rails), hedges, walls, windmills (the building block under them goes).
+- **Flat ground**: with small cells the 1 m elevation model's noise shows as a maze of half-meter steps, so the
+  heights are smoothed over ~5 m and the road carved again. Run `decor` on a fresh terrain (`terrain` first
+  when rebuilding): smoothing twice would flatten the ground further.
+
+Thresholds (`SATURATION`, `GAIN`, `is_crown`) are calibration knobs tuned on Longchamp, with colors measured on its
+photo in the tests. Then `le-mollet buildings courses/<id>.json` adds the real buildings (IGN BD TOPO, footprints
+and heights): grandstands, pavilions, the château.
+
 ## Validation checklist (do it for every new course)
 
 Compare with the reference figures of the climb (official signage, Tour de France roadbook,
@@ -139,6 +175,21 @@ Start = D16 / D16E junction above the village, where the classic climb is measur
 (classic 1035 m finish, not the gravel "super Planche" at 1140 m).
 Result: 5.81 km, 537 m to 1038 m, +503 m, avg 8.6 %, max 16.5 % over 100 m.
 Reference: 5.9 km, 8.5 %, 1035 m, ramps up to 20 %. Per-km: 10.5 / 6.7 / 10.7 / 9.8 / 6.6 %.
+
+### Anneau de Longchamp (Bois de Boulogne, Paris)
+
+```sh
+cargo run --release -- course "Anneau de Longchamp" -o courses/longchamp.json --relation 163270 --cell 2 48.860500,2.230000
+cargo run --release -- decor courses/longchamp.json
+cargo run --release -- buildings courses/longchamp.json
+```
+
+Relation 163270, "Anneau cyclable de Longchamp" (`bicycle:type=road_cycling`, `roundtrip=yes`), 10 ways. Start on the
+Route des Tribunes in front of the grandstands. Ridden clockwise, the way its one-way cycleways go.
+Result: 3.54 km a lap, 28 to 39 m, +12 m a lap, max 1.9 % over 100 m, the climb of the lap +8.6 m over 600 m on
+the east side up to the Moulin de Longchamp. Reference: 3.5 to 3.6 km, flat with a ~600 m false flat of ~10 m.
+Terrain 1848x2199 cells of 2 m. Decor: 13,014 pieces (6,465 broadleaf trees, 5,888 of them from the photo,
+20 pines, 4,589 rail sections, 1,871 hedge sections, 28 benches, 27 lamps, the mill); 11,459 IGN buildings.
 
 ## Riding
 

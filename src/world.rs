@@ -180,6 +180,7 @@ pub fn generate(seed: u64, length_m: f64, relief: Relief, name: &str) -> World {
         roads: vec![],
         looped: true,
         points,
+        ..Default::default()
     };
 
     // Terrain grid around the loop.

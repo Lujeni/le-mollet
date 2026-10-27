@@ -55,7 +55,7 @@ pub struct Start {
 }
 
 /// One piece of decor: kind, where, ground height (m), heading (degrees) and variant.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Prop {
     pub k: String,
     pub lat: f64,
@@ -215,7 +215,7 @@ impl Route {
         let node = city.nearest(at);
         let first = city.exits(node, None).into_iter().next().expect("junction has a street");
         let mut r = Self {
-            course: Course { name: city.name.clone(), attribution: city.attribution.clone(), waypoints: vec![], roads: vec![], looped: false, points: vec![] },
+            course: Course { name: city.name.clone(), attribution: city.attribution.clone(), waypoints: vec![], roads: vec![], looped: false, points: vec![], ..Default::default() },
             at: (first.street, first.forward),
             next: Turn::Straight,
             legs: vec![],
@@ -288,7 +288,7 @@ pub fn build(name: &str, relation: u64, start: [f64; 2]) -> Result<(City, Terrai
     let (Some(s), Some(w), Some(n), Some(e)) = (s, w, n, e) else { bail!("Overpass: relation {relation} has no bounds") };
     let (mlat, mlon) = (MARGIN_M / 110_540.0, MARGIN_M / (((s + n) / 2.0).to_radians().cos() * 111_320.0));
 
-    let mut t = Terrain::for_bbox(w - mlon, s - mlat, e + mlon, n + mlat)?;
+    let mut t = Terrain::for_bbox(w - mlon, s - mlat, e + mlon, n + mlat, crate::terrain::CELL_M)?;
     t.cover.fill(terrain::PAVE);
     t.paint_land_cover()?;
 

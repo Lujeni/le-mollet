@@ -178,7 +178,7 @@ mod tests {
 
     fn course(len: f32, looped: bool, ele: impl Fn(f32) -> f32) -> Course {
         let points = (0..=(len / 10.0) as usize).map(|i| { let d = i as f32 * 10.0; Point { d, lat: 0.0, lon: 0.0, ele: ele(d) } }).collect();
-        Course { name: "Col".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped, points }
+        Course { name: "Col".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped, points, ..Default::default() }
     }
 
     #[test]

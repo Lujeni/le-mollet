@@ -264,7 +264,8 @@ impl App {
             let id = p.file_stem().unwrap().to_string_lossy().into_owned();
             tracks.push(Arc::new(Track::new(id, Course::load(&path)?, std::fs::read(crate::terrain_path(&path)).ok(), None)?.with_extras(&path)));
         }
-        let summaries: Vec<_> = tracks.iter().map(|t| t.summary()).collect();
+        // Climbs on the fridge; real loops (Longchamp) ride with the open worlds, see worlds_json.
+        let summaries: Vec<_> = tracks.iter().filter(|t| !t.course.looped).map(|t| t.summary()).collect();
         // Open cities: `x.city.json` (+ `x.city.terrain.bin`), id `x`.
         let mut cities = vec![];
         for p in std::fs::read_dir(dir).map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).collect::<Vec<_>>()).unwrap_or_default() {
@@ -347,8 +348,11 @@ impl App {
         if let Err(e) = res { eprintln!("{path}: {e}") }
     }
 
+    /// Free rides: real loops first, then the generated worlds.
     fn worlds_json(&self) -> String {
-        json!(self.tracks.read().unwrap().iter().filter(|t| t.relief.is_some()).map(|t| t.summary()).collect::<Vec<_>>()).to_string()
+        let tracks = self.tracks.read().unwrap();
+        let real = tracks.iter().filter(|t| t.relief.is_none() && t.city.is_none() && t.course.looped);
+        json!(real.chain(tracks.iter().filter(|t| t.relief.is_some())).map(|t| t.summary()).collect::<Vec<_>>()).to_string()
     }
 
     fn add_world(&self, track: Track) -> String {

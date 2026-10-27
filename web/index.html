@@ -1648,7 +1648,7 @@ async function renderWorlds() {
       },
       h('div', { class:'row' }, h('strong', {}, w.name),
         h('small', { class: w.riders ? 'online' : '' }, w.riders ? `${w.riders} cycliste${w.riders > 1 ? 's' : ''} en ligne` : 'personne pour l\'instant')),
-      h('small', {}, `${(w.length / 1000).toFixed(1)} km · +${w.gain} m par tour · ${w.relief}`),
+      h('small', {}, `${(w.length / 1000).toFixed(1)} km · +${w.gain} m par tour · ${w.relief ?? 'circuit réel'}`),
       cv);
     requestAnimationFrame(() => sparkline(cv, w.profile));
     return card;
@@ -1812,7 +1812,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
   $('#leave').textContent = '‖ Pause';
   ride.course = await (await fetch(`/course?id=${encodeURIComponent(id)}`)).json();
   const listed = ride.list.cities?.find(c => c.id === id);
-  [ride.island, ride.props] = [kind === 'city' && !!listed?.island, listed?.props ?? []];
+  [ride.island, ride.props] = [kind === 'city' && !!listed?.island, listed?.props ?? ride.course.props ?? []]; // a course carries its own decor (le-mollet decor)
   startGhost(id);
   show('#ride');
   $('#courseName').textContent = zombie ? 'Zombie Halloween' : ride.course.name;
@@ -2290,7 +2290,9 @@ function drawProfile() {
 }
 
 // ---------- 3D course world (terrain from `le-mollet course` / `le-mollet terrain`) ----------
-const COVER = { GRASS:0, FOREST:1, WATER:2, BUILDING:3, ROCK:4, ROAD:5, PAVE:6, SAND:7, LAVA:8, FIELD:9, DIRT:10, BASALT:11, JUNGLE:12 }; // 7+: the island's grounds
+const COVER = { GRASS:0, FOREST:1, WATER:2, BUILDING:3, ROCK:4, ROAD:5, PAVE:6, SAND:7, LAVA:8, FIELD:9, DIRT:10, BASALT:11, JUNGLE:12, CANOPY:13, MOSAIC:32 }; // 7-12: the island's grounds
+// Ground read from the aerial photo (le-mollet decor, src/decor.rs MOSAIC): cover MOSAIC + i, Lego colors.
+const MOSAIC = ['#4b9f4a', '#237841', '#184632', '#9b9a5a', '#a0bcac', '#e4cd9e', '#958a73', '#a0a5a9', '#6c6e68', '#f4f4f4', '#582a12', '#aa7d55', '#352100', '#a5ca18'];
 const STEP_Y = 2;          // voxel height, m. Calibration knob: smaller = finer terraces
 const CHUNK = 64;          // cells per chunk side (5 m cells = 320 m)
 // ponytail: fixed view distance by screen width; measure fps on real devices before tuning
@@ -2780,6 +2782,44 @@ const MODELS = {
   sandcastle(k) { k.b(-2, -2, 0, 4, 4, 3, LC.tan, false); for (const [x, z] of [[-2, -2], [1, -2], [-2, 1], [1, 1]]) k.b(x, z, 3, 1, 1, 3, LC.tan, true); k.cyl(0, 0, 3, 0.1, 5, LC.white, 4); k.box(0, 6, 0, 1.2, 7, 0.1, LC.red) },
   bench(k) { for (const x of [-2, 2]) k.b(x - 0.3, -0.8, 0, 0.6, 1.6, 3, LC.dgray, false); k.b(-3, -0.8, 3, 6, 1.6, 0.6, LC.brn, false); k.b(-3, -0.9, 3.6, 6, 0.3, 3, LC.brn, false) },
   haystack(k) { k.part(p => p.cyl(0, 0, -2, 3, 4, LC.yel, 12), { at:[0, 3, 0], rx:Math.PI / 2 }) },
+  // Broadleaf tree at real size, read from the aerial photo: v = size class (0-3) * 8 + foliage (green, dark,
+  // olive, autumn yellow, orange, red-brown). Trunk and limbs, then a crown of rounded brick layers.
+  oak(k, v) {
+    const size = Math.min(3, v >> 3), [R, H] = [[5.5, 56], [8, 75], [10.8, 94], [14, 119]][size]; // crown radius in studs, height in plates
+    const [main, dark] = [[LC.bgrn, LC.grn], [LC.grn, LC.dgrn], ['#9b9a5a', LC.grn], [LC.yel, '#9b9a5a'], [LC.org, '#a95500'], ['#a95500', LC.dred]][v & 7] ?? [LC.bgrn, LC.grn];
+    const trunk = H * 0.36, tr = 0.7 + size * 0.3;
+    k.cyl(0, 0, 0, tr, trunk + 6, LC.brn, 7);
+    for (const [a, l] of [[0.6, 0.55], [2.7, 0.5], [4.6, 0.45]]) k.part(p => p.box(-0.35, 0, -0.35, 0.35, R * l * 2.4, 0.35, LC.brn), { at:[0, trunk - 6, 0], ry:a, rz:-0.9 });
+    const y0 = trunk - 3, layers = Math.round((H - y0) / 6);
+    for (let i = 0; i < layers; i++) {
+      const t = (i + 0.5) / layers, rad = R * Math.sqrt(Math.max(0.05, 1 - (2 * t - 1.15) ** 2)) * (0.92 + hash(v, i, 3) * 0.16);
+      const ox = (hash(v, i, 4) - 0.5) * R * 0.18, oz = (hash(v, i, 5) - 0.5) * R * 0.18;
+      k.cyl(ox, oz, y0 + i * 6, rad, 6, shadeHex(i % 3 ? main : dark, i + v), 8);
+    }
+    for (let i = 0; i < 5; i++) { const a = i * 1.26 + v; k.cyl(Math.cos(a) * R * 0.75, Math.sin(a) * R * 0.75, y0 + (H - y0) * (0.35 + (i % 3) * 0.12), R * 0.35, 6, shadeHex(main, i * 7), 7) } // lumps
+  },
+  // Stone tower mill (Moulin de Longchamp): v = height in m. Courses of stone, small windows, a pointed cap, four
+  // lattice sails on the +x face.
+  towermill(k, v) {
+    const H = Math.max(10, v) / 0.16, cap = 5 / 0.16, body = H - cap, stone = [LC.tan, '#d9c08f', LC.tan, '#e8d6ab'];
+    for (let y = 0; y < body; y += 3) k.cone(0, 0, y, 9.2 - y / body * 1.6, 9.2 - (y + 3) / body * 1.6, 3, LC.tan, 16, stone.slice(y / 3 % 2 ? 1 : 0));
+    for (const [a, y] of [[0, 8], [0, body * 0.45], [Math.PI, body * 0.3], [Math.PI / 2, body * 0.6], [-Math.PI / 2, body * 0.75]]) {
+      const r = 9.25 - y / body * 1.6;
+      k.part(p => p.box(-0.2, 0, -1, 0.2, a === 0 && y === 8 ? 14 : 8, 1, a === 0 && y === 8 ? LC.dbrn : LC.black), { at:[Math.cos(a) * r, y, Math.sin(a) * r], ry:-a });
+    }
+    k.cyl(0, 0, body, 8, 1.5, LC.dgray, 16);
+    k.cone(0, 0, body + 1.5, 8.2, 0.4, cap, LC.dgray, 12);
+    const hub = body - 2;
+    k.part(p => p.box(0, -0.8, -0.8, 3, 0.8, 0.8, LC.dbrn), { at:[7.5, hub, 0] });
+    for (let n = 0; n < 4; n++) k.part(p => { // one sail: a spar and a lattice frame
+      p.box(-0.3, 0, -0.3, 0.3, 58, 0.3, LC.dbrn); // ~9 m, like the real sails
+      p.box(-0.15, 10, 0.3, 0.15, 58, 0.45, LC.dbrn); p.box(-0.15, 10, 4.3, 0.15, 58, 4.45, LC.dbrn);
+      for (let y = 10; y <= 58; y += 6) p.box(-0.15, y, 0.3, 0.15, y + 0.8, 4.45, LC.white);
+    }, { at:[10.6, hub, 0], rx:n * Math.PI / 2 + 0.4, ry:Math.PI / 2 });
+  },
+  hedge(k, v) { for (let x = -2; x < 2; x++) k.b(x, -1, 0, 1, 2, 6 + (hash(x, v, 9) * 2 | 0), shadeHex(LC.grn, x + 3), false); k.b(-2, -0.9, 6, 4, 1.8, 2, shadeHex(LC.dgrn, v), true) },
+  lowwall(k) { wall(k, -2, 0, 2, 0, 0, 6, LC.lgray); k.b(-2, -0.6, 6, 4, 1.2, 1, LC.dgray, false) },
+  rail(k) { for (const x of [-3, 3]) k.b(x - 0.3, -0.3, 0, 0.6, 0.6, 6, LC.white, false); k.b(-3, -0.4, 6, 6, 0.8, 1, LC.white, false) },
   pine(k, v) { k.cyl(0, 0, 0, 0.8, 6, LC.brn, 8); for (let i = 0; i < 9; i++) k.cyl(0, 0, 5 + i * 2.6, 5.5 - i * 0.55, 1.2, shadeHex(v ? LC.dgrn : LC.grn, i), 8); k.cone(0, 0, 28.4, 0.8, 0, 2, LC.dgrn, 6) },
   crater() {},
   waterfall() {},
@@ -2802,7 +2842,7 @@ const MOVING = {
   waterfall: () => [{ anim:'falls', at:[0, 0, 0], build:() => {} }],
 };
 // Pieces that stand anywhere on the island and are seen from afar: always built, not per chunk.
-const LANDMARKS = new Set(['lighthouse', 'castle', 'pyramid', 'crater', 'windmill', 'fort', 'temple', 'ship', 'obelisk', 'waterfall', 'silo', 'barn', 'tavern', 'ropebridge']);
+const LANDMARKS = new Set(['towermill', 'lighthouse', 'castle', 'pyramid', 'crater', 'windmill', 'fort', 'temple', 'ship', 'obelisk', 'waterfall', 'silo', 'barn', 'tavern', 'ropebridge']);
 // Decor that moves about as a whole: boats float, animals graze and walk, crabs scuttle, parrots fly.
 const ROAMING = { ship:'float', boat:'float', cow:'graze', sheep:'graze', camel:'walk', crab:'scuttle', parrot:'fly' };
 MODELS.flag = MODELS.flagpole;
@@ -3037,16 +3077,21 @@ function parseTerrain(buf, course) {
   const toXZ = (lat, lon) => [(lon - p0.lon) * kx, (p0.lat - lat) * kz]; // x east, z south, meters
   const [ox, oz] = toXZ(north, west);
   const ele = i => heights[i] / 10;
+  const fine = (east - west) / w * kx < 3; // small cells (a short loop): small bricks
   const top = (c, r) => {
     const i = r * w + c;
-    const step = city ? 0.5 : ride.island ? 1 : STEP_Y; // a city is nearly flat: fine steps, no staircase streets; finer bricks on the island
-    return Math.floor(ele(i) / step) * step + (cover[i] === COVER.BUILDING && !w3.bld ? (city ? 18 : 6) : 0); // real buildings once loaded, blocks until then
+    const step = city || fine ? 0.5 : ride.island ? 1 : STEP_Y; // a city is nearly flat: fine steps, no staircase streets; finer bricks on the island and small cells
+    const lift = cover[i] === COVER.CANOPY ? 9 + Math.floor(hash(c >> 1, r >> 1, 71) * 5) * 1.5 // woods seen from afar: a lumpy canopy of bricks
+      : cover[i] === COVER.BUILDING && !w3.bld ? (city ? 18 : 6) : 0; // real buildings once loaded, blocks until then
+    return Math.floor(ele(i) / step) * step + lift;
   };
   return { w, h, cover, ele, top, toXZ, ox, oz, city, island:!!ride.island, west, north, cx:(east - west) / w * kx, cz:(north - south) / h * kz };
 }
 
 // Official Lego colors: Bright Green grass, Dark Green forest, Dark Tan rock, Dark Bluish Gray road.
 function topColor(cov, e, c = 0, r = 0) {
+  if (cov >= COVER.MOSAIC) return MOSAIC[cov - COVER.MOSAIC] ?? '#4b9f4a';
+  if (cov === COVER.CANOPY) return ['#184632', '#237841', '#184632', '#9b9a5a'][Math.floor(hash(c >> 1, r >> 1, 72) * 4)];
   if (cov === COVER.SAND) return '#e4cd9e';
   if (cov === COVER.JUNGLE) return '#184632';
   if (cov === COVER.LAVA) return '#fe8a18';
@@ -3060,7 +3105,7 @@ function topColor(cov, e, c = 0, r = 0) {
   if (cov === COVER.ROCK || e > 2400) return e > 2800 ? '#f4f4f4' : '#958a73';
   return cov === COVER.FOREST ? '#237841' : e > 1800 ? '#a5ca18' : '#4b9f4a'; // lime alpine pasture
 }
-const sideColor = (cov, e) => cov === COVER.SAND ? '#dcbc81' : cov === COVER.BASALT || cov === COVER.LAVA ? '#3b3b3b' : cov === COVER.DIRT || cov === COVER.FIELD ? '#582a12' : cov === COVER.PAVE ? '#6c6e68' : cov === COVER.BUILDING ? '#e4cd9e' : cov === COVER.ROCK || e > 2400 ? '#6c6e68' : '#582a12';
+const sideColor = (cov, e) => cov === COVER.CANOPY ? '#184632' : cov >= COVER.MOSAIC ? '#' + new THREE.Color(MOSAIC[cov - COVER.MOSAIC]).multiplyScalar(0.78).getHexString() : cov === COVER.SAND ? '#dcbc81' : cov === COVER.BASALT || cov === COVER.LAVA ? '#3b3b3b' : cov === COVER.DIRT || cov === COVER.FIELD ? '#582a12' : cov === COVER.PAVE ? '#6c6e68' : cov === COVER.BUILDING ? '#e4cd9e' : cov === COVER.ROCK || e > 2400 ? '#6c6e68' : '#582a12';
 const shade = (hex, c, r) => new THREE.Color(hex).offsetHSL(0, 0, (hash(c, r, 7) - 0.5) * 0.04); // bricks are uniform, a hint keeps cells apart
 const TRUNK = new THREE.Color('#582a12'), LEAVES = '#184632';
 
@@ -3117,7 +3162,7 @@ function chunkMesh(T, ci, cj) {
       }
       const kind = animalAt(T, c, r);
       if (kind) animals.push([kind, (x0 + x1) / 2, y, (z0 + z1) / 2, hash(c, r, 5) * Math.PI * 2]);
-      if (cov === COVER.FOREST && e < 2000 && !T.island && hash(c, r, 1) < 0.3) { // the island has its own trees, piece by piece // Lego pine: round trunk, two stacked studded layers
+      if (cov === COVER.FOREST && e < 2000 && !T.island && !ride.props?.length && hash(c, r, 1) < 0.3) { // the island has its own trees, piece by piece // Lego pine: round trunk, two stacked studded layers
         const [tx, tz, leaf] = [(x0 + x1) / 2, (z0 + z1) / 2, shade(LEAVES, c, r)];
         box(tx, y, tz, 1.2, 3, 1.2, TRUNK);
         box(tx, y + 3, tz, T.cx * 0.96, 2.5, T.cz * 0.96, leaf);
@@ -3246,6 +3291,7 @@ const bldMats = (() => {
 // Buildings bucketed by terrain chunk: { h, xz:[x0, z0, x1, z1, ...] } in scene meters.
 function parseBuildings(buf, T) {
   const dv = new DataView(buf), n = dv.getUint32(0, true), out = new Map();
+  const stands = (ride.props ?? []).filter(p => p.k === 'towermill').map(p => T.toXZ(p.lat, p.lon));
   let o = 4;
   for (let k = 0; k < n; k++) {
     const h = dv.getFloat32(o, true), m = dv.getUint16(o + 4, true);
@@ -3258,6 +3304,7 @@ function parseBuildings(buf, T) {
     }
     const [c, r] = [Math.floor((sx / m - T.ox) / T.cx), Math.floor((sz / m - T.oz) / T.cz)];
     if (c < 0 || r < 0 || c >= T.w || r >= T.h) continue;
+    if (stands.some(([x, z]) => Math.hypot(x - sx / m, z - sz / m) < 12)) continue; // a landmark piece stands here instead
     const key = `${Math.floor(c / CHUNK)},${Math.floor(r / CHUNK)}`;
     if (!out.has(key)) out.set(key, []);
     out.get(key).push({ h: Math.max(3, h), xz, cx:sx / m, cz:sz / m, ground: T.ele(r * T.w + c) });
@@ -3738,7 +3785,7 @@ function enter3d(buf) {
   menuBg.visible = false;
   if (ride.mode === 'zombie') halloween();
   if (climb() && ride.ghost) w3.group.add(w3.ghost = ghostModel());
-  if (ride.island) enterIsland();
+  if (ride.island || ride.props?.length) enterIsland();
   placeArches(ride.windows ?? []);
   placePowerArches();
   [w3.crowd, w3.cars, w3.pigeons, w3.clouds] = [makeCrowd(), [], [], makeClouds()];
@@ -4065,7 +4112,7 @@ function update3d(dt) {
   for (const [, i, j] of wanted.slice(0, w3.chunks.size ? 1 : 9)) {
     const m = chunkMesh(T, i, j), bld = w3.bld?.get(`${i},${j}`);
     if (bld) m.add(buildingMesh(bld));
-    const props = T.island && [...(w3.propCells?.get(`${i},${j}`) ?? []), ...islandFill(T, i, j)];
+    const props = w3.propCells && [...(w3.propCells.get(`${i},${j}`) ?? []), ...(T.island ? islandFill(T, i, j) : [])];
     if (props?.length) m.add(Object.assign(chunkProps(props), { userData:{ props:true } }));
     w3.group.add(m);
     w3.chunks.set(`${i},${j}`, m);

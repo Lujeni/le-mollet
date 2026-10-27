@@ -14,7 +14,7 @@ pub const TILE_CELLS: usize = 640;
 const TILE_PX: usize = 4096;
 const OVERVIEW_PX: usize = 2048;
 
-fn get_jpeg([south, west, north, east]: [f64; 4], w: usize, h: usize) -> Result<Vec<u8>> {
+pub(crate) fn get_jpeg([south, west, north, east]: [f64; 4], w: usize, h: usize) -> Result<Vec<u8>> {
     let url = format!(
         "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=ORTHOIMAGERY.ORTHOPHOTOS\
          &STYLES=&CRS=EPSG:4326&BBOX={south},{west},{north},{east}&WIDTH={w}&HEIGHT={h}&FORMAT=image/jpeg"

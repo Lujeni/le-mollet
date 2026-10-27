@@ -9,7 +9,7 @@ use crate::course::{Course, UA, request_json};
 use anyhow::{Result, bail};
 use std::io::Read;
 
-/// Cell size, m.
+/// Default cell size, m; a course may ask for finer (`Course::cell_m`).
 pub const CELL_M: f64 = 5.0;
 /// Terrain kept around the course bounding box, m.
 const MARGIN_M: f64 = 1500.0;
@@ -48,17 +48,17 @@ impl Terrain {
         let fold = |f: fn(f64, f64) -> f64, init: f64, get: fn(&crate::course::Point) -> f64| course.points.iter().map(get).fold(init, f);
         let (south, north) = (fold(f64::min, 90.0, |p| p.lat) - MARGIN_M / kz, fold(f64::max, -90.0, |p| p.lat) + MARGIN_M / kz);
         let (west, east) = (fold(f64::min, 180.0, |p| p.lon) - MARGIN_M / kx, fold(f64::max, -180.0, |p| p.lon) + MARGIN_M / kx);
-        let mut t = Self::for_bbox(west, south, east, north)?;
+        let mut t = Self::for_bbox(west, south, east, north, course.cell_m.unwrap_or(CELL_M))?;
         t.paint_land_cover()?;
         t.carve_road(course);
         Ok(t)
     }
 
-    /// Bare terrain (IGN elevation grid, all grass) over a lat/lon box.
-    pub fn for_bbox(west: f64, south: f64, east: f64, north: f64) -> Result<Self> {
+    /// Bare terrain (IGN elevation grid, all grass) over a lat/lon box, in `cell` m cells.
+    pub fn for_bbox(west: f64, south: f64, east: f64, north: f64, cell: f64) -> Result<Self> {
         let kx = ((south + north) / 2.0).to_radians().cos() * 111_320.0;
-        let w = ((east - west) * kx / CELL_M).round() as usize;
-        let h = ((north - south) * 110_540.0 / CELL_M).round() as usize;
+        let w = ((east - west) * kx / cell).round() as usize;
+        let h = ((north - south) * 110_540.0 / cell).round() as usize;
         // ponytail: single WMS request, IGN accepts up to 4096 px a side; tile it for longer routes
         if w > 4096 || h > 4096 { bail!("terrain {w}x{h} cells exceeds one IGN request (4096 max)") }
         Ok(Self { w, h, west, south, east, north, heights: fetch_heights(west, south, east, north, w, h)?, cover: vec![GRASS; w * h] })
@@ -74,6 +74,17 @@ impl Terrain {
         let top = at(c, r) + (at(c + 1, r) - at(c, r)) * tx;
         let bottom = at(c, r + 1) + (at(c + 1, r + 1) - at(c, r + 1)) * tx;
         top + (bottom - top) * ty
+    }
+
+    /// The terrain written by `to_bytes`.
+    pub fn from_bytes(b: &[u8]) -> Result<Self> {
+        if b.len() < 40 { bail!("terrain file too short") }
+        let u = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
+        let f = |o: usize| f64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+        let (w, h) = (u(0), u(4));
+        if b.len() != 40 + w * h * 3 { bail!("terrain file: {} bytes for {w}x{h} cells", b.len()) }
+        let heights = b[40..40 + w * h * 2].chunks_exact(2).map(|e| u16::from_le_bytes([e[0], e[1]]) as f32 / 10.0).collect();
+        Ok(Self { w, h, west: f(8), south: f(16), east: f(24), north: f(32), heights, cover: b[40 + w * h * 2..].to_vec() })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -140,7 +151,7 @@ impl Terrain {
         let cell_x = (self.east - self.west) / self.w as f64 * course.points[0].lat.to_radians().cos() * 111_320.0;
         let cell_z = (self.north - self.south) / self.h as f64 * 110_540.0;
         let mut best = vec![(f64::INFINITY, 0.0f64); self.w * self.h]; // (distance to road, road elevation)
-        let reach = (BANK_M / CELL_M).ceil() as isize + 1;
+        let reach = (BANK_M / cell_x.min(cell_z)).ceil() as isize + 1;
         for p in course.points.windows(2) {
             for k in 0..4 {
                 let t = k as f64 / 4.0;
