@@ -420,6 +420,27 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     }
 }
 
+/// Other riders sent in each frame; past that, only the nearest.
+const OTHERS_MAX: usize = 50;
+
+/// The `max` riders closest to the one at `distance` along the course (wrapping on a loop of `lap` m),
+/// or to `pos` in an open city, where each rider has a route of their own.
+fn nearest<'a>(riders: impl Iterator<Item = &'a Presence>, distance: f32, pos: Option<[f64; 2]>, lap: Option<f32>, max: usize) -> Vec<Presence> {
+    let gap = |p: &Presence| match (pos, p.pos) {
+        (Some(a), Some(b)) => ((a[0] - b[0]) * 110_540.0).hypot((a[1] - b[1]) * 111_320.0 * a[0].to_radians().cos()) as f32,
+        _ => {
+            let d = (p.distance - distance).abs();
+            lap.map_or(d, |l| d.min(l - d))
+        }
+    };
+    let mut v: Vec<(f32, &Presence)> = riders.map(|p| (gap(p), p)).collect();
+    if v.len() > max {
+        v.select_nth_unstable_by(max, |a, b| a.0.total_cmp(&b.0));
+        v.truncate(max);
+    }
+    v.into_iter().map(|(_, p)| p.clone()).collect()
+}
+
 /// One SSE frame: the ride, plus the workout progress when training or the zombie game, plus the other riders.
 #[derive(Serialize)]
 struct Frame<'a> {
@@ -496,15 +517,15 @@ async fn ride_session(
         let progress = plan.map(|(w, ftp)| w.progress(ride.elapsed, ftp));
         n += 1;
         if n % 3 == 0 {
-            // Publish where we are, read where the others are.
-            // ponytail: everyone sees everyone on a course; add proximity culling past a few dozen riders
+            // Publish where we are, read where the others are: the nearest ones, they are the ones on screen.
             let others = track.map_or(vec![], |t| {
                 let mut riders = t.riders.lock().unwrap();
-                if let Some(me) = riders.get_mut(&sid) {
+                let me = riders.get_mut(&sid).and_then(|me| {
                     (me.distance, me.speed_kmh, me.power) = (ride.distance, ride.speed_kmh, ride.power);
                     me.pos = city.map(|_| course.latlon_at(ride.distance));
-                }
-                riders.values().filter(|p| p.id != sid).take(50).cloned().collect()
+                    me.pos
+                });
+                nearest(riders.values().filter(|p| p.id != sid), ride.distance, me, t.course.looped.then(|| t.course.length()), OTHERS_MAX)
             });
             let fresh = route.as_ref().map_or(vec![], |r| r.course.points[sent_pts..].to_vec());
             sent_pts += fresh.len();
@@ -557,5 +578,22 @@ mod tests {
         assert_eq!((p.name.as_str(), p.color.as_str(), p.frame, p.country.as_deref()), ("<b>Bob", "#ff00AA", "gravel", Some("FR")));
         let p = presence("color=red&frame=bmx&country=fr", 7);
         assert_eq!((p.name.as_str(), p.color.as_str(), p.frame, p.country), ("Cycliste", "#c91a09", "road", None));
+    }
+
+    fn rider(id: u64, distance: f32) -> Presence {
+        Presence { id, name: String::new(), color: String::new(), frame: "road", country: None, distance, speed_kmh: 0.0, power: 0.0, pos: None }
+    }
+
+    #[test]
+    fn nearest_riders_first_and_around_the_loop() {
+        let rs: Vec<Presence> = [100.0, 5000.0, 900.0, 9950.0, 400.0].iter().enumerate().map(|(i, &d)| rider(i as u64, d)).collect();
+        let ids = |v: Vec<Presence>| {
+            let mut i: Vec<u64> = v.iter().map(|p| p.id).collect();
+            i.sort();
+            i
+        };
+        assert_eq!(ids(nearest(rs.iter(), 0.0, None, None, 2)), vec![0, 4]); // 100 m and 400 m ahead
+        assert_eq!(ids(nearest(rs.iter(), 0.0, None, Some(10_000.0), 2)), vec![0, 3]); // 50 m behind, across the line
+        assert_eq!(nearest(rs.iter(), 0.0, None, None, 10).len(), 5);
     }
 }
