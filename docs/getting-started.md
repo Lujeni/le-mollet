@@ -46,8 +46,8 @@ have 3D: they are generated on the fly.
 
 ### From the browser (recommended)
 
-Start the server without `--trainer`, open the page in **Chrome or Edge**, and on the home screen click
-**Home trainer** (FTMS trainers such as the KICKR CORE, or older KICKRs) and **Cardio** (any Bluetooth heart rate
+Start the server without `--trainer`, open the page in **Chrome or Edge** and pick your profile: the
+**Equipment** step comes next (and stays reachable from the home screen). Click **Home trainer** (FTMS trainers such as the KICKR CORE, or older KICKRs) and **Cardio** (any Bluetooth heart rate
 strap). Each rider connects their own devices, so everyone on a shared server rides their own trainer. The page
 sends the road grade (times the **difficulty** slider, 50 % by default) or the workout target in ERG mode.
 

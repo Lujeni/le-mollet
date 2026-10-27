@@ -135,16 +135,26 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .ride-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px }
 .ride-head h1, .ride-head h2 { margin:0 }
 
-/* Devices on the home screen */
-.devices { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:-8px 0 20px }
-.dev { display:flex; flex-direction:column; align-items:flex-start; gap:4px; padding:10px 14px; text-align:left; cursor:pointer; color:var(--ink); font:inherit; background:var(--glass-hi); border:1px solid var(--edge); border-radius:14px }
-.dev:hover:not(:disabled) { background:var(--glass-hi2) } .dev:disabled { opacity:.5; cursor:not-allowed }
-.dev b { font:600 15px var(--font) }
+/* Devices: their own step after picking a profile, a status line on the home screen */
+#devicesScreen { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
+.devs { width:min(640px, 100%); max-height:100%; overflow:auto; padding:28px; display:flex; flex-direction:column; gap:14px }
+.devs .ride-head { margin:0 } .devs > .muted { margin:0 }
+.devices { display:grid; grid-template-columns:1fr 1fr; gap:12px }
+.dev { display:flex; flex-direction:column; align-items:flex-start; gap:6px; padding:18px; min-height:170px; text-align:left; cursor:pointer; color:var(--ink); font:inherit; background:var(--glass-hi); border:1px solid var(--edge); border-radius:18px; transition:background .15s, transform .12s }
+.dev:hover:not(:disabled) { background:var(--glass-hi2); transform:translateY(-2px) } .dev:disabled { opacity:.5; cursor:not-allowed }
+.dev.on { border-color:#4bd06a; box-shadow:inset 0 0 0 1px #4bd06a }
+.dev i { font-style:normal; font-size:30px; line-height:1 }
+.dev b { font:700 19px var(--font) }
+.dev .live { font:700 30px var(--font); font-variant-numeric:tabular-nums } .dev .live small { font-size:14px; color:var(--muted); margin-left:4px }
+.dev .act { margin-top:auto; font:600 13px var(--font); color:var(--accent-ink) }
+.dev-diff-hint { margin-top:-10px !important; font-size:12px }
+#devGo { padding:14px; font-size:17px }
+.dev-status { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:-8px 0 20px; padding:8px 8px 8px 14px; border-radius:14px; background:var(--glass-hi); font-size:13px }
+.dev-status > span { display:flex; flex-wrap:wrap; gap:4px 14px }
 .dev-state { font-size:12.5px; color:var(--muted) } .dev-state::before { content:''; display:inline-block; width:8px; height:8px; border-radius:50%; background:#8a93a0; margin-right:6px }
 .dev-state.on { color:var(--ink) } .dev-state.on::before { background:#4bd06a; box-shadow:0 0 6px #4bd06a }
-.dev-diff { grid-column:1 / -1; flex-direction:row; align-items:center; justify-content:space-between; gap:12px; font-size:13px }
+.dev-diff { flex-direction:row; align-items:center; justify-content:space-between; gap:12px; font-size:13px }
 .dev-diff span { display:flex; align-items:center; gap:10px; flex:1; max-width:340px } .dev-diff output { font:700 14px var(--font); color:var(--ink); min-width:44px }
-.devices .muted { grid-column:1 / -1; margin:0; font-size:12px }
 /* Segments: the live banner, the result, the leaderboards */
 .seg-banner { position:absolute; left:50%; top:96px; transform:translateX(-50%); z-index:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 18px 10px; border-radius:16px; color:#fff; pointer-events:none; box-shadow:0 10px 26px rgba(0,0,0,.35); min-width:260px }
 .seg-banner.kom { background:radial-gradient(circle, #c91a09 3px, transparent 3.5px) 0 0 / 14px 14px, #f4f4f4; color:#1b2a34 } .seg-banner.sprint { background:#2d8a48 }
@@ -376,15 +386,27 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     </div>
   </main>
 
-  <main id="home" hidden>
-    <div class="block panel">
-      <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1 id="homeHello"></h1><div class="chips" id="homeStats"></div></div></div>
+  <main id="devicesScreen" hidden>
+    <div class="block panel devs">
+      <div class="ride-head">
+        <div><p class="kicker">Avant de rouler</p><h1>Tes équipements</h1></div>
+        <button class="btn" id="devBack">‹ Profils</button>
+      </div>
+      <p class="muted" id="devHint"></p>
       <div class="devices">
         <button class="dev" id="devTrainer"></button>
         <button class="dev" id="devHr"></button>
-        <label class="dev-diff">Difficulté des pentes<span><input type="range" id="difficulty" min="0" max="100" step="5"><output id="difficultyOut"></output></span></label>
-        <small class="muted" id="devHint"></small>
       </div>
+      <label class="dev-diff">Difficulté des pentes<span><input type="range" id="difficulty" min="0" max="100" step="5"><output id="difficultyOut"></output></span></label>
+      <small class="muted dev-diff-hint">Part de la vraie pente envoyée au home trainer : 100 % = comme sur la route.</small>
+      <button class="btn primary" id="devGo"></button>
+    </div>
+  </main>
+
+  <main id="home" hidden>
+    <div class="block panel">
+      <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1 id="homeHello"></h1><div class="chips" id="homeStats"></div></div></div>
+      <div class="dev-status"><span id="homeDevices"></span><button class="btn" id="goDevices">Équipements</button></div>
       <div class="tiles">
         <button class="tile ride" id="goRide">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M0 11h12v1H0zM1 10h10v1H1zM2 9h3V8h1V6h1v1h1v1h1v1h1v1H2zM5 5h2v1H5zM6 4h1v1H6z"/></svg>
@@ -1152,7 +1174,7 @@ function h(tag, props = {}, ...kids) {
 }
 
 // One screen at a time. Leaving the ride stops its stream, sound and 3D world.
-const SCREENS = ['#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
+const SCREENS = ['#devicesScreen', '#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
 function show(id) {
   if (id !== '#ride') {
     $('#ride').classList.remove('editing', 'bare');
@@ -1244,8 +1266,8 @@ function renderList() {
   $('#empty').hidden = profiles.length > 0;
   $('#list').replaceChildren(...profiles.map(p => h('div', {
       class:'card block', role:'button', tabindex:0,
-      onclick: () => showHome(p),
-      onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showHome(p) } },
+      onclick: () => showDevices(p),
+      onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showDevices(p) } },
     },
     h('span', { class:'avatar', style:`background:${p.bike.frame}` }, p.name[0].toUpperCase()),
     h('div', { class:'meta' },
@@ -1281,7 +1303,7 @@ $('#new').addEventListener('submit', e => {
   profiles.push(p);
   persist();
   e.target.reset();
-  showHome(p);
+  showDevices(p);
 });
 
 // Garage: the bike and the rider each get their own tab, preview and camera.
@@ -4226,12 +4248,26 @@ function pushSensors() {
 setInterval(pushSensors, 500);
 setInterval(driveTrainer, 1000);
 
-// Home: the devices panel.
+// The devices step: connect, see the figures move, then go. Home keeps a status line.
+function showDevices(p = current) {
+  current = p;
+  show('#devicesScreen');
+  draw(p);
+  renderSensors();
+}
 function renderSensors() {
   const ok = !!navigator.bluetooth, chip = (on, label) => h('span', { class:'dev-state' + (on ? ' on' : '') }, label);
-  $('#devTrainer').replaceChildren(h('b', {}, 'Home trainer'), chip(bt.trainer, bt.trainer ? `${bt.trainer.name} · ${Math.round(bt.trainer.power)} W` : 'non connecté'));
-  $('#devHr').replaceChildren(h('b', {}, 'Cardio'), chip(bt.hr, bt.hr ? `${bt.hr.name} · ${bt.hr.bpm ?? '…'} bpm` : 'non connecté'));
+  const t = bt.trainer, hr = bt.hr;
+  $('#devTrainer').classList.toggle('on', !!t);
+  $('#devTrainer').replaceChildren(h('i', {}, '🚲'), h('b', {}, 'Home trainer'), chip(t, t ? t.name : 'non connecté'),
+    t ? h('span', { class:'live' }, Math.round(t.power), h('small', {}, 'W'), t.cadence != null ? ` ${Math.round(t.cadence)}` : '', t.cadence != null ? h('small', {}, 'rpm') : '') : '',
+    h('span', { class:'act' }, t ? 'Pédale : les watts doivent bouger' : 'Connecter (FTMS, KICKR)'));
+  $('#devHr').classList.toggle('on', !!hr);
+  $('#devHr').replaceChildren(h('i', {}, '❤️'), h('b', {}, 'Cardio'), chip(hr, hr ? hr.name : 'non connecté'),
+    hr ? h('span', { class:'live' }, hr.bpm ?? '…', h('small', {}, 'bpm')) : '', h('span', { class:'act' }, hr ? 'Connecté' : 'Connecter une ceinture'));
   for (const id of ['#devTrainer', '#devHr']) $(id).disabled = !ok;
+  $('#devGo').textContent = t ? "C'est parti ›" : 'Continuer en mode démo ›';
+  $('#homeDevices').replaceChildren(chip(t, t ? `${t.name} · ${Math.round(t.power)} W` : ride.list?.trainer ? `Trainer du serveur : ${ride.list.trainer}` : 'Mode démo (curseur)'), ...(hr ? [chip(true, `${hr.bpm ?? '…'} bpm`)] : []));
   $('#devHint').textContent = ok ? (ride.list?.trainer ? `Le serveur pilote aussi « ${ride.list.trainer} » : ton trainer à toi passe en priorité.` : 'Chrome ou Edge : connecte ton home trainer (FTMS, KICKR) et ta ceinture cardio, sans rien installer.')
     : 'Bluetooth indisponible ici : utilise Chrome ou Edge, sur localhost ou en https.';
   $('#difficulty').value = Math.round((current?.difficulty ?? 0.5) * 100);
@@ -4241,7 +4277,10 @@ const btTry = fn => () => fn().catch(e => { if (e.name !== 'NotFoundError') aler
 $('#devTrainer').addEventListener('click', btTry(connectTrainer));
 $('#devHr').addEventListener('click', btTry(connectHr));
 $('#difficulty').addEventListener('input', e => { current.difficulty = +e.target.value / 100; persist(); bt.sent = null; renderSensors() });
-setInterval(() => { if (!$('#home').hidden && (bt.trainer || bt.hr)) renderSensors() }, 1000);
+setInterval(() => { if ((!$('#home').hidden || !$('#devicesScreen').hidden) && (bt.trainer || bt.hr)) renderSensors() }, 500);
+$('#devGo').addEventListener('click', () => showHome());
+$('#devBack').addEventListener('click', () => showProfiles());
+$('#goDevices').addEventListener('click', () => showDevices());
 const demoRide = () => !ride.list?.trainer && !bt.trainer;
 
 // ---------- segments: arches on the road, the live banner, the result, the leaderboards ----------
