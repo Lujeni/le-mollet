@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod club;
 pub mod decor;
+pub mod event;
 pub mod buildings;
 pub mod city;
 pub mod course;

@@ -25,7 +25,7 @@ The whole policy is `Role::can` in `src/auth.rs`. Endpoints check a permission (
 |---|---|---|---|---|
 | `ride` | ✅ | ✅ | ✅ | riding, Ride Ons, one's own power |
 | `create_world` | ✅ | ✅ | ✅ | `/worlds/new` |
-| `manage_events` | | ✅ | ✅ | events and group rides (to come) |
+| `manage_events` | | ✅ | ✅ | `/event/create`: schedule group rides and races (a club's founder may schedule its club rides) |
 | `moderate` | | | ✅ | `/admin/*`: reset a leaderboard (button in the pause menu) |
 | `manage_roles` | | | ✅ | (to come: roles from the page) |
 

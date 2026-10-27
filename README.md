@@ -55,6 +55,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 <td><img src="docs/screenshots/form.jpg" alt="Form chart: fitness, fatigue and daily stress over 90 days, power records"><br><sub><b>Form.</b> Fitness, fatigue, freshness, power records and an FTP estimate.</sub></td>
 </tr>
 <tr>
+<td><img src="docs/screenshots/events.jpg" alt="Events: a group ride and a race with entrants by category, the form to schedule one"><br><sub><b>Events.</b> Group rides and races, sign up, categories A to D.</sub></td>
+<td><img src="docs/screenshots/pen.jpg" alt="In the start pen at Longchamp: the countdown before the group ride"><br><sub><b>Start pen.</b> Everyone waits on the line, then goes at once.</sub></td>
+</tr>
+<tr>
 <td><img src="docs/screenshots/club.jpg" alt="Club page: tag, invite code, members ranked by kilometres this week"><br><sub><b>Clubs.</b> Your tag on the road, the week's kilometres, an invite code.</sub></td>
 <td><img src="docs/screenshots/fog.jpg" alt="Alpe d'Huez in thick fog"><br><sub><b>Fog.</b> Some spells you only see the next hairpin.</sub></td>
 </tr>
@@ -79,6 +83,11 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
   pirate port with ships in the bay, a desert with a pyramid and an oasis, a jungle temple and waterfall, farms
   with a windmill, a castle on its hill, thousands of Lego pieces. Pick a start place on its mosaic map, then
   your way at each junction.
+- **Group rides and races.** Schedule an event on any course or loop (organizers, or a club's founder for a club
+  ride), riders sign up and wait in the start pen with a countdown, then everyone goes at once. A group ride
+  follows a yellow pace leader at a set W/kg, and anyone up to 200 m behind rides on the bunch's wheel. A race
+  ranks riders live with their category (A to D by W/kg), counts the laps and records the finish, overall and
+  per category.
 - **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
   bike. Self-host it and invite your club on your LAN (`serve --lan`).
 - **A living world.** The sky follows your clock: golden dawn, day, sunset, then night with stars, lit windows

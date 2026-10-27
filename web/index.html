@@ -69,8 +69,36 @@ h1 { font-size:32px; line-height:1.1 } h2 { font-size:21px }
   background:linear-gradient(100deg, #2a1236, #6b2a72 45%, #e9781a); overflow:hidden }
 .tile.zombie::after { content:'ÉVÉNEMENT'; position:absolute; top:12px; right:-34px; transform:rotate(35deg); padding:3px 40px; background:#bbe90b; color:#1b2a34; font:700 11px var(--font); letter-spacing:1.5px }
 
-#profiles, #home, #profileEdit, #rideMenu, #free, #training, #courses, #clubScreen { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
-#profiles .panel, #profileEdit .panel { width:min(540px, 100%); max-height:100%; overflow:auto }
+#profiles, #profileNew, #home, #profileEdit, #rideMenu, #free, #training, #courses, #clubScreen { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
+#profileEdit .panel { width:min(540px, 100%); max-height:100%; overflow:auto }
+#profiles, #profileNew { justify-content:flex-start }
+#profiles .panel, #profileNew .panel { width:min(700px, 100%); max-height:100%; overflow:auto; padding:28px }
+.who-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:14px; margin-top:14px }
+.who-card { position:relative; display:flex; flex-direction:column; gap:8px; padding:16px; border-radius:18px; text-align:left; font:inherit; color:var(--ink); cursor:pointer;
+  background:linear-gradient(160deg, color-mix(in srgb, var(--c) 30%, transparent), var(--glass-hi)); border:1px solid var(--edge); transition:transform .12s, box-shadow .12s }
+.who-card:hover, .who-card:focus-visible { transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,.3); outline:none }
+.who-card .avatar { width:54px; height:54px; font-size:26px; background:var(--c) }
+.who-card strong { font:700 19px var(--font); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.who-card small { color:var(--muted); font-size:12.5px }
+.who-stats { display:flex; flex-wrap:wrap; align-items:center; gap:4px }
+.who-card .del { position:absolute; top:8px; right:8px; opacity:0; transition:opacity .15s }
+.who-card:hover .del, .who-card:focus-within .del { opacity:.8 }
+.who-new { align-items:center; justify-content:center; min-height:180px; background:none; border:2px dashed var(--edge); color:var(--muted) }
+.who-new b { font:700 40px var(--font); line-height:1 }
+.who-welcome { display:grid; gap:12px; justify-items:start }
+.who-welcome p { margin:0; max-width:46ch }
+.who-perks { margin:0; padding:0; list-style:none; display:grid; gap:6px; font-weight:600 }
+.btn.big { padding:14px 22px; font-size:16px }
+.new-steps { display:grid; gap:12px }
+.new-steps fieldset { margin:0; padding:10px 16px 14px; border:1px solid var(--edge); border-radius:16px; background:var(--glass-hi) }
+.new-steps legend { padding:0 6px; font:700 15px var(--font) }
+.new-steps legend b { display:inline-grid; place-items:center; width:22px; height:22px; margin-right:6px; border-radius:7px; background:var(--accent); color:#1b2a34; font-size:13px }
+.small { font-size:12.5px; margin:10px 0 }
+.levels { flex-wrap:wrap }
+.new-wkg { margin:10px 0 0; font-weight:600 }
+.new-colors { display:flex; flex-wrap:wrap; gap:8px }
+.new-colors button { flex:none; width:38px; height:38px; padding:0; border-radius:10px; border:2px solid rgba(255,255,255,.18); background:var(--c); cursor:pointer; box-shadow:inset 0 -4px 0 rgba(0,0,0,.2) }
+.new-colors button[aria-checked=true] { border-color:var(--ink); transform:scale(1.1) }
 
 /* Profiles */
 .list { display:grid; gap:10px; margin-bottom:16px }
@@ -172,6 +200,29 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .btn.powerup { position:relative; overflow:hidden; margin-top:8px; width:100%; justify-content:center; background:linear-gradient(90deg, #0055bf, #36aebf); color:#fff; border-color:transparent }
 .btn.powerup i { position:absolute; left:0; bottom:0; height:4px; background:#f2cd37 }
 #clubScreen .panel { width:min(680px, 100%); max-height:100%; overflow:auto }
+#eventsScreen .panel { width:min(820px, 100%); max-height:100%; overflow:auto }
+.event-list { display:grid; gap:10px; margin:14px 0 }
+.event-card { display:grid; grid-template-columns:auto 1fr auto; gap:6px 14px; align-items:center; padding:14px 16px; border-radius:16px; background:var(--glass-hi); border:1px solid var(--edge) }
+.event-card .when { display:flex; flex-direction:column; align-items:center; min-width:62px; padding:6px 8px; border-radius:12px; background:var(--c, #0b5ed0); color:#fff; font:700 13px var(--font) }
+.event-card .when b { font-size:20px }
+.event-card .what b { font:700 17px var(--font) } .event-card .what small { display:block; color:var(--muted) }
+.event-card .acts { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end }
+.event-card .live { color:#ff6b5a; font-weight:700 }
+.event-card .results { grid-column:1 / -1; font-size:12.5px; color:var(--muted) }
+.cats { display:inline-flex; gap:4px; margin-left:6px } .cat { display:inline-block; min-width:18px; padding:0 5px; border-radius:5px; color:#fff; font:700 11px var(--font); text-align:center }
+.cat.A { background:#d0230f } .cat.B { background:#2d8a48 } .cat.C { background:#0b5ed0 } .cat.D { background:#e9a21a } .cat.\- { background:#6c6e68 }
+.event-create summary { cursor:pointer; font-weight:700; margin:6px 0 12px }
+.event-create .check { flex-direction:row; align-items:center; gap:8px }
+.events-strip:empty, .home-event[hidden] { display:none }
+.events-strip, .home-event { display:flex; align-items:center; gap:12px; width:100%; margin:0 0 16px; padding:12px 16px; border-radius:16px; border:0; background:linear-gradient(90deg, #d0230f, #e9781a); color:#fff; font:inherit; text-align:left; cursor:pointer }
+.events-strip b, .home-event b { font:700 16px var(--font) } .events-strip span, .home-event span { flex:1 } .events-strip small, .home-event small { display:block; opacity:.85 }
+.event-box { position:absolute; left:16px; top:160px; z-index:1; width:270px; padding:12px 14px; border-radius:16px; background:rgba(17,21,28,.85); color:#fff; box-shadow:0 10px 26px rgba(0,0,0,.35); pointer-events:none }
+.event-box > b { display:block; font:700 15px var(--font); margin-bottom:4px }
+.event-box .countdown { font:700 44px var(--font); font-variant-numeric:tabular-nums; text-align:center; letter-spacing:2px }
+.event-box .row { display:grid; grid-template-columns:22px 1fr auto auto; gap:6px; align-items:center; font-size:13px; padding:2px 0 }
+.event-box .row.me { color:#f2cd37; font-weight:700 }
+.event-box .big { font:700 20px var(--font) }
+.event-box .bar { height:6px; border-radius:3px; background:rgba(255,255,255,.2); margin:6px 0 } .event-box .bar i { display:block; height:100%; border-radius:3px; background:#f2cd37 }
 .club-forms { display:grid; grid-template-columns:1fr 1fr; gap:16px }
 .club-forms form { display:grid; gap:10px; align-content:start; padding:16px; border-radius:14px; background:var(--glass-hi2) }
 .club-forms h2, .club-head h2 { margin:0 }
@@ -402,14 +453,14 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 .menu-actions .btn { text-align:center; padding:12px 15px }
 
 @media (max-width:1000px) { .dests { grid-template-columns:repeat(2, 1fr) } }
-@media (max-width:900px) { #home { justify-content:center } }
+@media (max-width:900px) { #home, #profiles, #profileNew { justify-content:center } }
 @media (max-width:700px) {
   .map.round { width:170px; height:170px }
   .pick-body { grid-template-columns:1fr } #pickMap { height:38vh } .pick { padding:20px }
   .tiles { grid-template-columns:1fr }
   .devices { grid-template-columns:1fr } .seg-banner { top:150px; min-width:0 }
   .tiles .tile.me, .tiles .tile.zombie { grid-column:auto }
-  .club-forms, .plan-cards { grid-template-columns:1fr } .plan-cal { font-size:10px } .plan-cal .day { padding:3px }
+  .club-forms, .plan-cards { grid-template-columns:1fr } .event-card { grid-template-columns:auto 1fr } .event-card .acts { grid-column:1 / -1; justify-content:flex-start } .event-box { top:auto; bottom:120px; width:auto; right:16px } .plan-cal { font-size:10px } .plan-cal .day { padding:3px }
   .kpis { grid-template-columns:repeat(3, 1fr) } .hist-top, .hist-body { grid-template-columns:1fr } .hist { padding:20px } .hist-list { max-height:none }
   .tiles .tile.ride { grid-row:auto; min-height:150px }
   .tiles .tile.ride b { font-size:30px }
@@ -424,7 +475,8 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   #ride { margin:0 8px 16px }
   .stats { gap:8px; padding:10px 12px }
   header { padding:12px 16px } .logo { font-size:18px }
-  #profiles, #home, #profileEdit, #rideMenu, #free, #training, #courses { padding:0 10px 10px }
+  #profiles, #profileNew, #home, #profileEdit, #rideMenu, #free, #training, #courses { padding:0 10px 10px }
+  #profiles .panel, #profileNew .panel { padding:20px } .who-grid { grid-template-columns:1fr 1fr }
   #home .panel, #rideMenu .panel { padding:20px }
   #garage { flex-direction:column; justify-content:flex-end; padding:0 }
   .garage-nav { flex-direction:row; align-self:stretch; margin:0; padding:8px 16px; border-radius:0 }
@@ -454,15 +506,48 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   </main>
   <main id="profiles">
     <div class="block panel">
-      <h1>Qui roule ?</h1>
-      <div id="list" class="list"></div>
-      <p id="empty" class="muted">Aucun profil. Crée le tien pour monter en selle.</p>
-      <form id="new" class="new">
-        <label class="full">Nom<input name="name" maxlength="24" required autocomplete="off"></label>
-        <label>Poids (kg)<input name="weight" type="number" min="30" max="200" step="0.1" value="75" required></label>
-        <label>FTP (W)<input name="ftp" type="number" min="50" max="600" value="200" required></label>
-        <label class="full">Nationalité (optionnel)<select name="country" class="countries"></select></label>
-        <button class="btn primary full">Créer le profil</button>
+      <div id="whoPick">
+        <p class="kicker">Le Mollet</p>
+        <h1>Qui roule ?</h1>
+        <div id="list" class="who-grid"></div>
+      </div>
+      <div id="empty" class="who-welcome" hidden>
+        <p class="kicker">Bienvenue</p>
+        <h1>En selle !</h1>
+        <p>Un profil, c'est ton cycliste Lego, ton vélo, ta FTP et tes sorties. Tout reste sur ce PC, sans compte.</p>
+        <ul class="who-perks"><li>🚴 Cols, île Lego, Paris, Longchamp</li><li>📈 Séances et plans sur ta FTP</li><li>🏁 Sorties de groupe et courses</li></ul>
+        <button class="btn primary big" id="welcomeNew">Créer mon cycliste</button>
+      </div>
+    </div>
+  </main>
+
+  <main id="profileNew" hidden>
+    <div class="block panel">
+      <div class="ride-head">
+        <div><p class="kicker">Nouveau cycliste</p><h1>Fais connaissance</h1></div>
+        <button class="btn" id="newBack">‹ Profils</button>
+      </div>
+      <form id="new" class="new-steps">
+        <fieldset><legend><b>1</b> Qui es-tu ?</legend>
+          <div class="new">
+            <label>Nom<input name="name" maxlength="24" required autocomplete="off" placeholder="Ton prénom ou ton pseudo"></label>
+            <label>Nationalité (optionnel)<select name="country" class="countries"></select></label>
+          </div>
+        </fieldset>
+        <fieldset><legend><b>2</b> Ton moteur</legend>
+          <div class="new">
+            <label>Poids (kg)<input name="weight" type="number" min="30" max="200" step="0.1" value="75" required></label>
+            <label>FTP (W)<input name="ftp" type="number" min="50" max="600" value="200" required></label>
+          </div>
+          <p class="muted small">La FTP, c'est la puissance que tu tiens une heure. Tu ne la connais pas ? Choisis ton niveau, tu la mesureras plus tard avec le test FTP.</p>
+          <div class="seg levels" id="newLevels"></div>
+          <p class="new-wkg" id="newWkg"></p>
+        </fieldset>
+        <fieldset><legend><b>3</b> Tes couleurs</legend>
+          <div class="new-colors" id="newColors" role="radiogroup" aria-label="Couleur du maillot et du vélo"></div>
+          <p class="muted small">Maillot et vélo assortis. Tout le reste se règle au garage.</p>
+        </fieldset>
+        <div class="form-actions"><button class="btn primary big">Créer et monter en selle</button></div>
       </form>
     </div>
   </main>
@@ -488,6 +573,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     <div class="block panel">
       <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1><span id="homeHello"></span><span id="homeRole"></span></h1><div class="chips" id="homeStats"></div><div id="homeLevel"></div></div></div>
       <div class="dev-status"><span id="homeDevices"></span><button class="btn" id="goDevices">Équipements</button></div>
+      <button class="home-event" id="homeEvent" hidden></button>
       <div class="tiles">
         <button class="tile ride" id="goRide">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M0 11h12v1H0zM1 10h10v1H1zM2 9h3V8h1V6h1v1h1v1h1v1h1v1H2zM5 5h2v1H5zM6 4h1v1H6z"/></svg>
@@ -571,6 +657,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <div><p class="kicker">Rouler</p><h1>Où on va aujourd'hui ?</h1></div>
         <button class="btn" id="rideMenuBack">‹ Accueil</button>
       </div>
+      <div class="events-strip" id="eventsStrip"></div>
       <div class="dests">
         <button class="dest" id="goCircuits">
           <canvas class="thumb" id="thumbCircuits" aria-hidden="true"></canvas>
@@ -670,6 +757,29 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     </div>
   </main>
 
+  <main id="eventsScreen" hidden>
+    <div class="block panel">
+      <div class="ride-head">
+        <div><p class="kicker">Rouler ensemble</p><h1>Événements</h1></div>
+        <button class="btn" id="eventsBack">‹ Rouler</button>
+      </div>
+      <p class="muted">Sorties de groupe derrière un meneur, courses par catégorie. Le sas ouvre 10 min avant le départ : tout le monde part en même temps.</p>
+      <div id="eventList" class="event-list"></div>
+      <details class="event-create" id="eventCreate" hidden>
+        <summary>Programmer un événement</summary>
+        <form id="eventForm" class="new">
+          <label>Type<select name="kind"><option value="group">Sortie de groupe</option><option value="race">Course</option></select></label>
+          <label>Nom<input name="title" maxlength="40" placeholder="Sortie du jeudi"></label>
+          <label>Parcours<select name="track" id="eventTrack"></select></label>
+          <label>Départ<input name="when" type="datetime-local" required></label>
+          <label data-for="race">Tours<input name="laps" type="number" min="1" max="50" value="3"></label>
+          <label data-for="group">Allure du meneur (W/kg)<input name="pace" type="number" min="1" max="5" step="0.1" value="2.5"></label>
+          <label class="full check" id="eventClubRow" hidden><input name="club" type="checkbox"> <span id="eventClubLabel">Sortie de club</span></label>
+          <div class="form-actions"><button class="btn primary">Programmer</button><span class="club-error" id="eventError" role="alert"></span></div>
+        </form>
+      </details>
+    </div>
+  </main>
   <main id="clubScreen" hidden>
     <div class="block panel">
       <div class="ride-head">
@@ -709,6 +819,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     <div id="mirror" class="hud" data-w="mirror" hidden aria-hidden="true"><small>Rétro</small></div>
     <small class="attrib" id="attrib"></small>
     <div class="seg-banner" id="segBanner" hidden aria-live="polite"></div>
+    <div class="event-box" id="eventBox" hidden aria-live="polite"></div>
     <div class="seg-toast" id="segToast" hidden role="status"></div>
     <div class="ride-toast" id="rideToast" hidden role="status"></div>
     <div class="block panel hud-edit" id="hudEdit" hidden role="dialog" aria-labelledby="hudEditTitle">
@@ -1250,10 +1361,11 @@ function resize() {
   camera.zoom = Math.min(1, camera.aspect * 1.3) * ($('#ride').hidden || w3.group ? 1 : 0.6); // portrait / ride panels: zoom out so the bike fits
   const [side, nav] = $('#garage').hidden ? [] : ['.side', '.garage-nav'].map(s => $(s).getBoundingClientRect());
   const narrow = W <= 700;
+  const beside = ['#home', '#profiles', '#profileNew'].find(id => !$(id).hidden);
   // Center the bike between the left menu and the options panel (stacked at the bottom on narrow screens).
   if (side && narrow) camera.zoom *= 0.6; // only the strip above the bottom sheet is left for the bike
   if (side) camera.setViewOffset(W, H, narrow ? 0 : (side.width - nav.width) / 2, narrow ? (side.height + nav.height) / 2 : 0, W, H);
-  else if (!$('#home').hidden && !narrow && W > 900) camera.setViewOffset(W, H, -$('#home .panel').getBoundingClientRect().right / 2, 0, W, H); // home: the rider beside the menu
+  else if (beside && !narrow && W > 900) camera.setViewOffset(W, H, -$(`${beside} .panel`).getBoundingClientRect().right / 2, 0, W, H); // the rider beside the menu
   else camera.clearViewOffset(); // the ride HUD floats over the 3D: nothing to center around
   placeHud();
   camera.updateProjectionMatrix();
@@ -1291,7 +1403,7 @@ function h(tag, props = {}, ...kids) {
 }
 
 // One screen at a time. Leaving the ride stops its stream, sound and 3D world.
-const SCREENS = ['#clubScreen', '#devicesScreen', '#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
+const SCREENS = ['#profileNew', '#eventsScreen', '#clubScreen', '#devicesScreen', '#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
 function show(id) {
   if (id !== '#ride') {
     $('#ride').classList.remove('editing', 'bare');
@@ -1356,6 +1468,7 @@ function showProfiles() {
   show('#profiles');
   draw(profiles.at(-1));
   renderList();
+  resize();
 }
 
 function showHome(p = current) {
@@ -1379,34 +1492,77 @@ function showHome(p = current) {
   const rides = p.history?.length ?? 0;
   $('#goHistorySub').textContent = rides ? `${rides} sortie${rides > 1 ? 's' : ''}, tes records` : 'Ton historique et tes records';
   refreshClub();
+  refreshEvents();
   $('#homeMode').textContent = !ride.list ? '' : ride.list.trainer
     ? `Home trainer connecté : ${ride.list.trainer}`
     : 'Mode démo : pas de home trainer, tu règles les watts avec un curseur.';
 }
 
+// Who rides: a card per profile (hover shows that rider in 3D), and one to add a rider. No profile yet: a welcome.
+const ago = iso => { const d = Math.floor((Date.now() - Date.parse(iso)) / 864e5); return d <= 0 ? 'aujourd\'hui' : d === 1 ? 'hier' : d < 30 ? `il y a ${d} j` : new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }) };
 function renderList() {
   $('#empty').hidden = profiles.length > 0;
-  $('#list').replaceChildren(...profiles.map(p => h('div', {
-      class:'card block', role:'button', tabindex:0,
-      onclick: () => showDevices(p),
-      onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showDevices(p) } },
-    },
-    h('span', { class:'avatar', style:`background:${p.bike.frame}` }, p.name[0].toUpperCase()),
-    h('div', { class:'meta' },
-      h('strong', {}, `${p.name}${p.country ? ` ${flag(p.country)}` : ''}`),
-      h('small', {}, `${p.weightKg} kg · ${p.ftp} W · ${(p.ftp / p.weightKg).toFixed(1)} W/kg`)),
-    h('button', {
-      class:'del', title:'Supprimer', 'aria-label':`Supprimer ${p.name}`,
-      onclick: e => {
-        e.stopPropagation();
-        if (!confirm(`Supprimer le profil ${p.name} ?`)) return;
-        profiles = profiles.filter(q => q !== p);
-        persist();
-        showProfiles();
+  $('#whoPick').hidden = !profiles.length;
+  const recent = [...profiles].sort((a, b) => (b.history?.[0]?.date ?? b.createdAt).localeCompare(a.history?.[0]?.date ?? a.createdAt)); // the last one out first
+  $('#list').replaceChildren(...recent.map(p => {
+    const wkg = p.ftp / p.weightKg, km = (p.history ?? []).reduce((a, r) => a + r.distance, 0) / 1000, last = p.history?.[0];
+    return h('div', {
+        class:'who-card', role:'button', tabindex:0, style:`--c:${p.bike.frame}`, 'aria-label':`Rouler avec ${p.name}`,
+        onclick: () => showDevices(p),
+        onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showDevices(p) } },
+        onmouseenter: () => draw(p), onfocus: () => draw(p),
       },
-    }, '×'),
-  )));
+      h('span', { class:'avatar' }, p.name[0].toUpperCase()),
+      h('strong', {}, `${p.club ? `[${p.club.tag}] ` : ''}${p.name}${p.country ? ` ${flag(p.country)}` : ''}`),
+      h('span', { class:'who-stats' }, h('span', { class:'chip' }, h('b', {}, `Niv. ${levelOf(p.xp ?? 0).level}`)), h('span', { class:'chip' }, `${(Math.floor(wkg * 10) / 10).toFixed(1)} W/kg`), h('span', { class:`cat ${CAT_OF(wkg)}` }, CAT_OF(wkg))),
+      h('small', {}, last ? `${Math.round(km)} km · dernière sortie ${ago(last.date)}` : 'Pas encore roulé'),
+      h('button', {
+        class:'del', title:'Supprimer', 'aria-label':`Supprimer ${p.name}`,
+        onclick: e => {
+          e.stopPropagation();
+          if (!confirm(`Supprimer le profil ${p.name} ? Son historique et ses réglages partent avec.`)) return;
+          profiles = profiles.filter(q => q !== p);
+          persist();
+          showProfiles();
+        },
+      }, '×'));
+  }), h('button', { class:'who-card who-new', onclick:showNewProfile, onmouseenter: () => draw(newDraft()) }, h('b', {}, '+'), h('span', {}, 'Nouveau cycliste')));
 }
+
+// A new rider, on its own screen: who, engine (FTP from a level when unknown), colors; the 3D rider follows.
+const LEVELS = [['Je débute', 2.0], ['Je roule souvent', 2.8], ['Sportif', 3.5], ['Compétiteur', 4.2]];
+let draftColor = null;
+const newDraft = () => {
+  const f = $('#new'), color = draftColor ?? Object.values(PALETTE)[profiles.length % Object.keys(PALETTE).length];
+  return { name:f.name.value || '?', weightKg:+f.weight.value || 75, ftp:+f.ftp.value || 200, bike:{ ...DEFAULT_BIKE, frame:color }, rider:{ ...DEFAULT_RIDER, jersey:color } };
+};
+function showNewProfile() {
+  show('#profileNew');
+  $('#new').reset();
+  draftColor = Object.values(PALETTE)[profiles.length % Object.keys(PALETTE).length];
+  renderNewProfile();
+  resize();
+  $('#new').name.focus();
+}
+function renderNewProfile() {
+  const f = $('#new'), w = +f.weight.value, ftp = +f.ftp.value, wkg = w ? ftp / w : 0;
+  $('#newLevels').replaceChildren(...LEVELS.map(([label, k]) => h('button', { type:'button', class:Math.abs(wkg - k) < 0.05 ? 'on' : '',
+    onclick: () => { f.ftp.value = Math.ceil((+f.weight.value || 75) * k / 5) * 5; renderNewProfile() } }, label)));
+  $('#newWkg').replaceChildren(`${(Math.floor(wkg * 10) / 10).toFixed(1)} W/kg · catégorie `, h('span', { class:`cat ${CAT_OF(wkg)}` }, CAT_OF(wkg)), ` · tu monteras l'Alpe d'Huez en ~${Math.round(alpeMinutes(ftp, w))} min`);
+  $('#newColors').replaceChildren(...Object.entries(PALETTE).map(([name, hex]) => h('button', { type:'button', role:'radio', 'aria-checked':hex === draftColor, 'aria-label':name, title:name, style:`--c:${hex}`,
+    onclick: () => { draftColor = hex; renderNewProfile() } })));
+  draw(newDraft());
+}
+// Rough Alpe d'Huez time at 90 % of FTP: 13.8 km, 1,100 m up at ~8 %, the bike adds 8 kg.
+function alpeMinutes(ftp, kg) {
+  const m = kg + 8, p = ftp * 0.9;
+  let v = 3;
+  for (let i = 0; i < 50; i++) v = p / (m * 9.81 * (0.08 + 0.004) + 0.5 * 1.1 * 0.32 * v * v); // steady speed: power = resistance x speed
+  return 13800 / v / 60;
+}
+for (const n of ['weight', 'ftp', 'name']) $('#new')[n].addEventListener('input', renderNewProfile);
+$('#newBack').addEventListener('click', showProfiles);
+$('#welcomeNew').addEventListener('click', showNewProfile);
 
 $('#new').addEventListener('submit', e => {
   e.preventDefault();
@@ -1419,8 +1575,8 @@ $('#new').addEventListener('submit', e => {
     createdAt: new Date().toISOString(),
     name, weightKg: +f.get('weight'), ftp: +f.get('ftp'),
     ...(COUNTRY_CODES.includes(f.get('country')) && { country: f.get('country') }),
-    bike: { ...DEFAULT_BIKE, frame: colors[profiles.length % colors.length] },
-    rider: { ...DEFAULT_RIDER, jersey: colors[profiles.length % colors.length] },
+    bike: { ...DEFAULT_BIKE, frame: draftColor ?? colors[profiles.length % colors.length] },
+    rider: { ...DEFAULT_RIDER, jersey: draftColor ?? colors[profiles.length % colors.length] },
   };
   profiles.push(p);
   persist();
@@ -1510,6 +1666,7 @@ const MAGNET_THEMES = [
 
 function showRideMenu() {
   show('#rideMenu');
+  refreshEvents();
   const n = ride.list?.courses.length ?? 0;
   $('#goCircuitsSub').textContent = `${n} col${n > 1 ? 's' : ''} mythique${n > 1 ? 's' : ''}, en vrai relief`;
   $('#modeHint').textContent = !ride.list ? '' : ride.list.trainer
@@ -1793,8 +1950,10 @@ async function openZombie() {
 }
 
 // kind: 'course' (climb or loop), 'zombie' (chased on a loop) or 'city' (open city, the route grows as you ride).
-async function openRide(id, hasTerrain, kind = 'course', start = null) {
+async function openRide(id, hasTerrain, kind = 'course', start = null, event = null) {
   ride.start = start; // open world: index of the picked start place
+  [ride.event, ride.lastEvent, ride.eventFinish] = [event, null, null]; // an event's id: pen, start, leader or ranking
+  ride.events?.close(); // one ride at a time
   ride.rideOns = 0;
   [ride.segCount, ride.rideOnsGiven] = [0, 0];
   $('#emotes').hidden = false;
@@ -1832,7 +1991,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
   // ponytail: 8 kg bike until the garage has weights
   const me = `&pid=${current.id}&name=${encodeURIComponent(clubName())}&color=${encodeURIComponent(current.bike.frame)}&frame=${current.bike.frameType ?? 'road'}&country=${current.country ?? ''}`;
   const game = zombie ? `&mode=zombie&ftp=${current.ftp}` : '';
-  ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}${me}${game}${start != null ? `&start=${start}` : ''}`);
+  ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}${me}${game}${start != null ? `&start=${start}` : ''}${event ? `&event=${event}` : ''}`);
   if (hasTerrain) {
     $('#attrib').textContent = 'Chargement du terrain…';
     const buf = await (await fetch(`/terrain?id=${encodeURIComponent(id)}`)).arrayBuffer();
@@ -1841,7 +2000,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null) {
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -5024,6 +5183,120 @@ function renderPlan() {
     h('div', { class:'plan-cal' }, ...days));
 }
 
+// ---------- events: group rides and races (src/event.rs), signed up by profile ----------
+const evs = { list:[], now:0, at:0, worlds:[] };
+const evApi = (path, args = {}) => fetch(`/event/${path}?${new URLSearchParams({ pid:current.id, me:current.name, ...args })}`)
+  .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.json() });
+const evNow = () => evs.now + (Date.now() - evs.at) / 1000; // the server's clock
+const myWkg = () => (current.ftp / current.weightKg).toFixed(2);
+const PEN_S = 600;
+const evPhase = e => { const t = e.start - evNow(); return t > PEN_S ? 'upcoming' : t > 0 ? 'pen' : 'live' };
+const evTrack = e => [...evs.worlds, ...(ride.list?.courses ?? [])].find(c => c.id === e.track);
+const EV_KIND = { group:['🚴', 'Sortie de groupe', '#2d8a48'], race:['🏁', 'Course', '#d0230f'] };
+const CAT_OF = w => w >= 4 ? 'A' : w >= 3.2 ? 'B' : w >= 2.5 ? 'C' : 'D';
+function keepEvents(r) { Object.assign(evs, { list:r.events, now:r.now, at:Date.now() }); return evs.list }
+const loadEvents = () => evApi('list').then(keepEvents);
+const whenText = e => { const t = e.start - evNow(); return t <= 0 ? 'en cours' : t < 3600 ? `dans ${Math.ceil(t / 60)} min` : new Date(e.start * 1000).toLocaleString('fr-FR', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) };
+const evLine = e => { const tr = evTrack(e); return `${tr?.name ?? e.track}${e.kind === 'race' ? ` · ${tr?.looped ? `${e.laps} tour${e.laps > 1 ? 's' : ''} · ${(tr.length * e.laps / 1000).toFixed(1)} km` : 'jusqu\'au sommet'}` : ` · meneur à ${e.pace.toFixed(1).replace('.', ',')} W/kg`}${e.club ? ` · club [${e.club}]` : ''}` };
+// Home and ride menu: the next event worth showing (live, in the pen, or mine, or within a day).
+async function refreshEvents() {
+  try { await loadEvents() } catch { return }
+  if (!evs.worlds.length) evs.worlds = await fetch('/worlds').then(r => r.json()).catch(() => []); // loops are named there
+  const next = evs.list.find(e => evPhase(e) !== 'upcoming' || e.entrants.some(x => x.pid === current.id) || e.start - evNow() < 86400);
+  for (const el of [$('#homeEvent'), $('#eventsStrip')]) {
+    el.hidden = !next && el.id === 'homeEvent';
+    if (!next) { el.replaceChildren(...(el.id === 'eventsStrip' && evs.list.length ? [h('span', {}, h('b', {}, `${evs.list.length} événement${evs.list.length > 1 ? 's' : ''} à venir`)), h('small', {}, 'Voir ›')] : [])); el.onclick = showEvents; continue }
+    const [icon, kind] = EV_KIND[next.kind];
+    el.replaceChildren(h('span', {}, h('b', {}, `${icon} ${kind} · ${next.name}`), h('small', {}, `${whenText(next)} · ${evLine(next)} · ${next.entrants.length} inscrit${next.entrants.length > 1 ? 's' : ''}`)), h('small', {}, evPhase(next) === 'upcoming' ? 'Voir ›' : 'Rejoindre ›'));
+    el.onclick = () => evPhase(next) === 'upcoming' ? showEvents() : enterEvent(next);
+  }
+}
+async function showEvents() {
+  show('#eventsScreen');
+  evs.worlds = await fetch('/worlds').then(r => r.json()).catch(() => []);
+  try { await loadEvents() } catch {}
+  renderEvents();
+  // Organizers schedule; a club's founder schedules its club rides (the server checks both).
+  const club = current.club;
+  $('#eventCreate').hidden = !(can('manage_events') || club);
+  $('#eventClubRow').hidden = !club;
+  if (club) $('#eventClubLabel').textContent = `Sortie du club [${club.tag}] ${club.name}`;
+  $('#eventTrack').replaceChildren(...[...evs.worlds, ...(ride.list?.courses ?? [])].map(c => h('option', { value:c.id }, `${c.name} · ${(c.length / 1000).toFixed(1)} km${c.looped ? ' (boucle)' : ''}`)));
+  const f = $('#eventForm'), d = new Date(Date.now() + 3600e3); d.setMinutes(0, 0, 0);
+  if (!f.when.value) f.when.value = `${localDay(d)}T${String(d.getHours()).padStart(2, '0')}:00`;
+  syncEventForm();
+}
+function syncEventForm() {
+  const f = $('#eventForm');
+  for (const el of f.querySelectorAll('[data-for]')) el.hidden = el.dataset.for !== f.kind.value;
+}
+$('#eventForm').kind.addEventListener('change', syncEventForm);
+$('#eventForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target, start = Math.floor(new Date(f.when.value).getTime() / 1000);
+  try {
+    keepEvents(await evApi('create', { kind:f.kind.value, name:f.title.value, track:f.track.value, start, laps:f.laps.value, pace:f.pace.value, ...(f.club.checked && { club:'1' }) }));
+    $('#eventError').textContent = ''; f.title.value = ''; $('#eventCreate').open = false;
+    renderEvents();
+  } catch (x) { $('#eventError').textContent = x.message }
+});
+$('#eventsBack').addEventListener('click', showRideMenu);
+function renderEvents() {
+  const list = evs.list;
+  $('#eventList').replaceChildren(...(list.length ? list.map(e => {
+    const [icon, kind, color] = EV_KIND[e.kind], phase = evPhase(e), mine = e.entrants.some(x => x.pid === current.id);
+    const cats = ['A', 'B', 'C', 'D'].map(c => [c, e.entrants.filter(x => x.cat === c).length]).filter(([, n]) => n);
+    const act = (label, fn, cls = 'btn') => h('button', { class:cls, onclick: async () => { try { await fn() } catch (x) { alert(x.message) } } }, label);
+    const join = () => evApi('join', { id:e.id, wkg:myWkg() }).then(r => { keepEvents(r); renderEvents() });
+    const acts = [];
+    if (phase !== 'upcoming' && !(e.kind === 'race' && phase === 'live' && !mine)) acts.push(act(phase === 'pen' ? 'Entrer dans le sas' : e.kind === 'race' ? 'Rejoindre la course' : 'Rejoindre le groupe', () => enterEvent(e), 'btn primary'));
+    else if (phase === 'upcoming') acts.push(mine ? act('Inscrit ✓ · Annuler', () => evApi('leave', { id:e.id }).then(r => { keepEvents(r); renderEvents() })) : act(`S'inscrire (${CAT_OF(+myWkg())})`, join, 'btn primary'));
+    if (e.by === current.id || can('manage_events')) acts.push(act('Supprimer', () => confirm(`Annuler « ${e.name} » ?`) && evApi('delete', { id:e.id }).then(r => { keepEvents(r); renderEvents() }), 'btn danger'));
+    const d = new Date(e.start * 1000);
+    return h('div', { class:'event-card' },
+      h('span', { class:'when', style:`--c:${color}` }, h('small', {}, d.toLocaleDateString('fr-FR', { weekday:'short', day:'numeric' })), h('b', {}, d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }))),
+      h('span', { class:'what' }, h('b', {}, `${icon} ${e.name}`), h('small', {}, `${kind} · ${evLine(e)}`),
+        h('small', {}, phase === 'live' ? h('span', { class:'live' }, '● En cours') : whenText(e), ` · ${e.entrants.length} inscrit${e.entrants.length > 1 ? 's' : ''}`, h('span', { class:'cats' }, ...cats.map(([c, n]) => h('span', { class:`cat ${c}` }, `${c} ${n}`))), ` · par ${e.by_name || '?'}`)),
+      h('span', { class:'acts' }, ...acts),
+      e.results.length ? h('div', { class:'results' }, 'Arrivée : ', ...e.results.slice(0, 5).map((r, i) => h('span', {}, `${i ? ' · ' : ''}${i + 1}. ${r.name} `, h('span', { class:`cat ${r.cat}` }, r.cat), ` ${hms(r.time)}`))) : '');
+  }) : [h('p', { class:'muted' }, 'Rien de prévu pour l\'instant.' + (can('manage_events') || current.club ? ' Programme le premier ci-dessous !' : ''))]));
+}
+// Into the pen (or the race, or the bunch): sign up if needed, then ride the event's course.
+async function enterEvent(e) {
+  if (!e.entrants.some(x => x.pid === current.id)) { try { keepEvents(await evApi('join', { id:e.id, wkg:myWkg() })) } catch {} }
+  if (!ride.list) return;
+  const tr = evTrack(e) ?? (await fetch('/worlds').then(r => r.json()).catch(() => [])).find(c => c.id === e.track);
+  openRide(e.track, tr?.terrain ?? true, 'course', null, e.id);
+}
+// In the ride: the countdown in the pen, then the bunch or the race.
+function renderEvent() {
+  const e = ride.state?.event, box = $('#eventBox');
+  box.hidden = !e || $('#ride').hidden;
+  if (!e) return;
+  ride.lastEvent = e;
+  const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`, [icon] = EV_KIND[e.kind];
+  const head = h('b', {}, `${icon} ${e.name}`);
+  if (e.phase === 'upcoming' || e.phase === 'pen') {
+    return box.replaceChildren(head, h('div', { class:'countdown' }, mmss(Math.max(0, e.starts_in))),
+      h('small', {}, e.phase === 'pen' ? `Dans le sas · ${e.of} au départ. Tout le monde part ensemble.` : 'Le sas ouvre 10 min avant le départ.'));
+  }
+  if (e.kind === 'group') {
+    const g = e.leader_gap;
+    return box.replaceChildren(head,
+      h('div', { class:'big' }, g == null ? 'Le meneur s\'élance…' : g > 200 ? `Meneur à ${Math.round(g)} m` : g < -25 ? 'Devant le meneur' : g <= 0 ? `En tête · ${e.bunch}` : `Dans le groupe · ${e.bunch}`),
+      h('small', {}, g == null ? '' : g > 200 ? 'Accroche-toi : à moins de 200 m, le groupe t\'aspire.' : g < -25 ? 'Attends le groupe : seul devant, pas d\'aspiration.'
+        : g <= 0 ? 'À la hauteur du meneur : c\'est toi qui fais le vent.' : 'Bien calé : l\'aspiration du groupe te porte.'));
+  }
+  const lap = e.race_m / Math.max(1, e.laps), done = Math.min(e.done_m, e.race_m);
+  if (e.finish && !ride.eventFinish) { ride.eventFinish = e.finish; toast(`🏁 Arrivée ! ${e.finish[0]}e au général, ${e.finish[1]}e de ta catégorie`) }
+  box.replaceChildren(head,
+    e.finish ? h('div', { class:'big' }, `🏁 ${e.finish[0]}e · ${hms(e.finish[2])}`) : h('div', { class:'big' }, `${e.rank}e / ${e.of}`),
+    h('small', {}, e.finish ? `${e.finish[1]}e de ta catégorie. Bravo !` : `${e.laps > 1 ? `Tour ${Math.min(e.laps, Math.floor(done / lap) + 1)}/${e.laps} · ` : ''}encore ${((e.race_m - done) / 1000).toFixed(2)} km`),
+    h('div', { class:'bar' }, h('i', { style:`width:${(done / e.race_m * 100).toFixed(1)}%` })),
+    ...e.board.map((r, i) => h('div', { class:'row' + (r.me ? ' me' : '') }, h('span', {}, `${r.me ? e.rank : i + 1}.`), h('span', {}, r.name), h('span', { class:`cat ${r.cat}` }, r.cat),
+      h('span', {}, r.me ? '' : `${r.gap > 0 ? '+' : ''}${Math.round(r.gap)} m`))));
+}
+
 // ---------- clubs: a name and a tag before members' names, kilometres of the week (kept by the server) ----------
 // The profile keeps its club's tag to show it on the road; the server is the reference (see src/club.rs).
 const clubName = () => current.club ? `[${current.club.tag}] ${current.name}` : current.name;
@@ -5237,7 +5510,9 @@ function summary(s = ride.state ?? {}) {
     date: new Date().toISOString(),
     kind: ride.mode,
     ...(ride.mode === 'workout' && { workoutId:ride.workout.id }),
-    name: ride.mode === 'workout' ? ride.workout.name
+    ...(ride.lastEvent && { event:{ id:ride.lastEvent.id, kind:ride.lastEvent.kind, finish:ride.lastEvent.finish ?? null } }),
+    name: ride.lastEvent ? `${ride.lastEvent.kind === 'race' ? 'Course' : 'Sortie de groupe'} · ${ride.lastEvent.name}${ride.lastEvent.finish ? ` · ${ride.lastEvent.finish[0]}e` : ''}`
+      : ride.mode === 'workout' ? ride.workout.name
       : ride.mode === 'zombie' ? `Zombie Halloween · vague ${z?.wave ?? 1} · ${z?.sprints_won ?? 0} sprint${z?.sprints_won > 1 ? 's' : ''}`
       : ride.course.name,
     ...(ride.mode === 'zombie' && { wave: z?.wave ?? 1, sprintsWon: z?.sprints_won ?? 0, sprints: z?.sprints ?? 0 }),
