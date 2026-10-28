@@ -6,7 +6,7 @@
 |---|---|---|---|
 | Listens on | this PC only | the whole network | `--addr` |
 | Account | none | none (Strava optional) | **required** |
-| Admin | the browser on this PC | the browser on this PC | athletes given `admin` in `roles.json` |
+| Admin | the browser on this PC | the browser on this PC | athletes given `admin` (`le-mollet role`) |
 | Others | | LAN guests ride as Riders | signed-in athletes ride as Riders |
 
 In local mode, profiles, history and progression stay in the browser; the server keeps leaderboards and roles
@@ -56,14 +56,14 @@ everyone out.
 3. In the page: **Profile > Compte > Se connecter avec Strava**.
 
 Scopes asked: `read,activity:write`, so a later version can upload rides to Strava. The tokens are kept in
-`strava-tokens.json` next to `roles.json` (readable by the server's user only, git-ignored).
+the server's database, `le-mollet.db` (readable by the server's user only, git-ignored).
 
 Strava limits a new app to its creator ("single player mode"); raise it to 10 athletes in the app settings, and
 ask Strava for a review beyond that. Fine for a club, a bottleneck for a public server.
 
 ## Giving roles
 
-Roles are given by Strava athlete id (shown in Profile > Compte once signed in), in `roles.json`, at once:
+Roles are given by Strava athlete id (shown in Profile > Compte once signed in), in the server's database, at once (even while it runs):
 
 ```sh
 cargo run -- role set 4242 admin --note Julien    # or organizer, rider
@@ -71,4 +71,5 @@ cargo run -- role list
 cargo run -- role remove 4242
 ```
 
-`serve --roles <file>` picks another file. A missing file means everyone rides and nobody administers.
+`serve --db <file>` and `role --db <file>` pick another database. No roles means everyone rides and nobody
+administers. A `roles.json` from an older version is imported on the first start (kept as `roles.json.bak`).

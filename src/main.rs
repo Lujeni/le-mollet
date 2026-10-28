@@ -54,9 +54,9 @@ enum Cmd {
         /// Directory of course JSON files
         #[arg(long, default_value = "courses")]
         courses: String,
-        /// Roles of Strava athletes (see `le-mollet role`, docs/rbac.md)
-        #[arg(long, default_value = "roles.json")]
-        roles: String,
+        /// The database: riders, events, clubs, leaderboards, roles, sign-ins (one SQLite file, see src/db.rs)
+        #[arg(long, default_value = "le-mollet.db")]
+        db: String,
         /// local: no account, this PC's browser is admin. cloud: Strava sign-in required (docs/rbac.md)
         #[arg(long, value_enum, default_value_t = web::Mode::Local)]
         mode: web::Mode,
@@ -75,8 +75,9 @@ enum Cmd {
         /// A label for the list
         #[arg(long, default_value = "")]
         note: String,
-        #[arg(long, default_value = "roles.json")]
-        roles: String,
+        /// The server's database
+        #[arg(long, default_value = "le-mollet.db")]
+        db: String,
     },
     /// Build an open city (every street inside an OSM boundary) and its terrain, see docs/city.md
     City {
@@ -159,23 +160,24 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::Terrain { course } => tokio::task::spawn_blocking(move || build_terrain(&course)).await?,
-        Cmd::Serve { addr, trainer, difficulty, courses, roles, mode, lan } => {
+        Cmd::Serve { addr, trainer, difficulty, courses, db, mode, lan } => {
             let addr = if lan { format!("0.0.0.0:{}", addr.rsplit(':').next().unwrap_or("8080")) } else { addr };
-            serve(&addr, trainer, difficulty, &courses, &roles, mode).await
+            serve(&addr, trainer, difficulty, &courses, &db, mode).await
         }
-        Cmd::Role { action, athlete, role, note, roles } => {
+        Cmd::Role { action, athlete, role, note, db } => {
             use le_mollet::auth::{Grant, Role, Roles};
-            let mut r = Roles::load(&roles)?;
+            let db = le_mollet::db::Db::open(&db, &[db_dir(&db)])?;
+            let mut r = Roles::load(&db)?;
             match (action.as_str(), athlete, role) {
                 ("set", Some(id), Some(role)) => {
                     let role = Role::parse(&role).context("role: admin, organizer or rider")?;
                     r.grants.insert(id, Grant { role, note });
-                    r.save(&roles)?;
+                    r.save(&db)?;
                     println!("Strava athlete {id} is now {role:?} on this server (effective at once).");
                 }
                 ("remove", Some(id), _) => {
                     anyhow::ensure!(r.grants.remove(&id).is_some(), "athlete {id} has no role");
-                    r.save(&roles)?;
+                    r.save(&db)?;
                     println!("Strava athlete {id} is a rider again.");
                 }
                 ("list", _, _) => r.grants.iter().for_each(|(id, g)| println!("{id:<12} {:<10} {}", format!("{:?}", g.role), g.note)),
@@ -279,7 +281,12 @@ async fn trainer_console(filter: Option<String>) -> anyhow::Result<()> {
     trainer.disconnect().await
 }
 
-async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &str, roles: &str, mode: web::Mode) -> anyhow::Result<()> {
+/// Where the database sits: older JSON files (roles.json, strava-tokens.json) are looked for there too.
+fn db_dir(db: &str) -> &str {
+    std::path::Path::new(db).parent().and_then(|p| p.to_str()).filter(|p| !p.is_empty()).unwrap_or(".")
+}
+
+async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &str, db: &str, mode: web::Mode) -> anyhow::Result<()> {
     let trainer = match filter {
         Some(f) => {
             eprintln!("scanning...");
@@ -289,7 +296,8 @@ async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &st
         }
         None => None,
     };
-    let app = Arc::new(web::App::new(courses, trainer, difficulty, roles, mode)?);
+    let db = le_mollet::db::Db::open(db, &[courses, db_dir(db)])?;
+    let app = Arc::new(web::App::new(courses, trainer, difficulty, db, mode)?);
     if mode == web::Mode::Local && addr.starts_with("0.0.0.0:") {
         // The address other PCs on the network use; connecting a UDP socket sends nothing.
         let ip = std::net::UdpSocket::bind("0.0.0.0:0").and_then(|u| u.connect("192.0.2.1:9").and(u.local_addr()));

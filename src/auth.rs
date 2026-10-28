@@ -1,8 +1,8 @@
 //! Role-based access control. Riding needs no account: anyone not signed in is a `Rider`. Signing in (with
-//! Strava, see strava.rs) gives an identity; `roles.json` raises some identities to `Organizer` or `Admin`.
+//! Strava, see strava.rs) gives an identity; roles in the database (`le-mollet role`) raise some identities to `Organizer` or `Admin`.
 //! Endpoints check permissions (`Perm`), never roles. See docs/rbac.md.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -89,17 +89,14 @@ pub struct Grant {
 }
 
 impl Roles {
-    /// A missing file is an empty one: everyone rides, nobody administers.
-    pub fn load(path: &str) -> Result<Self> {
-        match std::fs::read_to_string(path) {
-            Ok(s) => serde_json::from_str(&s).with_context(|| format!("parse {path}")),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(e) => Err(e).with_context(|| format!("read {path}")),
-        }
+    /// None yet: everyone rides, nobody administers.
+    pub fn load(db: &crate::db::Db) -> Result<Self> {
+        let rows: Vec<(String, Grant)> = db.all("roles")?;
+        Ok(Self { grants: rows.into_iter().filter_map(|(id, g)| Some((id.parse().ok()?, g))).collect() })
     }
 
-    pub fn save(&self, path: &str) -> Result<()> {
-        std::fs::write(path, serde_json::to_string_pretty(self)?).with_context(|| format!("write {path}"))
+    pub fn save(&self, db: &crate::db::Db) -> Result<()> {
+        db.replace("roles", self.grants.iter().map(|(id, g)| (id.to_string(), g)))
     }
 
     pub fn role_of(&self, athlete: u64) -> Role {
@@ -123,6 +120,11 @@ mod tests {
     fn roles_by_athlete() {
         let r: Roles = serde_json::from_str(r#"{"grants":{"42":{"role":"admin","note":"Julien"}}}"#).unwrap();
         assert_eq!((r.role_of(42), r.role_of(7)), (Role::Admin, Role::Rider));
-        assert_eq!(Roles::load("/nonexistent/roles.json").unwrap().grants.len(), 0);
+        let db = crate::db::Db::memory();
+        assert_eq!(Roles::load(&db).unwrap().grants.len(), 0);
+        let mut r = Roles::default();
+        r.grants.insert(42, Grant { role: Role::Admin, note: "me".into() });
+        r.save(&db).unwrap();
+        assert_eq!(Roles::load(&db).unwrap().role_of(42), Role::Admin);
     }
 }

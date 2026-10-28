@@ -5620,7 +5620,7 @@ $('#clubBack').addEventListener('click', () => showHome());
 
 // ---------- account and access (RBAC), see docs/rbac.md ----------
 // Riding needs no account. Signing in with Strava (a cookie the server sets) gives an identity, and the
-// server's roles.json may make it organizer or admin. The account belongs to the browser, not to a profile.
+// server's roles (`le-mollet role`) may make it organizer or admin. The account belongs to the browser, not to a profile.
 const auth = { me:{ role:'rider', perms:['ride', 'create_world'], strava:false, mode:'local' } };
 const can = p => auth.me.perms.includes(p);
 const authed = (path, opts = {}) => fetch(path, { credentials:'same-origin', ...opts });

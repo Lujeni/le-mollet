@@ -1,9 +1,10 @@
 //! Clubs: riders gather under a name and a short tag shown before their names, and the server counts each
 //! member's kilometres this week. Members are profiles (their `pid`), so clubs work without accounts, on one
-//! PC or a LAN. One club per profile. Kept in `clubs.json` next to the courses.
+//! PC or a LAN. One club per profile. Kept in the database (src/db.rs).
 //! ponytail: a pid is the only credential, fine at home; in cloud mode tie members to the signed-in account
 
-use anyhow::{Context, Result};
+use crate::db::Db;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -39,13 +40,12 @@ pub fn week(unix_secs: u64) -> u64 {
 }
 
 impl Clubs {
-    /// A missing or broken file is an empty one: clubs are a nicety, never a reason not to ride.
-    pub fn load(path: &str) -> Self {
-        std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    pub fn load(db: &Db) -> Result<Self> {
+        Ok(Self { clubs: db.all("clubs")?.into_iter().map(|(_, c)| c).collect() })
     }
 
-    pub fn save(&self, path: &str) -> Result<()> {
-        std::fs::write(path, serde_json::to_string(self)?).with_context(|| format!("write {path}"))
+    pub fn save(&self, db: &Db) -> Result<()> {
+        db.replace("clubs", self.clubs.iter().map(|c| (c.code.clone(), c)))
     }
 
     pub fn of(&self, pid: &str) -> Option<&Club> {

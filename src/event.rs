@@ -1,9 +1,10 @@
 //! Scheduled rides: group rides behind a pace leader, and races with categories, a live ranking and results.
 //! Riders sign up, wait in the start pen during the last minutes, and all go at the start time. Kept in
-//! `events.json` next to the courses. Riders are profiles (`pid`), like clubs: no account needed at home.
+//! the database (src/db.rs). Riders are profiles (`pid`), like clubs: no account needed at home.
 //! ponytail: a pid is the only credential, fine at home; in cloud mode tie entrants to the signed-in account
 
-use anyhow::{Context, Result};
+use crate::db::Db;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 /// The pen opens this long before the start, s.
@@ -132,13 +133,14 @@ pub struct Events {
 }
 
 impl Events {
-    /// A missing or broken file is an empty one.
-    pub fn load(path: &str) -> Self {
-        std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    pub fn load(db: &Db) -> Result<Self> {
+        let mut events: Vec<Event> = db.all("events")?.into_iter().map(|(_, e)| e).collect();
+        events.sort_by_key(|e| e.start);
+        Ok(Self { events })
     }
 
-    pub fn save(&self, path: &str) -> Result<()> {
-        std::fs::write(path, serde_json::to_string(self)?).with_context(|| format!("write {path}"))
+    pub fn save(&self, db: &Db) -> Result<()> {
+        db.replace("events", self.events.iter().map(|e| (e.id.clone(), e)))
     }
 
     /// Not over yet, soonest first; older events are dropped.

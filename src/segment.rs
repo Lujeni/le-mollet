@@ -129,12 +129,16 @@ pub struct Boards(pub HashMap<String, Vec<Entry>>);
 const KEEP: usize = 200;
 
 impl Boards {
-    pub fn load(path: &str) -> Self {
-        std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    pub fn load(db: &crate::db::Db) -> anyhow::Result<Self> {
+        Ok(Self(db.all("boards")?.into_iter().collect()))
     }
 
-    pub fn save(&self, path: &str) -> std::io::Result<()> {
-        std::fs::write(path, serde_json::to_string(self)?)
+    /// Store one segment's board (or its removal).
+    pub fn save(&self, db: &crate::db::Db, key: &str) -> anyhow::Result<()> {
+        match self.0.get(key) {
+            Some(list) => db.put("boards", key, list),
+            None => db.delete("boards", key),
+        }
     }
 
     /// Record a time (kept only if it beats the rider's own) and say where this time ranks.

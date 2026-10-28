@@ -157,9 +157,10 @@ Layout:
 | `src/city.rs`, `docs/city.md` | open city: street graph, turns, growing route |
 | `src/auth.rs`, `src/strava.rs`, `docs/rbac.md` | roles and permissions, sign in with Strava |
 | `src/decor.rs` | decor from the real place: aerial photo mosaic and trees, OSM pieces (`le-mollet decor`) |
-| `src/event.rs` | group rides and races: pen, phases, ranks (Bronze to Légende), races every half hour, results (`courses/events.json`) |
-| `src/rider.rs` | fair play: the server's record of each rider (weight, FTP seen, rank) and the checks on each second of power (`courses/riders.json`, docs/security.md) |
-| `src/club.rs` | clubs: members by profile, kilometres of the week (`courses/clubs.json`) |
+| `src/event.rs` | group rides and races: pen, phases, ranks (Bronze to Légende), races every half hour, results |
+| `src/db.rs` | the database: one SQLite file (`le-mollet.db`) of JSON documents, older JSON files imported |
+| `src/rider.rs` | fair play: the server's record of each rider (weight, FTP seen, rank) and the checks on each second of power (docs/security.md) |
+| `src/club.rs` | clubs: members by profile, kilometres of the week |
 | `src/island.rs`, `docs/island.md` | hand-made Lego island: map file to roads, terrain and decor |
 
 ## Troubleshooting

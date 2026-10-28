@@ -18,7 +18,7 @@ guests and in cloud mode.
 - **A ride belongs to whoever opened it.** The first call with a ride's `session` claims it for that browser
   (its address and, signed in, its Strava athlete); any other browser gets `403 not your ride` on `/power`,
   `/pause`, `/turn`, `/seek`, `/powerup`, `/emote` and `/events`.
-- **Weight and rank are the server's** (`src/rider.rs`, `courses/riders.json`). The page registers the profile
+- **Weight and rank are the server's** (`src/rider.rs`, kept in the database). The page registers the profile
   with `/rider?pid=&weight=&ftp=`; rides then use the server's weight, never the query's `mass`, and races
   the server's rank, never a `wkg` from the page.
   - The weight moves at most **2 kg a week** (free on the profile's first day), so nobody turns 40 kg for a race.

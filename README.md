@@ -104,7 +104,8 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
   second of power (flat typed numbers, spikes, watts without pedalling, efforts beyond human). Only rides with a
   trainer and nothing odd reach the leaderboards and race results ([fair play and security](docs/security.md)).
 - **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
-  bike. Self-host it and invite your club on your LAN (`serve --lan`).
+  bike. Self-host it and invite your club on your LAN (`serve --lan`): everything the server keeps is one SQLite
+  file, `le-mollet.db`, nothing to install.
 - **A living world.** The sky follows your clock: golden dawn, day, sunset, then night with stars, lit windows
   and a headlamp (or pick one). The weather turns every 20 minutes, the same for everyone on a road: sun,
   clouds, rain, fog, and snow on the high passes.

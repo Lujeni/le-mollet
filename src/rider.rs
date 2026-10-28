@@ -1,10 +1,11 @@
 //! Fair play: what the server knows of each rider, and how it checks the power a ride reports (docs/security.md).
 //! Watts come from a trainer the browser reads over Bluetooth: nothing proves them. So the server keeps the
 //! rider's weight and rank itself, checks each second of power for what no human or trainer does, and only
-//! lets rides it believes into leaderboards and race results. Kept in `riders.json` next to the courses.
+//! lets rides it believes into leaderboards and race results. Kept in the database (src/db.rs).
 
 use crate::event::category;
-use anyhow::{Context, Result};
+use crate::db::Db;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -72,13 +73,13 @@ impl Rider {
 }
 
 impl Riders {
-    /// A missing or broken file is an empty one.
-    pub fn load(path: &str) -> Self {
-        std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    pub fn load(db: &Db) -> Result<Self> {
+        Ok(Self { riders: db.all("riders")?.into_iter().collect() })
     }
 
-    pub fn save(&self, path: &str) -> Result<()> {
-        std::fs::write(path, serde_json::to_string(self)?).with_context(|| format!("write {path}"))
+    /// Store one rider.
+    pub fn save(&self, db: &Db, pid: &str) -> Result<()> {
+        self.riders.get(pid).map_or(Ok(()), |r| db.put("riders", pid, r))
     }
 
     /// Whoever asks with this profile id may use it: anyone at home, its owner only in cloud mode.

@@ -22,6 +22,7 @@ jpeg-decoder = { version = "0.3", default-features = false }
 png = "0.17"
 ureq = { version = "2", features = ["json"] }
 clap = { version = "4", features = ["derive"] }
+rusqlite = { version = "0.41.0", features = ["bundled"] }
 
 [workspace]
 members = ["client"]

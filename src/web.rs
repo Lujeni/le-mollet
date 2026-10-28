@@ -40,7 +40,7 @@
 //!
 //! Access (docs/rbac.md): in `Local` mode, whoever sits at the server's PC is admin without an account and LAN
 //! guests ride as Riders; in `Cloud` mode, everything but the page and the sign-in needs a Strava sign-in.
-//! Signing in sets an `lm_session` cookie; the athlete's role comes from roles.json. Endpoints check `Perm`s.
+//! Signing in sets an `lm_session` cookie; the athlete's role from the database (`le-mollet role`). Endpoints check `Perm`s.
 //!
 //! Power, per ride: the browser's own trainer (Web Bluetooth, `src=bt`), else the server's trainer (whose grade the
 //! latest ride drives), else the demo slider. Pace partners ride every course and open world around the clock.
@@ -57,6 +57,7 @@ use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
 use le_mollet::strava::{self, Strava};
 use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
+use le_mollet::db::Db;
 use le_mollet::physics;
 use le_mollet::ride::Ride;
 use le_mollet::rider::{self, Check, Flagged, Riders, Trust};
@@ -234,15 +235,13 @@ pub struct App {
     difficulty: f32,
     /// What each ride reports: demo slider watts, or its own trainer and heart rate strap.
     sensors: Mutex<HashMap<u64, Sensors>>,
+    /// Everything kept across restarts (src/db.rs); the structures below are its working copy.
+    db: Db,
     boards: Mutex<Boards>,
-    boards_path: String,
     clubs: Mutex<Clubs>,
-    clubs_path: String,
     events: Mutex<Events>,
-    events_path: String,
     /// Group rides whose pace leader is out on the road.
     beacons: Mutex<HashSet<String>>,
-    roles_path: String,
     mode: Mode,
     /// The server's Strava app, when configured (LE_MOLLET_STRAVA_CLIENT_ID / _SECRET).
     strava: Option<Strava>,
@@ -250,8 +249,6 @@ pub struct App {
     sessions: Mutex<HashMap<String, Session>>,
     /// OAuth states handed out and not used yet, with when: a callback must bring one back (CSRF).
     oauth_states: Mutex<HashMap<String, std::time::Instant>>,
-    /// Strava tokens by athlete, to upload rides on their behalf later.
-    strava_tokens_path: String,
     demo_seek: Mutex<HashMap<u64, f32>>,
     paused: Mutex<HashSet<u64>>,
     /// Open city: turn each session asked for at its next junction.
@@ -263,7 +260,6 @@ pub struct App {
     /// Session allowed to drive the trainer grade: the most recent one.
     driver: AtomicU64,
     riders: Mutex<Riders>,
-    riders_path: String,
     /// Who opened each ride: only they may steer it (power, pause, turns...).
     owners: Mutex<HashMap<u64, Owner>>,
 }
@@ -283,8 +279,8 @@ pub enum Mode {
 
 impl App {
     /// Load every `*.json` course in `dir` (the id is the file stem) and open today's world.
-    pub fn new(dir: &str, trainer: Option<Trainer>, difficulty: f32, roles: &str, mode: Mode) -> anyhow::Result<Self> {
-        Roles::load(roles)?; // a broken roles file stops the server now, not at the first admin call
+    pub fn new(dir: &str, trainer: Option<Trainer>, difficulty: f32, db: Db, mode: Mode) -> anyhow::Result<Self> {
+        Roles::load(&db)?; // broken roles stop the server now, not at the first admin call
         let strava = Strava::from_env()?;
         anyhow::ensure!(mode == Mode::Local || strava.is_some(), "cloud mode needs a Strava app: set LE_MOLLET_STRAVA_CLIENT_ID and _SECRET (docs/rbac.md)");
         let mut paths: Vec<_> = std::fs::read_dir(dir)
@@ -325,28 +321,24 @@ impl App {
             trainer_sample: Mutex::new((0.0, None)),
             difficulty,
             sensors: Mutex::new(HashMap::new()),
-            boards: Mutex::new(Boards::load(&format!("{dir}/leaderboards.json"))),
-            boards_path: format!("{dir}/leaderboards.json"),
-            clubs: Mutex::new(Clubs::load(&format!("{dir}/clubs.json"))),
-            clubs_path: format!("{dir}/clubs.json"),
-            events: Mutex::new(Events::load(&format!("{dir}/events.json"))),
-            events_path: format!("{dir}/events.json"),
+            boards: Mutex::new(Boards::load(&db)?),
+            clubs: Mutex::new(Clubs::load(&db)?),
+            events: Mutex::new(Events::load(&db)?),
             beacons: Mutex::new(HashSet::new()),
-            roles_path: roles.to_owned(),
             mode,
             strava,
-            sessions: Mutex::new(HashMap::new()),
+            // Signed-in browsers stay signed in across a restart.
+            sessions: Mutex::new(db.all::<Session>("sessions")?.into_iter().filter(|(_, s)| s.expires > std::time::SystemTime::now()).collect()),
             oauth_states: Mutex::new(HashMap::new()),
-            strava_tokens_path: std::path::Path::new(roles).with_file_name("strava-tokens.json").to_string_lossy().into_owned(),
             demo_seek: Mutex::new(HashMap::new()),
             paused: Mutex::new(HashSet::new()),
             turns: Mutex::new(HashMap::new()),
             powerup: Mutex::new(HashSet::new()),
             inbox: Mutex::new(HashMap::new()),
             driver: AtomicU64::new(0),
-            riders: Mutex::new(Riders::load(&format!("{dir}/riders.json"))),
-            riders_path: format!("{dir}/riders.json"),
+            riders: Mutex::new(Riders::load(&db)?),
             owners: Mutex::new(HashMap::new()),
+            db,
         })
     }
 
@@ -365,7 +357,7 @@ impl App {
     fn identify(&self, cookie: Option<&str>, peer: Option<std::net::IpAddr>) -> Identity {
         let owner = self.mode == Mode::Local && peer.is_some_and(|ip| ip.is_loopback());
         let mut who = match cookie.and_then(|c| self.sessions.lock().unwrap().get(c).filter(|s| s.expires > std::time::SystemTime::now()).cloned()) {
-            Some(s) => Identity { role: Roles::load(&self.roles_path).map_or(Role::Rider, |r| r.role_of(s.athlete)), name: Some(s.name), athlete: Some(s.athlete) },
+            Some(s) => Identity { role: Roles::load(&self.db).map_or(Role::Rider, |r| r.role_of(s.athlete)), name: Some(s.name), athlete: Some(s.athlete) },
             None => Identity::ANONYMOUS,
         };
         if owner { who.role = Role::Admin }
@@ -379,12 +371,9 @@ impl App {
         states.insert(state, std::time::Instant::now());
     }
 
+    /// Strava tokens by athlete, to upload rides on their behalf later.
     fn save_strava_tokens(&self, athlete: u64, t: strava::Tokens) {
-        let path = &self.strava_tokens_path;
-        let mut all: HashMap<u64, strava::Tokens> = std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
-        all.insert(athlete, t);
-        let res = serde_json::to_string(&all).map_err(std::io::Error::other).and_then(|s| write_private(path, &s));
-        if let Err(e) = res { eprintln!("{path}: {e}") }
+        if let Err(e) = self.db.put("strava_tokens", &athlete.to_string(), &t) { eprintln!("strava tokens: {e}") }
     }
 
     /// Free rides: real loops first, then the generated worlds.
@@ -568,7 +557,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     tokens.scope = param(query, "scope").map(decode).unwrap_or_default();
                     let id = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
                     let name = athlete.name();
-                    app.sessions.lock().unwrap().insert(id.clone(), Session { athlete: athlete.id, name: name.clone(), expires: std::time::SystemTime::now() + SESSION_TTL });
+                    let s = Session { athlete: athlete.id, name: name.clone(), expires: std::time::SystemTime::now() + SESSION_TTL };
+                    if let Err(e) = app.db.put("sessions", &id, &s) { eprintln!("sessions: {e}") }
+                    app.sessions.lock().unwrap().insert(id.clone(), s);
                     app.save_strava_tokens(athlete.id, tokens);
                     eprintln!("signed in: {name} (Strava athlete {})", athlete.id);
                     let secure = if std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("https://")) { "; Secure" } else { "" };
@@ -582,7 +573,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             }
         }
         ("/auth/logout", _) => {
-            if let Some(c) = cookie(&req, SESSION_COOKIE) { app.sessions.lock().unwrap().remove(c); }
+            if let Some(c) = cookie(&req, SESSION_COOKIE) {
+                app.sessions.lock().unwrap().remove(c);
+                if let Err(e) = app.db.delete("sessions", c) { eprintln!("sessions: {e}") }
+            }
             redirect(&mut sock, "/", Some(&format!("{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"))).await
         }
         ("/admin/segments/reset", Some(t)) => {
@@ -590,7 +584,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let done = {
                 let mut boards = app.boards.lock().unwrap();
                 let done = boards.reset(&format!("{}:{name}", t.id));
-                if done && let Err(e) = boards.save(&app.boards_path) { eprintln!("leaderboards: {e}") }
+                if done && let Err(e) = boards.save(&app.db, &format!("{}:{name}", t.id)) { eprintln!("leaderboards: {e}") }
                 done
             };
             if done { eprintln!("{} reset the leaderboard {}:{name}", who.name.as_deref().unwrap_or("?"), t.id) }
@@ -609,7 +603,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 let view = |r: &rider::Rider| json!({ "weight": r.weight, "ftp": r.ftp, "seen_ftp": r.seen_ftp(now), "rank": r.rank(now).to_string(), "wkg": r.wkg(now), "flags": r.flags.len() });
                 match res {
                     Ok(r) => {
-                        if num("weight").is_some() && let Err(e) = riders.save(&app.riders_path) { eprintln!("riders: {e}") }
+                        if num("weight").is_some() && let Err(e) = riders.save(&app.db, pid) { eprintln!("riders: {e}") }
                         ("200 OK", view(&r))
                     }
                     // Refused: what the server keeps, so the page can put it back.
@@ -737,7 +731,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 // Races by level on every half hour, on the short courses in turn (loops, climbs up to 15 km).
                 let short: Vec<_> = app.tracks.read().unwrap().iter().filter(|t| t.city.is_none() && t.relief.is_none() && (t.course.looped || t.course.length() <= 15_000.0))
                     .map(|t| (t.id.clone(), t.course.name.clone(), t.course.length(), t.course.looped)).collect();
-                if events.schedule(now, &short) && let Err(e) = events.save(&app.events_path) { eprintln!("events: {e}") }
+                if events.schedule(now, &short) && let Err(e) = events.save(&app.db) { eprintln!("events: {e}") }
                 let changed = match p {
                     "/event/list" => return Ok(json!({ "now": now, "events": events_for(&events.current(now), pid.as_deref()) })),
                     "/event/create" => {
@@ -782,7 +776,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     }
                     _ => return Err("not found"),
                 };
-                if changed && let Err(e) = events.save(&app.events_path) { eprintln!("events: {e}") }
+                if changed && let Err(e) = events.save(&app.db) { eprintln!("events: {e}") }
                 Ok(json!({ "now": now, "events": events_for(&events.current(now), pid.as_deref()) }))
             })();
             match res {
@@ -809,7 +803,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     "/club/leave" => { clubs.leave(pid); Ok(None) }
                     _ => Err("not found"),
                 };
-                if res.is_ok() && p != "/club" && let Err(e) = clubs.save(&app.clubs_path) { eprintln!("clubs: {e}") }
+                if res.is_ok() && p != "/club" && let Err(e) = clubs.save(&app.db) { eprintln!("clubs: {e}") }
                 res
             };
             match res {
@@ -874,11 +868,11 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 if let Some(f) = &flagged { eprintln!("fair play: {} flagged on {}: {}", f.name, f.track, f.why.join(", ")) }
                 let mut riders = app.riders.lock().unwrap();
                 riders.ride_done(pid.unwrap_or(""), seen.filter(|s| *s > r.ftp_now(now)), flagged, now);
-                if let Err(e) = riders.save(&app.riders_path) { eprintln!("riders: {e}") }
+                if let Err(e) = riders.save(&app.db, pid.unwrap_or("")) { eprintln!("riders: {e}") }
             }
             if let Some(me) = track.as_ref().and_then(|t| t.riders.lock().unwrap().remove(&sid)).filter(|p| !p.pid.is_empty() && ride.ridden >= 100.0) {
                 let mut clubs = app.clubs.lock().unwrap();
-                if clubs.add_km(&me.pid, &me.name, ride.ridden / 1000.0, club::week(unix_now())) && let Err(e) = clubs.save(&app.clubs_path) { eprintln!("clubs: {e}") }
+                if clubs.add_km(&me.pid, &me.name, ride.ridden / 1000.0, club::week(unix_now())) && let Err(e) = clubs.save(&app.db) { eprintln!("clubs: {e}") }
             }
             app.sensors.lock().unwrap().remove(&sid);
             app.paused.lock().unwrap().remove(&sid);
@@ -1233,7 +1227,7 @@ async fn ride_session(
                 if unranked.is_none() {
                     let mut events = app.events.lock().unwrap();
                     finish = events.finish(&e.id, &me.pid, &me.name, time).map(|(o, c)| (o, c, time));
-                    if let Err(err) = events.save(&app.events_path) { eprintln!("events: {err}") }
+                    if let Err(err) = events.save(&app.db) { eprintln!("events: {err}") }
                 }
             }
             // The horde waits for the first pedal stroke, like the ride clock.
@@ -1258,7 +1252,7 @@ async fn ride_session(
             let who = if me.pid.is_empty() { sid.to_string() } else { me.pid };
             let mut boards = app.boards.lock().unwrap();
             let rank = boards.record(&key(w), Entry { who, name: me.name, color: me.color, time, date: unix_now() });
-            if let Err(e) = boards.save(&app.boards_path) { eprintln!("leaderboards: {e}") }
+            if let Err(e) = boards.save(&app.db, &key(w)) { eprintln!("leaderboards: {e}") }
             result = Some(SegResult { name: w.name.clone(), kind: w.kind, time, rank });
         }
         // Workout clock = riding time, so it starts with the first pedal stroke.
@@ -1327,11 +1321,10 @@ async fn ride_session(
 }
 
 /// Sign-in sessions: an HttpOnly cookie naming an entry of `App::sessions`.
-/// ponytail: sessions live in memory, a restart signs everyone out; persist them if that gets annoying
 const SESSION_COOKIE: &str = "lm_session";
 const SESSION_TTL: Duration = Duration::from_secs(30 * 86_400);
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, serde::Deserialize)]
 struct Session {
     athlete: u64,
     name: String,
@@ -1370,14 +1363,6 @@ fn cookie<'a>(req: &'a str, name: &str) -> Option<&'a str> {
         .filter_map(|l| l.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case("cookie")).map(|(_, v)| v))
         .flat_map(|v| v.split(';'))
         .find_map(|kv| kv.trim().split_once('=').filter(|(k, _)| *k == name).map(|(_, v)| v))
-}
-
-/// Tokens on disk, readable by the server's user only.
-fn write_private(path: &str, s: &str) -> std::io::Result<()> {
-    std::fs::write(path, s)?;
-    #[cfg(unix)]
-    std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
-    Ok(())
 }
 
 async fn redirect(sock: &mut TcpStream, to: &str, set_cookie: Option<&str>) -> std::io::Result<()> {

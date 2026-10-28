@@ -2,6 +2,7 @@
 
 pub mod auth;
 pub mod club;
+pub mod db;
 pub mod decor;
 pub mod dem;
 pub mod event;
