@@ -13,6 +13,7 @@ courses/ile-des-briques.city.json
 courses/leaderboards.json
 courses/clubs.json
 courses/events.json
+courses/riders.json
 # roles by Strava athlete, and their Strava tokens: see docs/rbac.md
 roles.json
 strava-tokens.json

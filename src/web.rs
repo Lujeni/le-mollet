@@ -34,6 +34,9 @@
 //!   GET /club?pid=<profile>                    the profile's club, members ranked by km this week (or null)
 //!   GET /club/create?pid=&me=&name=&tag=&color=   found a club;  /club/join?pid=&me=&code=;  /club/leave?pid=
 //!   GET /audio/<name>.mp3                      nature ambience loops (web/audio/CREDITS.md)
+//!   GET /rider?pid=[&weight=<kg>&ftp=<W>]      the profile as the server knows it (weight, FTP seen, rank); with
+//!                                              weight and ftp, register or update it (docs/security.md)
+//!   GET /admin/flags                           rides the fair-play checks flagged (moderate)
 //!
 //! Access (docs/rbac.md): in `Local` mode, whoever sits at the server's PC is admin without an account and LAN
 //! guests ride as Riders; in `Cloud` mode, everything but the page and the sign-in needs a Strava sign-in.
@@ -41,6 +44,11 @@
 //!
 //! Power, per ride: the browser's own trainer (Web Bluetooth, `src=bt`), else the server's trainer (whose grade the
 //! latest ride drives), else the demo slider. Pace partners ride every course and open world around the clock.
+//!
+//! Fair play (docs/security.md): the server simulates every ride and only takes power, cadence and heart rate
+//! from the page. A ride belongs to the browser that opened it; weight and rank come from the server's own
+//! record of the profile; each second of power is checked, and only believed rides reach leaderboards and race
+//! results. Requests from other sites are refused (CSRF), and profile ids are never sent to other riders.
 
 use le_mollet::Trainer;
 use le_mollet::auth::{Identity, Perm, Role, Roles};
@@ -51,6 +59,7 @@ use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
 use le_mollet::physics;
 use le_mollet::ride::Ride;
+use le_mollet::rider::{self, Check, Flagged, Riders, Trust};
 use le_mollet::segment::{self, Boards, Entry, Kind, Rank, Window};
 use le_mollet::workout::{self, Progress, Workout};
 use le_mollet::world::{self, Relief};
@@ -253,7 +262,14 @@ pub struct App {
     inbox: Mutex<HashMap<u64, Vec<Notice>>>,
     /// Session allowed to drive the trainer grade: the most recent one.
     driver: AtomicU64,
+    riders: Mutex<Riders>,
+    riders_path: String,
+    /// Who opened each ride: only they may steer it (power, pause, turns...).
+    owners: Mutex<HashMap<u64, Owner>>,
 }
+
+/// A ride's owner: the browser's address and, signed in, the athlete.
+type Owner = (Option<std::net::IpAddr>, Option<u64>);
 
 /// Where the server runs, which sets who must sign in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, clap::ValueEnum)]
@@ -272,7 +288,7 @@ impl App {
         let strava = Strava::from_env()?;
         anyhow::ensure!(mode == Mode::Local || strava.is_some(), "cloud mode needs a Strava app: set LE_MOLLET_STRAVA_CLIENT_ID and _SECRET (docs/rbac.md)");
         let mut paths: Vec<_> = std::fs::read_dir(dir)
-            .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json") && !p.to_string_lossy().ends_with(".map.json") && !p.ends_with("leaderboards.json") && !p.ends_with("clubs.json") && !p.ends_with("events.json")).collect())
+            .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json") && !p.to_string_lossy().ends_with(".map.json") && !p.ends_with("leaderboards.json") && !p.ends_with("clubs.json") && !p.ends_with("events.json") && !p.ends_with("riders.json")).collect())
             .unwrap_or_default();
         paths.sort();
         let mut tracks = vec![];
@@ -328,6 +344,9 @@ impl App {
             powerup: Mutex::new(HashSet::new()),
             inbox: Mutex::new(HashMap::new()),
             driver: AtomicU64::new(0),
+            riders: Mutex::new(Riders::load(&format!("{dir}/riders.json"))),
+            riders_path: format!("{dir}/riders.json"),
+            owners: Mutex::new(HashMap::new()),
         })
     }
 
@@ -482,9 +501,28 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
     let track = param(query, "id").or(param(query, "course")).and_then(|id| app.track(id));
     let session: Option<u64> = param(query, "session").and_then(|s| s.parse().ok());
-    let who = app.identify(cookie(&req, SESSION_COOKIE), sock.peer_addr().ok().map(|a| a.ip()));
+    let peer = sock.peer_addr().ok().map(|a| a.ip());
+    let who = app.identify(cookie(&req, SESSION_COOKIE), peer);
     // Cloud: only the page and the way to sign in are open to strangers.
     let open = matches!(path, "/" | "/whoami") || path.starts_with("/auth/") || path.starts_with("/audio/");
+    // Another site's page must not drive this one in the visitor's browser (CSRF): every call but a visit is refused
+    // when the browser says it comes from elsewhere.
+    if !open && cross_site(&req) {
+        return reply(&mut sock, "403 Forbidden", "text/plain", b"cross-site request").await;
+    }
+    // A ride is steered only by whoever opened it; the first call claims a fresh session.
+    let owner: Owner = (peer, who.athlete);
+    if matches!(path, "/power" | "/seek" | "/turn" | "/powerup" | "/pause" | "/emote" | "/events")
+        && let Some(sid) = session
+        && *app.owners.lock().unwrap().entry(sid).or_insert(owner) != owner
+    {
+        return reply(&mut sock, "403 Forbidden", "text/plain", b"not your ride").await;
+    }
+    // A profile id in the query: in cloud mode, only its owner may use it.
+    let pid = param(query, "pid").filter(|p| valid_pid(p));
+    if pid.is_some_and(|p| !app.riders.lock().unwrap().may_use(p, who.athlete)) {
+        return reply(&mut sock, "403 Forbidden", "text/plain", b"this profile belongs to another account").await;
+    }
     if app.mode == Mode::Cloud && who.athlete.is_none() && !open {
         return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in with Strava first").await;
     }
@@ -557,6 +595,37 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             };
             if done { eprintln!("{} reset the leaderboard {}:{name}", who.name.as_deref().unwrap_or("?"), t.id) }
             reply(&mut sock, if done { "204 No Content" } else { "404 Not Found" }, "text/plain", b"").await
+        }
+        ("/rider", _) => {
+            let Some(pid) = pid else { return reply(&mut sock, "400 Bad Request", "text/plain", b"need pid").await };
+            let num = |k| param(query, k).and_then(|v| v.parse::<f32>().ok());
+            let now = unix_now();
+            let (status, body) = {
+                let mut riders = app.riders.lock().unwrap();
+                let res = match (num("weight"), num("ftp")) {
+                    (Some(w), Some(f)) => riders.register(pid, who.athlete, w, f, now).cloned(),
+                    _ => riders.riders.get(pid).cloned().ok_or("no such rider"),
+                };
+                let view = |r: &rider::Rider| json!({ "weight": r.weight, "ftp": r.ftp, "seen_ftp": r.seen_ftp(now), "rank": r.rank(now).to_string(), "wkg": r.wkg(now), "flags": r.flags.len() });
+                match res {
+                    Ok(r) => {
+                        if num("weight").is_some() && let Err(e) = riders.save(&app.riders_path) { eprintln!("riders: {e}") }
+                        ("200 OK", view(&r))
+                    }
+                    // Refused: what the server keeps, so the page can put it back.
+                    Err(e) => ("409 Conflict", json!({ "error": e, "rider": riders.riders.get(pid).map(view) })),
+                }
+            };
+            reply(&mut sock, status, "application/json", body.to_string().as_bytes()).await
+        }
+        ("/admin/flags", _) => {
+            let body = {
+                let riders = app.riders.lock().unwrap();
+                let mut all: Vec<_> = riders.riders.values().flat_map(|r| r.flags.iter().cloned()).collect();
+                all.sort_by_key(|f| std::cmp::Reverse(f.at));
+                json!(all).to_string()
+            };
+            reply(&mut sock, "200 OK", "application/json", body.as_bytes()).await
         }
         ("/emote", Some(t)) => {
             let e = param(query, "e").and_then(|e| EMOTES.iter().find(|x| **x == e).copied());
@@ -662,7 +731,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         (p, _) if p.starts_with("/event/") => {
             let text = |k| param(query, k).map(decode).unwrap_or_default().chars().filter(|c| !c.is_control()).take(40).collect::<String>();
             let now = unix_now();
-            let pid = param(query, "pid").filter(|p| valid_pid(p)).map(str::to_owned);
+            let pid = pid.map(str::to_owned);
             let res: Result<serde_json::Value, &str> = (|| {
                 let mut events = app.events.lock().unwrap();
                 // Races by level on every half hour, on the short courses in turn (loops, climbs up to 15 km).
@@ -670,7 +739,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     .map(|t| (t.id.clone(), t.course.name.clone(), t.course.length(), t.course.looped)).collect();
                 if events.schedule(now, &short) && let Err(e) = events.save(&app.events_path) { eprintln!("events: {e}") }
                 let changed = match p {
-                    "/event/list" => return Ok(json!({ "now": now, "events": events.current(now) })),
+                    "/event/list" => return Ok(json!({ "now": now, "events": events_for(&events.current(now), pid.as_deref()) })),
                     "/event/create" => {
                         let pid = pid.clone().ok_or("need pid")?;
                         // A club ride: the founder of the profile's club may schedule it; anything else needs manage_events.
@@ -698,7 +767,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                         true
                     }
                     "/event/join" => {
-                        let wkg = param(query, "wkg").and_then(|w| w.parse::<f32>().ok()).filter(|w| (0.5..=8.0).contains(w)).ok_or("need wkg")?;
+                        // The rank the server knows, never the page's word.
+                        let wkg = app.riders.lock().unwrap().riders.get(pid.as_deref().unwrap_or("")).map(|r| r.wkg(now)).ok_or("unknown rider")?;
                         events.join(param(query, "id").unwrap_or(""), pid.as_deref().ok_or("need pid")?, &text("me"), wkg, now)?;
                         true
                     }
@@ -713,7 +783,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     _ => return Err("not found"),
                 };
                 if changed && let Err(e) = events.save(&app.events_path) { eprintln!("events: {e}") }
-                Ok(json!({ "now": now, "events": events.current(now) }))
+                Ok(json!({ "now": now, "events": events_for(&events.current(now), pid.as_deref()) }))
             })();
             match res {
                 Ok(v) => reply(&mut sock, "200 OK", "application/json", v.to_string().as_bytes()).await,
@@ -721,7 +791,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             }
         }
         (p, _) if p == "/club" || p.starts_with("/club/") => {
-            let Some(pid) = param(query, "pid").filter(|p| valid_pid(p)) else {
+            let Some(pid) = pid else {
                 return reply(&mut sock, "400 Bad Request", "text/plain", b"need pid").await;
             };
             let text = |k| param(query, k).map(decode).unwrap_or_default().chars().filter(|c| !c.is_control()).take(30).collect::<String>();
@@ -749,7 +819,12 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                         for m in &mut c.members { if m.week != wk { m.km = 0.0 } } // last week's count
                         c.members.sort_by(|a, b| b.km.total_cmp(&a.km));
                     }
-                    reply(&mut sock, "200 OK", "application/json", json!(c).to_string().as_bytes()).await
+                    let mut v = json!(c);
+                    for m in v["members"].as_array_mut().into_iter().flatten() { // no profile ids for the others
+                        m["me"] = json!(m["pid"].as_str() == Some(pid));
+                        m.as_object_mut().map(|o| o.remove("pid"));
+                    }
+                    reply(&mut sock, "200 OK", "application/json", v.to_string().as_bytes()).await
                 }
                 Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
             }
@@ -773,7 +848,12 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 return reply(&mut sock, "400 Bad Request", "text/plain", b"need course=<id>, or workout=<id>&ftp=<W>").await;
             }
             let Some(sid) = session else { return reply(&mut sock, "400 Bad Request", "text/plain", b"need session").await };
-            let mass = param(query, "mass").and_then(|m| m.parse::<f32>().ok()).filter(|m| (30.0..=250.0).contains(m));
+            // Weight and FTP from the server's record of the profile, never from the query (docs/security.md).
+            // A workout, alone on a flat road, races nobody: the page's mass does.
+            let known = pid.filter(|_| track.is_some()).and_then(|p| app.riders.lock().unwrap().riders.get(p).cloned());
+            let asked = param(query, "mass").and_then(|m| m.parse::<f32>().ok()).filter(|m| (30.0..=250.0).contains(m));
+            let mass = known.as_ref().map(|r| r.weight + rider::BIKE_KG).or(asked);
+            let mut check = Check::new(known.as_ref().map(|r| r.ftp_now(unix_now())), mass.unwrap_or(83.0) - rider::BIKE_KG);
             sock.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n").await?;
             app.driver.store(sid, Ordering::Relaxed);
             let plan = workout.zip(ftp).filter(|_| track.is_none());
@@ -786,7 +866,16 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let start = param(query, "start").and_then(|s| s.parse::<usize>().ok());
             // Road bonuses on courses and open worlds, not in workouts nor against the zombies.
             let mut ride = Ride { powerups: plan.is_none() && game.is_none() && event.as_ref().is_none_or(|e| e.kind == EventKind::Race), ..Ride::new(mass.unwrap_or(83.0)) };
-            let res = ride_session(&mut sock, &app, track.as_deref(), plan, game, (sid, start, event), &mut ride).await;
+            let res = ride_session(&mut sock, &app, track.as_deref(), plan, game, (sid, start, event), (&mut ride, &mut check)).await;
+            if let (Some(r), Some(t)) = (&known, &track) && ride.ridden >= 100.0 {
+                let now = unix_now();
+                let seen = [check.seen_ftp(), check.race_ftp].into_iter().flatten().reduce(f32::max);
+                let flagged = (check.trust() == Trust::Flagged).then(|| Flagged { at: now, track: t.id.clone(), name: presence(query, sid).name, why: check.why() });
+                if let Some(f) = &flagged { eprintln!("fair play: {} flagged on {}: {}", f.name, f.track, f.why.join(", ")) }
+                let mut riders = app.riders.lock().unwrap();
+                riders.ride_done(pid.unwrap_or(""), seen.filter(|s| *s > r.ftp_now(now)), flagged, now);
+                if let Err(e) = riders.save(&app.riders_path) { eprintln!("riders: {e}") }
+            }
             if let Some(me) = track.as_ref().and_then(|t| t.riders.lock().unwrap().remove(&sid)).filter(|p| !p.pid.is_empty() && ride.ridden >= 100.0) {
                 let mut clubs = app.clubs.lock().unwrap();
                 if clubs.add_km(&me.pid, &me.name, ride.ridden / 1000.0, club::week(unix_now())) && let Err(e) = clubs.save(&app.clubs_path) { eprintln!("clubs: {e}") }
@@ -796,6 +885,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             app.turns.lock().unwrap().remove(&sid);
             app.inbox.lock().unwrap().remove(&sid);
             app.powerup.lock().unwrap().remove(&sid);
+            app.owners.lock().unwrap().remove(&sid);
             res
         }
         _ => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
@@ -856,6 +946,15 @@ struct Frame<'a> {
     inbox: Vec<Notice>,
     #[serde(skip_serializing_if = "Option::is_none")]
     event: Option<EventLive>,
+    /// How far the server believes this ride's power (docs/security.md).
+    fair: Fair,
+}
+
+#[derive(Serialize)]
+struct Fair {
+    trust: Trust,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    why: Vec<String>,
 }
 
 /// Where a rider stands in their event, each frame.
@@ -883,6 +982,9 @@ struct EventLive {
     /// Crossed the line: place overall, place in category, time.
     #[serde(skip_serializing_if = "Option::is_none")]
     finish: Option<(usize, usize, f32)>,
+    /// Crossed the line but out of the results: "demo", "flagged" or "above rank".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unranked: Option<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -906,7 +1008,7 @@ fn event_live(e: &Event, riders: &HashMap<u64, Presence>, sid: u64, ride: &Ride,
     EventLive {
         id: e.id.clone(), kind: e.kind, name: e.name.clone(), phase: phase.unwrap_or(Phase::Upcoming),
         starts_in: (e.start as f64 - now_f()) as f32, laps: e.laps, race_m: e.distance(course.length(), course.looped), done_m: ride.ridden,
-        leader_gap: leader.map(|l| l - ride.ridden), bunch, rank, of: field.len(), board, finish,
+        leader_gap: leader.map(|l| l - ride.ridden), bunch, rank, of: field.len(), board, finish, unranked: None,
     }
 }
 
@@ -1055,8 +1157,10 @@ async fn ride_session(
     plan: Option<(&Workout, f32)>,
     mut game: Option<Game>,
     (sid, start, event): (u64, Option<usize>, Option<Event>),
-    ride: &mut Ride,
+    (ride, check): (&mut Ride, &mut Check),
 ) -> std::io::Result<()> {
+    // A race finish kept out of the results, and why.
+    let mut unranked: Option<&'static str> = None;
     let mut finish: Option<(usize, usize, f32)> = None;
     let base = track.map_or(&app.flat, |t| &t.course);
     // Open city: this rider's own route, grown street by street; `sent` route points already streamed.
@@ -1106,18 +1210,31 @@ async fn ride_session(
         {
             tokio::spawn(beacon(t, e.clone()));
         }
+        // Every second of power is checked, warm-up in the pen included: the slider or no profile makes a demo ride.
+        if !paused && !caught { check.tick(ride.power, ride.cadence, sensors.live || app.trainer.is_some(), DT) }
         if !paused && !caught && !held {
             ride.tick(course, DT);
-            if let (Some(e), Some(Phase::Live), None) = (&event, phase, finish)
+            if let (Some(e), Some(Phase::Live), None, None) = (&event, phase, finish, unranked)
                 && e.kind == EventKind::Race
                 && ride.ridden >= e.distance(base.length(), base.looped)
                 && let Some(me) = track.and_then(|t| t.riders.lock().unwrap().get(&sid).cloned())
                 && e.entrants.iter().any(|x| x.pid == me.pid)
             {
                 let time = (now_f() - e.start as f64) as f32;
-                let mut events = app.events.lock().unwrap();
-                finish = events.finish(&e.id, &me.pid, &me.name, time).map(|(o, c)| (o, c, time));
-                if let Err(err) = events.save(&app.events_path) { eprintln!("events: {err}") }
+                // Too strong for the race's ranks: moved up, out of its results.
+                check.race_ftp = check.effort_ftp(time as usize);
+                let above = check.race_ftp.is_some_and(|f| !e.open_to(le_mollet::event::category(f / check.kg)));
+                unranked = match check.trust() {
+                    Trust::Demo => Some("demo"),
+                    Trust::Flagged => Some("flagged"),
+                    Trust::Device if above => Some("above rank"),
+                    Trust::Device => None,
+                };
+                if unranked.is_none() {
+                    let mut events = app.events.lock().unwrap();
+                    finish = events.finish(&e.id, &me.pid, &me.name, time).map(|(o, c)| (o, c, time));
+                    if let Err(err) = events.save(&app.events_path) { eprintln!("events: {err}") }
+                }
             }
             // The horde waits for the first pedal stroke, like the ride clock.
             if let Some(g) = game.as_mut().filter(|_| ride.elapsed > 0.0) {
@@ -1134,6 +1251,7 @@ async fn ride_session(
             legs_seen = r.legs.len();
         }
         if !paused && let Some((i, time)) = timer.update(&windows, ride.distance, ride.elapsed)
+            && check.trust() == Trust::Device // only believed rides on the leaderboards
             && let Some(me) = track.and_then(|t| t.riders.lock().unwrap().get(&sid).cloned())
         {
             let w = &windows[i];
@@ -1159,7 +1277,7 @@ async fn ride_session(
                 let lap = t.course.looped.then(|| t.course.length());
                 // Drafting: the rider just ahead cuts the wind for the next ticks.
                 ride.draft = draft_behind(riders.values().filter(|p| p.sid != sid), ride.distance, me.map(|a| (a, course.latlon_at(ride.distance + 5.0))), lap);
-                live = event.as_ref().map(|e| event_live(e, &riders, sid, ride, phase, finish, base));
+                live = event.as_ref().map(|e| EventLive { unranked, ..event_live(e, &riders, sid, ride, phase, finish, base) });
                 // Group ride: anyone up to 200 m behind the leader rides on the bunch's wheel; ahead of it, alone.
                 if let Some(gap) = live.as_ref().and_then(|l| l.leader_gap) {
                     if gap > 0.0 && gap < 200.0 { ride.draft = ride.draft.max(0.3) } else if gap < -25.0 { ride.draft = 0.0 }
@@ -1179,7 +1297,7 @@ async fn ride_session(
             });
             let new_windows = windows[sent_windows..].to_vec();
             sent_windows = windows.len();
-            let frame = Frame { event: live, ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take(), inbox: app.inbox.lock().unwrap().remove(&sid).unwrap_or_default() };
+            let frame = Frame { fair: Fair { trust: check.trust(), why: check.why() }, event: live, ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take(), inbox: app.inbox.lock().unwrap().remove(&sid).unwrap_or_default() };
             let json = serde_json::to_string(&frame).expect("frame serializes");
             sock.write_all(format!("data: {json}\n\n").as_bytes()).await?;
         }
@@ -1218,6 +1336,32 @@ struct Session {
     athlete: u64,
     name: String,
     expires: std::time::SystemTime,
+}
+
+/// A header's value from the request head.
+fn header<'a>(req: &'a str, name: &str) -> Option<&'a str> {
+    req.lines().take_while(|l| !l.is_empty()).find_map(|l| l.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.trim()))
+}
+
+/// The browser says this request comes from another site's page: `Sec-Fetch-Site`, or an `Origin` that is not us.
+fn cross_site(req: &str) -> bool {
+    header(req, "sec-fetch-site").is_some_and(|s| s == "cross-site" || s == "same-site")
+        || header(req, "origin").is_some_and(|o| o.split_once("://").map(|x| x.1) != header(req, "host"))
+}
+
+/// Events as one profile sees them: no profile ids (they are the only key to a profile at home), `me` instead.
+fn events_for(list: &[Event], pid: Option<&str>) -> serde_json::Value {
+    json!(list.iter().map(|e| {
+        let mut v = json!(e);
+        v["by"] = json!(if e.by == "auto" { "auto" } else if Some(e.by.as_str()) == pid { "me" } else { "" });
+        for k in ["entrants", "results"] {
+            for x in v[k].as_array_mut().into_iter().flatten() {
+                x["me"] = json!(pid.is_some() && x["pid"].as_str() == pid);
+                x.as_object_mut().map(|o| o.remove("pid"));
+            }
+        }
+        v
+    }).collect::<Vec<_>>())
 }
 
 /// A cookie's value from the request head.

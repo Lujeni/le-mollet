@@ -100,6 +100,9 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
   turn, so one always starts soon; organizers can also restrict their own races to some ranks. Riders may race up
   a rank, never down. Signed up, you wait in a waiting room: the countdown, who is in at each rank, a warm-up
   hint, and into the start pen on your own when it opens, 10 min before the gun.
+- **Fair play.** The server simulates every ride and keeps each rider's weight and rank itself; it checks every
+  second of power (flat typed numbers, spikes, watts without pedalling, efforts beyond human). Only rides with a
+  trainer and nothing odd reach the leaderboards and race results ([fair play and security](docs/security.md)).
 - **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
   bike. Self-host it and invite your club on your LAN (`serve --lan`).
 - **A living world.** The sky follows your clock: golden dawn, day, sunset, then night with stars, lit windows
@@ -185,6 +188,7 @@ Tested hardware:
 - [Adding a course](courses/AGENTS.md): turn a real climb into a ridable course.
 - [How courses are built](docs/courses.md): data sources, smoothing, validation, recipes.
 - [Accounts and roles](docs/rbac.md): sign in with Strava, roles and permissions.
+- [Fair play and security](docs/security.md): what the server trusts, the power checks, CSRF.
 - [Contributing](docs/CONTRIBUTING.md): principles, checks, commits, testing a trainer.
 
 ## Contributing

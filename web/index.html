@@ -239,6 +239,7 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .event-create summary { cursor:pointer; font-weight:700; margin:6px 0 12px }
 .event-create .check { flex-direction:row; align-items:center; gap:8px }
 .event-filter { margin-top:12px }
+#fairChip { background:#6c6e68; color:#fff; cursor:help }
 .levels { display:flex; flex-wrap:wrap; gap:8px 18px; border:0; padding:0; margin:0 } .levels label { display:inline-flex; flex-direction:row; align-items:center; gap:6px } .levels input { width:auto; margin:0 } .levels legend { padding:0; margin-bottom:4px; font-size:13px; color:var(--muted) }
 .lobby-clock { display:flex; flex-direction:column; align-items:center; gap:6px; margin:18px 0; padding:20px; border-radius:18px; background:var(--glass-hi); border:1px solid var(--edge) }
 .lobby-clock b { font:700 64px var(--font); font-variant-numeric:tabular-nums; letter-spacing:2px; line-height:1 }
@@ -857,6 +858,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <h2 id="courseName"></h2>
         <span>
           <button class="btn" id="hudBtn" aria-label="Personnaliser l'affichage" title="Personnaliser l'affichage">⚙</button>
+          <span class="chip fair" id="fairChip" hidden></span>
           <span class="chip" id="weatherChip" hidden></span>
           <button class="btn" id="night" aria-label="Moment de la journée : suit l'heure, ou fixé" hidden></button>
           <button class="btn" id="mute" aria-label="Couper ou remettre le son"></button>
@@ -954,7 +956,24 @@ const OPTIONS = [
 // ponytail: profiles live in this browser only, move to the Rust backend when login lands
 const KEY = 'lemollet.profiles.v1';
 let profiles = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || [] } catch { return [] } })();
-const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(profiles)) } catch {} };
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(profiles)) } catch {} syncRider() };
+// Fair play (docs/security.md): the server keeps each profile's weight and rank, races and leaderboards go by
+// them. The page sends weight and FTP when they change and shows the rank the server answers.
+let riderSynced = '';
+async function syncRider(p = current) {
+  const key = p && `${p.id}|${p.weightKg}|${p.ftp}`;
+  if (!p || key === riderSynced) return;
+  riderSynced = key;
+  const r = await fetch(`/rider?${new URLSearchParams({ pid:p.id, weight:p.weightKg, ftp:p.ftp })}`).catch(() => null);
+  const body = await r?.json().catch(() => null);
+  if (r?.status === 409 && body?.rider && body.rider.weight !== p.weightKg) {
+    alert(`Poids refusé : il bouge de 2 kg par semaine au plus, pour des courses justes. On garde ${body.rider.weight} kg.`);
+    p.weightKg = body.rider.weight;
+    persist();
+  }
+  const known = r?.ok ? body : body?.rider;
+  if (known) Object.assign(p, { rank:known.rank, seenFtp:known.seen_ftp });
+}
 
 // Profile id: UUID v4, the stable key for a future backend; the name is only a label.
 // crypto.randomUUID needs a secure context (not plain http on the LAN), getRandomValues does not.
@@ -1535,6 +1554,7 @@ function showProfiles() {
 
 function showHome(p = current) {
   current = p;
+  syncRider();
   show('#home');
   draw(p);
   $('#homeAvatar').textContent = p.name[0].toUpperCase();
@@ -2075,7 +2095,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); renderFair(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -5379,13 +5399,13 @@ const CAT_OF = w => TIERS.find(t => w >= t[1])[0];
 const catChip = (c, extra = '') => h('span', { class:`cat ${c}`, title:TIER[c]?.range ?? '' }, `${TIER[c]?.name ?? c}${extra}`);
 const catNames = cats => [...cats].map(c => TIER[c]?.name ?? c).join(', ');
 $('#eventTiers').append(...TIERS.map(([c]) => h('label', { class:'check', title:TIER[c].range }, h('input', { type:'checkbox', name:'cat', value:c }), ' ', catChip(c))));
-const myCat = () => CAT_OF(+myWkg());
-const isMine = e => e.entrants.some(x => x.pid === current.id);
+const myCat = () => current.rank ?? CAT_OF(+myWkg()); // the server's word once it answered
+const isMine = e => e.entrants.some(x => x.me); // the server never sends profile ids, it marks mine
 // Like the server (src/event.rs): a race for a rank takes that rank and the weaker ones, who may race up.
 const openTo = (e, cat = myCat()) => !e.cats || [...e.cats].some(c => TIER[c]?.rank <= TIER[cat].rank);
 // "My rank": events I may join, and of the races by rank scheduled every half hour, only my own.
 const forMe = e => isMine(e) || (e.by === 'auto' ? e.cats === myCat() : openTo(e));
-const EV_ERRORS = { 'not your category':'Course d\'un autre rang : on peut courir au-dessus du sien, pas en dessous.', 'the race has started':'La course est partie.' };
+const EV_ERRORS = { 'unknown rider':'Le serveur ne connaît pas encore ce profil : réessaie dans un instant.', 'not your category':'Course d\'un autre rang : on peut courir au-dessus du sien, pas en dessous.', 'the race has started':'La course est partie.' };
 let evFilter = 'mine';
 function keepEvents(r) { Object.assign(evs, { list:r.events, now:r.now, at:Date.now() }); return evs.list }
 const loadEvents = () => evApi('list').then(keepEvents);
@@ -5447,7 +5467,7 @@ function renderEvents() {
     const acts = [];
     if (phase !== 'upcoming' && !(e.kind === 'race' && phase === 'live' && !mine)) { if (open || mine) acts.push(act(phase === 'pen' ? 'Entrer dans le sas' : e.kind === 'race' ? 'Rejoindre la course' : 'Rejoindre le groupe', () => enterEvent(e), 'btn primary')) }
     else if (phase === 'upcoming') acts.push(mine ? act('Salle d\'attente ›', () => showLobby(e), 'btn primary') : open ? act(`S'inscrire (${TIER[cat].name})`, () => showLobby(e), 'btn primary') : h('small', { class:'muted' }, `Réservée ${e.cats.length > 1 ? 'aux rangs' : 'au rang'} ${catNames(e.cats)}`));
-    if (e.by !== 'auto' && (e.by === current.id || can('manage_events'))) acts.push(act('Supprimer', () => confirm(`Annuler « ${e.name} » ?`) && evApi('delete', { id:e.id }).then(r => { keepEvents(r); renderEvents() }), 'btn danger'));
+    if (e.by !== 'auto' && (e.by === 'me' || can('manage_events'))) acts.push(act('Supprimer', () => confirm(`Annuler « ${e.name} » ?`) && evApi('delete', { id:e.id }).then(r => { keepEvents(r); renderEvents() }), 'btn danger'));
     const d = new Date(e.start * 1000);
     return h('div', { class:'event-card' },
       h('span', { class:'when', style:`--c:${color}` }, h('small', {}, d.toLocaleDateString('fr-FR', { weekday:'short', day:'numeric' })), h('b', {}, d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }))),
@@ -5460,7 +5480,7 @@ function renderEvents() {
 // Waiting room: signed up, the clock runs down to the start; riders by level; into the pen on its own when it opens.
 const lobby = { id:null, timer:0, tick:0 };
 async function showLobby(e) {
-  if (!isMine(e)) { try { keepEvents(await evApi('join', { id:e.id, wkg:myWkg() })) } catch (x) { return alert(EV_ERRORS[x.message] ?? x.message) } }
+  if (!isMine(e)) { try { keepEvents(await evApi('join', { id:e.id })) } catch (x) { return alert(EV_ERRORS[x.message] ?? x.message) } }
   lobby.id = e.id;
   show('#lobby');
   renderLobby();
@@ -5488,7 +5508,7 @@ function renderLobby() {
   const by = c => e.entrants.filter(x => x.cat === c);
   $('#lobbyCats').replaceChildren(...TIERS.map(([c]) => h('div', { class:openTo(e, c) ? '' : 'off' },
     h('h3', {}, catChip(c), h('small', {}, TIER[c].range)),
-    ...(by(c).length ? by(c).map(x => h('p', { class:x.pid === current.id ? 'me' : '' }, `${x.pid === current.id ? '★ ' : ''}${x.name} · ${x.wkg.toFixed(1).replace('.', ',')}`)) : [h('p', { class:'muted' }, openTo(e, c) ? 'Personne encore' : 'Pas ce rang')]))));
+    ...(by(c).length ? by(c).map(x => h('p', { class:x.me ? 'me' : '' }, `${x.me ? '★ ' : ''}${x.name} · ${x.wkg.toFixed(1).replace('.', ',')}`)) : [h('p', { class:'muted' }, openTo(e, c) ? 'Personne encore' : 'Pas ce rang')]))));
 }
 $('#lobbyBack').addEventListener('click', showEvents);
 $('#goEvents').addEventListener('click', showEvents);
@@ -5498,10 +5518,21 @@ $('#lobbyLeave').addEventListener('click', async () => {
 });
 // Into the pen (or the race, or the bunch): sign up if needed, then ride the event's course.
 async function enterEvent(e) {
-  if (!e.entrants.some(x => x.pid === current.id)) { try { keepEvents(await evApi('join', { id:e.id, wkg:myWkg() })) } catch {} }
+  if (!isMine(e)) { try { keepEvents(await evApi('join', { id:e.id })) } catch {} }
   if (!ride.list) return;
   const tr = evTrack(e) ?? (await fetch('/worlds').then(r => r.json()).catch(() => [])).find(c => c.id === e.track);
   openRide(e.track, tr?.terrain ?? true, 'course', null, e.id);
+}
+// Fair play: a chip when the server keeps this ride out of the rankings, and why (src/rider.rs).
+const FAIR_WHY = { demo:'mode démo', flat:'puissance figée', spike:'pic de puissance', 'no cadence':'des watts sans pédaler', 'beyond W′':'au-delà de tes réserves',
+  '20 min over 6.5 W/kg':'plus de 6,5 W/kg sur 20 min', '5 min over 8 W/kg':'plus de 8 W/kg sur 5 min', '1 s over 25 W/kg':'plus de 25 W/kg' };
+const UNRANKED = { demo:'sortie en mode démo, sans home trainer.', flagged:'puissance invraisemblable, un modérateur va regarder.', 'above rank':'trop fort pour ce rang : tu montes au rang supérieur.' };
+function renderFair() {
+  const f = ride.state?.fair, el = $('#fairChip');
+  el.hidden = !f || f.trust === 'device';
+  if (el.hidden) return;
+  el.textContent = f.trust === 'demo' ? '🎮 Démo · hors classement' : '⚑ Hors classement';
+  el.title = `Classements et courses : home trainer seulement, et une puissance vraisemblable. ${f.trust === 'demo' ? '' : (f.why ?? []).map(w => FAIR_WHY[w] ?? w).join(', ')}`;
 }
 // In the ride: the countdown in the pen, then the bunch or the race.
 function renderEvent() {
@@ -5521,6 +5552,10 @@ function renderEvent() {
       h('div', { class:'big' }, g == null ? 'Le meneur s\'élance…' : g > 200 ? `Meneur à ${Math.round(g)} m` : g < -25 ? 'Devant le meneur' : g <= 0 ? `En tête · ${e.bunch}` : `Dans le groupe · ${e.bunch}`),
       h('small', {}, g == null ? '' : g > 200 ? 'Accroche-toi : à moins de 200 m, le groupe t\'aspire.' : g < -25 ? 'Attends le groupe : seul devant, pas d\'aspiration.'
         : g <= 0 ? 'À la hauteur du meneur : c\'est toi qui fais le vent.' : 'Bien calé : l\'aspiration du groupe te porte.'));
+  }
+  if (e.unranked) {
+    if (!ride.eventFinish) { ride.eventFinish = true; toast(`🏁 Arrivée hors classement : ${UNRANKED[e.unranked]}`) }
+    return box.replaceChildren(head, h('div', { class:'big' }, '🏁 Hors classement'), h('small', {}, UNRANKED[e.unranked] ?? e.unranked));
   }
   const lap = e.race_m / Math.max(1, e.laps), done = Math.min(e.done_m, e.race_m);
   if (e.finish && !ride.eventFinish) { ride.eventFinish = e.finish; toast(`🏁 Arrivée ! ${e.finish[0]}e au général, ${e.finish[1]}e de ta catégorie`) }
@@ -5575,7 +5610,7 @@ async function showClub() {
     h('div', { class:'club-head' }, h('h2', {}, h('span', { class:'club-tag', style:`background:${c.color}` }, c.tag), c.name),
       h('span', {}, h('small', { class:'muted' }, 'Code d\'invitation '), h('span', { class:'club-code' }, c.code), ' ', copy)),
     h('h3', {}, `Cette semaine · ${total.toFixed(1)} km ensemble`),
-    h('ol', { class:'club-board' }, ...c.members.map((m, i) => h('li', { class:m.pid === current.id ? 'me' : '' },
+    h('ol', { class:'club-board' }, ...c.members.map((m, i) => h('li', { class:m.me ? 'me' : '' },
       h('b', {}, `${i + 1}`), h('span', {}, m.name, i === 0 && m.km > 0 ? ' 👑' : ''), h('span', {}, `${m.km.toFixed(1)} km`)))),
     h('p', { class:'muted' }, 'Les kilomètres comptent sur les cols, les boucles et les mondes ouverts de ce serveur, remis à zéro chaque lundi.'),
     h('button', { class:'btn danger', onclick: async () => { if (confirm(`Quitter ${c.name} ?`)) { await clubApi('/leave').catch(() => {}); keepClub(null); showClub() } } }, 'Quitter le club'));

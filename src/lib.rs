@@ -14,6 +14,7 @@ pub mod ortho;
 pub mod physics;
 pub mod protocol;
 pub mod ride;
+pub mod rider;
 pub mod segment;
 pub mod strava;
 pub mod terrain;
