@@ -31,6 +31,9 @@ pub struct Course {
     /// OpenStreetMap route relation a loop was built from (`build_ring`), kept for rebuilds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relation: Option<u64>,
+    /// ISO 3166 country code (FR, ES, IT...), from OpenStreetMap at the start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
     /// Terrain cell size, m, when finer than the default 5 m (short loops get small bricks).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cell_m: Option<f64>,
@@ -46,6 +49,9 @@ pub const STEP_M: f64 = 10.0;
 /// meter, but OSM road lines cut hairpin insides and graze embankments: narrower
 /// windows leave fake 15-20 % ramps in every switchback (see docs/courses.md).
 const SMOOTH_SIGMA_PTS: f32 = 5.0;
+/// Outside France the elevation model is ~30 m, not 1 m (src/dem.rs): stacked hairpins borrow each other's
+/// height, so the smoothing is twice as wide (100 m).
+const SMOOTH_SIGMA_DEM_PTS: f32 = 10.0;
 pub(crate) const UA: &str = "le-mollet/0.1 (https://github.com/lujeni/le-mollet)";
 
 impl Course {
@@ -92,6 +98,31 @@ impl Course {
             .fold((f32::MIN, f32::MAX), |(hi, lo), g| (hi.max(g), lo.min(g)))
     }
 
+    /// Cap the climb at `max` % per 10 m step, keeping the total: what a step has above the cap goes to the
+    /// nearest steps that have room, shared by their room, within a window that widens 100 m at a time.
+    /// For the ~30 m elevation outside France (src/dem.rs), which squeezes a short ramp or a hairpin stack
+    /// into a fake wall; `max` is the climb's published steepest ramp (see docs/courses.md).
+    pub fn cap_grade(&mut self, max: f32) {
+        let p = &mut self.points;
+        let mut d: Vec<f32> = p.windows(2).map(|w| w[1].ele - w[0].ele).collect();
+        let cap: Vec<f32> = p.windows(2).map(|w| (w[1].d - w[0].d) * max / 100.0).collect();
+        for i in 0..d.len() {
+            let mut extra = d[i] - cap[i];
+            if extra <= 0.0 { continue }
+            d[i] = cap[i];
+            for r in (10..=d.len()).step_by(10) {
+                let near = i.saturating_sub(r)..(i + r + 1).min(d.len());
+                let room: f32 = near.clone().map(|j| (cap[j] - d[j]).max(0.0)).sum();
+                if room <= 0.0 { continue }
+                let share = (extra / room).min(1.0);
+                for j in near { d[j] += (cap[j] - d[j]).max(0.0) * share }
+                extra -= room * share;
+                if extra <= 1e-4 { break }
+            }
+        }
+        for i in 0..d.len() { p[i + 1].ele = p[i].ele + d[i] }
+    }
+
     pub fn elevation_gain(&self) -> f32 {
         self.points.windows(2).map(|w| (w[1].ele - w[0].ele).max(0.0)).sum()
     }
@@ -115,8 +146,9 @@ impl Course {
         if waypoints.len() < 2 { bail!("need at least start and finish waypoints") }
         let line = route_osm(waypoints, roads)?;
         let samples = resample(&line, STEP_M);
-        let ele = smooth(&elevations(&samples)?, SMOOTH_SIGMA_PTS);
-        Ok(Self { waypoints: waypoints.to_vec(), roads: roads.to_vec(), ..Self::from_samples(name, &samples, ele) })
+        let (ele, dem) = elevations(&samples)?;
+        let ele = smooth(&ele, if dem { SMOOTH_SIGMA_DEM_PTS } else { SMOOTH_SIGMA_PTS });
+        Ok(Self { waypoints: waypoints.to_vec(), roads: roads.to_vec(), country: country_at(waypoints[0]), ..Self::from_samples(name, &samples, ele, dem) })
     }
 
     /// Build a closed loop from an OpenStreetMap route relation (a cycling ring): its ways chained in order,
@@ -142,15 +174,16 @@ impl Course {
             None => ring,
         };
         let samples = resample(&ring, STEP_M);
-        let mut ele = elevations(&samples)?;
+        let (mut ele, dem) = elevations(&samples)?;
         // The last sample is the start again: smooth the loop without it, then close it.
         ele.pop();
-        let mut ele = smooth_loop(&ele, SMOOTH_SIGMA_PTS);
+        let mut ele = smooth_loop(&ele, if dem { SMOOTH_SIGMA_DEM_PTS } else { SMOOTH_SIGMA_PTS });
         ele.push(ele[0]);
-        Ok(Self { waypoints: vec![ring[0]], relation: Some(relation), looped: true, ..Self::from_samples(name, &samples, ele) })
+        Ok(Self { waypoints: vec![ring[0]], relation: Some(relation), looped: true, country: country_at(ring[0]), ..Self::from_samples(name, &samples, ele, dem) })
     }
 
-    fn from_samples(name: &str, samples: &[(f64, [f64; 2])], ele: Vec<f32>) -> Self {
+    /// `dem`: some elevations came from the Terrain Tiles (outside France), not IGN.
+    fn from_samples(name: &str, samples: &[(f64, [f64; 2])], ele: Vec<f32>, dem: bool) -> Self {
         let round = |x: f64| (x * 1e6).round() / 1e6;
         let points = samples
             .iter()
@@ -159,7 +192,8 @@ impl Course {
             .collect();
         Self {
             name: name.into(),
-            attribution: "Route © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).".into(),
+            attribution: if dem { format!("Route © OpenStreetMap contributors (ODbL). {}", crate::dem::ATTRIBUTION) }
+                else { "Route © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).".into() },
             points,
             ..Default::default()
         }
@@ -198,26 +232,34 @@ fn chain_ring(ways: &[(i64, Vec<[f64; 2]>)], oneway: &HashSet<i64>) -> Result<Ve
     Ok(ring)
 }
 
-/// IGN RGE ALTI elevation at each sample.
-fn elevations(samples: &[(f64, [f64; 2])]) -> Result<Vec<f32>> {
-        let mut ele = Vec::with_capacity(samples.len());
-        // ponytail: 100 points per GET keeps URLs short; ~15 requests for a 14 km climb
-        for chunk in samples.chunks(100) {
-            let join = |f: fn(&(f64, [f64; 2])) -> f64| chunk.iter().map(|s| format!("{:.6}", f(s))).collect::<Vec<_>>().join("|");
-            let url = format!(
-                "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon={}&lat={}&resource=ign_rge_alti_wld&zonly=true",
-                join(|s| s.1[1]),
-                join(|s| s.1[0])
-            );
-            let r = request_json(|| ureq::get(&url).set("User-Agent", UA).call())?;
-            for z in r["elevations"].as_array().context("IGN: no elevations")? {
-                let z = z.as_f64().context("IGN: bad elevation")?;
-                // IGN answers -99999 outside its coverage (France + overseas).
-                if z < -1000.0 { bail!("IGN has no elevation here; course outside France?") }
-                ele.push(z as f32);
-            }
+/// Elevation at each sample: IGN RGE ALTI (1 m) in France, the Terrain Tiles elsewhere (src/dem.rs).
+/// Also tells whether any came from the tiles.
+fn elevations(samples: &[(f64, [f64; 2])]) -> Result<(Vec<f32>, bool)> {
+    let mut ele = Vec::with_capacity(samples.len());
+    let mut tiles: Option<crate::dem::Tiles> = None;
+    // ponytail: 100 points per GET keeps URLs short; ~15 requests for a 14 km climb
+    for chunk in samples.chunks(100) {
+        let join = |f: fn(&(f64, [f64; 2])) -> f64| chunk.iter().map(|s| format!("{:.6}", f(s))).collect::<Vec<_>>().join("|");
+        let url = format!(
+            "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon={}&lat={}&resource=ign_rge_alti_wld&zonly=true",
+            join(|s| s.1[1]),
+            join(|s| s.1[0])
+        );
+        let r = request_json(|| ureq::get(&url).set("User-Agent", UA).call())?;
+        for (z, s) in r["elevations"].as_array().context("IGN: no elevations")?.iter().zip(chunk) {
+            let z = z.as_f64().context("IGN: bad elevation")?;
+            // IGN answers -99999 outside its coverage (France + overseas): the tiles take over there.
+            ele.push(if z < -1000.0 { tiles.get_or_insert_with(Default::default).ele(s.1[0], s.1[1])? } else { z as f32 });
         }
-        Ok(ele)
+    }
+    Ok((ele, tiles.is_some()))
+}
+
+/// ISO 3166 code of the country at a point, from OpenStreetMap's admin boundaries; None if unknown.
+fn country_at([lat, lon]: [f64; 2]) -> Option<String> {
+    let query = format!("[out:json][timeout:60];is_in({lat},{lon})->.a;area.a[admin_level=2][\"ISO3166-1\"];out tags;");
+    let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &query)])).ok()?;
+    r["elements"].as_array()?.iter().find_map(|e| e["tags"]["ISO3166-1"].as_str().map(str::to_owned))
 }
 
 const DRIVABLE: &[&str] = &[
@@ -411,6 +453,20 @@ mod tests {
         let mut spike = vec![0.0; 31];
         spike[15] = 10.0;
         assert!(smooth(&spike, 3.0)[15] < 1.5);
+    }
+
+    #[test]
+    fn capping_spreads_a_wall_and_keeps_the_climb() {
+        // 1 km at 5 %, with a 100 m wall at 30 % in the middle.
+        let points = (0..=100)
+            .scan(0.0, |e, i| { let p = Point { d: i as f32 * 10.0, lat: 0.0, lon: 0.0, ele: *e }; *e += if (45..55).contains(&i) { 3.0 } else { 0.5 }; Some(p) })
+            .collect();
+        let mut c = Course { points, ..Default::default() };
+        let top = c.points.last().unwrap().ele;
+        c.cap_grade(12.0);
+        assert!((c.points.last().unwrap().ele - top).abs() < 1e-3);
+        assert!(c.grade_extremes(100.0).0 <= 12.0 + 1e-3);
+        assert!((c.ele_at(100.0) - 5.0).abs() < 1e-3); // far from the wall: untouched
     }
 
     #[test]

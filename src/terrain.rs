@@ -188,11 +188,18 @@ pub(crate) fn fetch_heights(west: f64, south: f64, east: f64, north: f64, w: usi
         "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES\
          &STYLES=&CRS=EPSG:4326&BBOX={south},{west},{north},{east}&WIDTH={w}&HEIGHT={h}&FORMAT=image/x-bil;bits=32"
     );
-    let mut raw = Vec::with_capacity(w * h * 4);
-    ureq::get(&url).set("User-Agent", UA).call()?.into_reader().read_to_end(&mut raw)?;
-    if raw.len() != w * h * 4 { bail!("IGN elevation grid: got {} bytes, expected {}", raw.len(), w * h * 4) }
-    let v: Vec<f32> = raw.chunks_exact(4).map(|b| f32::from_le_bytes(b.try_into().unwrap())).collect();
-    if v.iter().any(|&e| e < -1000.0) { bail!("IGN has no elevation for part of the area; course outside France?") }
+    let ign = || -> Result<Vec<f32>> {
+        let mut raw = Vec::with_capacity(w * h * 4);
+        ureq::get(&url).set("User-Agent", UA).call()?.into_reader().read_to_end(&mut raw)?;
+        if raw.len() != w * h * 4 { bail!("IGN elevation grid: got {} bytes, expected {}", raw.len(), w * h * 4) }
+        Ok(raw.chunks_exact(4).map(|b| f32::from_le_bytes(b.try_into().unwrap())).collect())
+    };
+    // Outside France (or across a border), IGN has no data: the Terrain Tiles fill those cells (src/dem.rs).
+    let mut v = ign().unwrap_or_else(|e| { eprintln!("IGN elevation grid unavailable ({e}): Terrain Tiles instead"); vec![f32::MIN; w * h] });
+    if v.iter().any(|&e| e < -1000.0) {
+        let tiles = crate::dem::grid(west, south, east, north, w, h)?;
+        for (e, t) in v.iter_mut().zip(tiles) { if *e < -1000.0 { *e = t } }
+    }
     Ok(v)
 }
 

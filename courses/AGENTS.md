@@ -8,8 +8,9 @@ Instructions for agents (and humans) adding a real climb to le-mollet. Each cour
 
 - **Rust only.** Build and check with the `le-mollet` commands below. Ad hoc analysis in a scratch dir is
   fine, but no Python, shell or other scripts land in the repo or in the instructions.
-- **France only for now.** Elevation comes from IGN, and the build fails elsewhere ("IGN has no elevation").
-  A route abroad needs a Copernicus fallback first: say so instead of faking data.
+- **Elevation: IGN in France, Terrain Tiles elsewhere.** IGN RGE ALTI (1 m) wherever it has data; outside France
+  the builder falls back on its own to the Terrain Tiles on AWS Open Data (SRTM, EU-DEM, ~30 m, src/dem.rs) and
+  smooths over 100 m instead of 50 m. Expect a rougher max grade on stacked hairpins abroad; `le-mollet cap` brings it back to the published max.
 - **Real data, validated.** Never hand-edit points or elevations to match a reference. If the figures are
   off, fix the inputs (waypoints, roads) and rebuild.
 - **Commit the JSON only.** `*.terrain.bin` is rebuilt by `terrain` and ignored by git.
@@ -81,7 +82,7 @@ profile in demo mode to jump through the climb in 3D.
 | Too short, with an 18-25 % spike | the route took a lane or a footpath | add a via on the real road at that spot; add the missing `--road` |
 | Too long, with a dip | detour around a one-way or a loop | move or remove the via that caused it |
 | `no road matching [...]` | ref not found near the waypoints | check the exact tag on openstreetmap.org |
-| `IGN has no elevation` | outside France | out of scope for now, see Rules |
+| A 20 %+ spike on stacked hairpins abroad | the ~30 m elevation model mixes the levels of nearby hairpins | check the road first (a lane, a shortcut); if the road is right, `le-mollet cap courses/<id>.json <published max %>` and put that line in the recipe |
 | `terrain ... exceeds one IGN request` | route spans more than ~20 km across | out of scope for now, needs tiled requests |
 
 Smoothing (Gaussian, sigma 50 m) is tuned in `src/course.rs`. Do not change it for one course: it applies to

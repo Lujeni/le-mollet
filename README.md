@@ -31,7 +31,7 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 <td><img src="docs/screenshots/longchamp-woods.jpg" alt="Anneau de Longchamp in the rain through the Bois de Boulogne"><br><sub><b>Bois de Boulogne.</b> Every tree where the photo shows one, here in the rain.</sub></td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/climbs.jpg" alt="Climbs as fridge magnets"><br><sub><b>Climbs.</b> Legendary climbs as fridge magnets.</sub></td>
+<td><img src="docs/screenshots/climbs.jpg" alt="Climbs as fridge magnets with country flags"><br><sub><b>Climbs.</b> Legendary climbs of France, Spain and Italy as fridge magnets.</sub></td>
 <td><img src="docs/screenshots/garage.jpg" alt="Garage: the Lego minifig rider and its options"><br><sub><b>Garage.</b> Your minifig: jersey and pattern, helmet, glasses, face.</sub></td>
 </tr>
 <tr>
@@ -70,9 +70,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 
 ## Ride
 
-- **Real climbs, in real relief.** Legendary climbs rebuilt from OpenStreetMap roads and IGN elevation data,
-  validated against their official profiles: Alpe d'Huez, Mont Ventoux, Galibier, Tourmalet, Izoard,
-  La Planche des Belles Filles. Pick them as souvenir fridge magnets.
+- **Real climbs, in real relief.** Legendary climbs rebuilt from OpenStreetMap roads and IGN elevation data
+  (open Terrain Tiles outside France), validated against their official profiles. France: Alpe d'Huez, Mont Ventoux,
+  Galibier, Tourmalet, Izoard, Madeleine, Grand Colombier, Aubisque, La Planche des Belles Filles. Spain: Angliru,
+  Lagos de Covadonga. Italy: Stelvio, Mortirolo. Pick them as souvenir fridge magnets, filtered by country.
 - **Duel the record.** On the Alpe d'Huez, the Ventoux and the Tourmalet, race the fastest ascent ever timed as a
   ghost: its public time turned into even power on our road, at 100 % or scaled down to a fair fight at your FTP.
 - **Race your ghost.** Finish a climb and your best time rides with you next time, see-through, with the gap in

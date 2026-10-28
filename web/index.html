@@ -453,6 +453,8 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 .magnet:hover, .magnet:focus-visible { transform:rotate(0) translateY(-6px) scale(1.04); box-shadow:0 8px 0 rgba(0,0,0,.15), 0 22px 30px rgba(0,0,0,.4); outline:none }
 .magnet canvas { position:absolute; inset:0; width:100%; height:100% }
 .magnet .ribbon { position:absolute; left:0; right:0; bottom:0; padding:8px 10px 9px; font:700 17px var(--font); color:#fff; text-shadow:0 2px 0 rgba(0,0,0,.35); text-align:left }
+.magnet .flag-pin { position:absolute; left:10px; top:10px; z-index:1; padding:2px 6px; border-radius:8px; background:rgba(255,255,255,.85); font-size:18px; line-height:1.2; box-shadow:0 2px 0 rgba(0,0,0,.2) }
+.country-filter { margin-bottom:12px; flex-wrap:wrap }
 .magnet .ribbon small { display:block; font-family:Inter, sans-serif; font-weight:600; font-size:11px; text-shadow:none; opacity:.9 }
 .magnet .badge { position:absolute; top:8px; right:8px; width:58px; height:58px; border-radius:50%; display:grid; place-items:center; text-align:center;
   background:#f2cd37; color:#1b2a34; border:3px solid #fff; font:700 12px var(--font); line-height:1.05; transform:rotate(12deg); box-shadow:0 3px 0 rgba(0,0,0,.2) }
@@ -753,6 +755,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <h1>Circuits</h1>
         <button class="btn" id="coursesBack">‹ Rouler</button>
       </div>
+      <div class="seg country-filter" id="countryFilter" hidden></div>
       <div id="courseList" class="fridge"></div>
     </div>
   </main>
@@ -1460,6 +1463,8 @@ const COUNTRY_CODES = ('AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD
 const countryName = new Intl.DisplayNames(['fr'], { type:'region' });
 // Regional-indicator emoji; platforms without flag glyphs show the two letters instead.
 const flag = code => String.fromCodePoint(...[...code].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+// A country's name in French, from the browser itself.
+let courseCountry = 'all';
 const countryOptions = [h('option', { value:'' }, '—'), ...COUNTRY_CODES
   .map(code => [code, countryName.of(code)]).sort((a, b) => a[1].localeCompare(b[1], 'fr'))
   .map(([code, name]) => h('option', { value:code }, `${flag(code)} ${name}`))];
@@ -1794,16 +1799,25 @@ function showFree() {
 
 function showCourses() {
   show('#courses');
-  $('#courseList').replaceChildren(...ride.list.courses.map((c, i) => {
+  // Climbs by country, France first; a filter once there are several countries.
+  const countries = [...new Set(ride.list.courses.map(c => c.country ?? 'FR'))].sort((a, b) => (b === 'FR') - (a === 'FR') || countryName.of(a).localeCompare(countryName.of(b)));
+  if (!countries.includes(courseCountry)) courseCountry = 'all';
+  $('#countryFilter').hidden = countries.length < 2;
+  $('#countryFilter').replaceChildren(...[['all', 'Tous'], ...countries.map(k => [k, `${flag(k)} ${countryName.of(k)}`])].map(([k, label]) =>
+    h('button', { class:courseCountry === k ? 'on' : '', 'aria-pressed':courseCountry === k, onclick: () => { courseCountry = k; showCourses() } }, label)));
+  const shown = ride.list.courses.filter(c => courseCountry === 'all' || (c.country ?? 'FR') === courseCountry)
+    .sort((a, b) => countries.indexOf(a.country ?? 'FR') - countries.indexOf(b.country ?? 'FR'));
+  $('#courseList').replaceChildren(...shown.map((c, i) => {
     const theme = MAGNET_THEMES[i % MAGNET_THEMES.length], cv = h('canvas', { 'aria-hidden':'true' });
     const avg = ((c.profile.at(-1) - c.profile[0]) / c.length * 100).toFixed(1);
     const rec = RECORDS[c.id];
     const card = h('button', {
         class:'magnet', style:`--r:${((hash(i, 7, 3) - 0.5) * 9).toFixed(1)}deg`,
-        'aria-label':`${c.name}, ${(c.length / 1000).toFixed(1)} km, ${avg} % de moyenne`,
+        'aria-label':`${c.name}, ${countryName.of(c.country ?? 'FR')}, ${(c.length / 1000).toFixed(1)} km, ${avg} % de moyenne`,
         onclick: () => openRide(c.id, c.terrain),
       },
       cv,
+      h('span', { class:'flag-pin', title:countryName.of(c.country ?? 'FR') }, flag(c.country ?? 'FR')),
       h('span', { class:'badge' }, `${Math.round(Math.max(...c.profile))}`, h('br'), 'm'),
       h('span', { class:'ribbon', style:`background:${theme.ribbon}` }, c.name,
         h('small', {}, `${(c.length / 1000).toFixed(1)} km · +${c.gain} m · ${avg} %${current?.ghosts?.[c.id] ? ` · record ${hms(current.ghosts[c.id].elapsed)}` : ''}`)));
@@ -1836,7 +1850,7 @@ async function renderWorlds() {
         onclick: () => openRide(w.id, true),
         onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRide(w.id, true) } },
       },
-      h('div', { class:'row' }, h('strong', {}, w.name),
+      h('div', { class:'row' }, h('strong', {}, `${w.country ? `${flag(w.country)} ` : ''}${w.name}`),
         h('small', { class: w.riders ? 'online' : '' }, w.riders ? `${w.riders} cycliste${w.riders > 1 ? 's' : ''} en ligne` : 'personne pour l\'instant')),
       h('small', {}, `${(w.length / 1000).toFixed(1)} km · +${w.gain} m par tour · ${w.relief ?? 'circuit réel'}`),
       cv);

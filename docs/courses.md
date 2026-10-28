@@ -9,7 +9,8 @@ Apply this method to every new route.
 |---|---|---|
 | Road geometry | OpenStreetMap via Overpass API (POST, with User-Agent) | ODbL, attribution required |
 | Elevation (France) | IGN RGE ALTI via Géoplateforme altimetry API | 1 m DEM, Licence Ouverte Etalab 2.0 |
-| Elevation (elsewhere) | Copernicus GLO-30 | Not wired yet: IGN answers -99999 outside France and the build fails |
+| Elevation (elsewhere) | Terrain Tiles on AWS Open Data (Mapzen/Tilezen: SRTM, EU-DEM © Copernicus) | Terrarium PNG tiles at zoom 13, ~30 m of real resolution; used wherever IGN answers -99999 (src/dem.rs), for course points and the terrain grid |
+| Country | OpenStreetMap admin boundaries (`is_in`, ISO3166-1) | recorded in the course file, shown as a flag on its magnet |
 
 Never use GPX elevation recorded by phones or GPS units: too noisy for grades. GPX is only good for geometry.
 
@@ -22,11 +23,16 @@ Never use GPX elevation recorded by phones or GPS units: too noisy for grades. G
    Dijkstra from waypoint to waypoint (each waypoint snaps to the nearest node on a wanted road).
 2. **Resample** every 10 m along the line.
 3. **Elevation** from IGN for each point (100 points per request). IGN and Overpass calls back off on 429/502/503/504.
-4. **Smooth** with a Gaussian, sigma 50 m. Why: the DEM is exact, but OSM lines cut the inside
+4. **Smooth** with a Gaussian, sigma 50 m (100 m when the elevation comes from the Terrain Tiles, ~30 m data). Why: the DEM is exact, but OSM lines cut the inside
    of hairpins and graze embankments, which creates fake 15-20 % ramps and dips at every
    switchback. A 50 m moving average was not enough; sigma 30 m still left 17 % spikes.
 5. **Write** `courses/<id>.json`: name, attribution, waypoints, roads, points `{d, lat, lon, ele}`.
    Grade is computed at ride time over a 10 m baseline.
+   **Cap** (`le-mollet cap courses/<id>.json <max %>`), only where a ramp still reads steeper than the climb's
+   published steepest one: steps above the cap give their extra height to the nearest steps with room, in a window
+   widening 100 m at a time, so the total, the finish and the per-km grades stay put. Needed outside France, where the
+   ~30 m Terrain Tiles squeeze a short ramp or a hairpin stack into a fake wall (Angliru 32 % for 23.5 %, Stelvio 19.7 %
+   for 12 %). Rewrites the course and its terrain; run it after every rebuild.
 6. **3D terrain** `courses/<id>.terrain.bin` (git-ignored, rebuild with `le-mollet terrain courses/<id>.json`):
    - IGN elevation grid in one WMS-Raster request (`ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES`, float32 BIL),
      5 m cells, course bounding box + 1.5 km. Max 4096 px a side per request.
@@ -208,6 +214,114 @@ Reference: 19.0-19.3 km, ~470-475 m to 1993 m, +1515 to 1522 m, 7.8-8.0 %, max 1
 9.4 / 8.7 / 7.9 / 7.2 / 9.7 / 8.0 / 7.6 / 9.1 / 6.3 / 7.8 / 8.4 / 7.9 / 7.8 / 7.1 / 8.0 / 8.0 %, the published shape:
 steep 2-4 km above La Chambre, ~10 % around km 7 and 10, a short ease after km 11, steady ~8 % to the top.
 
+### Col du Grand Colombier (from Culoz, D120)
+
+```sh
+cargo run --release -- course "Col du Grand Colombier (Culoz)" -o courses/grand-colombier-culoz.json \
+  --road "D 120" \
+  45.848784,5.783051 45.903459,5.761663
+```
+
+Start = Rue du Stade in Culoz, the official start of the Ain tourist board (244 m). Finish = OSM col node (1498 m). No
+via: the D120 climbs through the hairpins above Culoz, past the D120a (Anglefort) junction, to the col, all inside the box.
+Result: 17.58 km, 248 m to 1497 m, +1256 m (net +1248 m), avg 7.1 %, max 13.0 % over 100 m.
+Reference: 17.6 km, 244 m to 1501 m, ~7.1 %, max 14 % (Ain tourisme); cols-cyclisme gives 18.3 km at 6.9 % from a
+lower, unspecified start. Per-km: 5.7 / 8.2 / 9.7 / 6.9 / 9.6 / 10.6 / 8.3 / 3.0 / 4.0 / 9.2 / 10.0 / 9.9 / 5.1 / 1.4 /
+6.9 / 5.6 / 5.2 %, the published shape: steep first 9 km, a 3 % false flat after the Anglefort junction (878 m), steep
+again, easier after La Sapette (1230 m).
+
+### Col d'Aubisque (from Laruns, D934 / D918)
+
+```sh
+cargo run --release -- course "Col d'Aubisque (Laruns)" -o courses/aubisque-laruns.json \
+  --road "D 934" --road "D 918" \
+  42.980205,-0.420696 42.976575,-0.339792
+cargo run --release -- cap courses/aubisque-laruns.json 14
+```
+
+Start = the D934 bridge over the Gave at the entrance of Laruns. Finish = OSM col node (1709 m). No via. Starting at the
+D918/D934 roundabout instead gives 16.38 km from 532 m, 13 m too high.
+Result: 16.85 km, 508 m to 1707 m, +1206 m (net +1199 m), avg 7.1 %, max 14.0 % over 100 m (16.1 % before the cap).
+Reference: 16.6-17.1 km, ~519 m to 1709 m, +1190-1202 m, 7.17 %, max 13-14 % (13.8 % steepest 100 m on climbfinder).
+Per-km: 4.3 / 5.0 / 4.8 / 5.4 / 6.3 / 6.6 / 5.7 / 8.5 / 9.0 / 6.3 / 9.0 / 9.3 / 7.0 / 8.9 / 9.3 / 8.4 %: gentle to
+Eaux-Bonnes, then steeper through the avalanche galleries to Gourette, ~8-9 % to the top. The 16 % before the cap sits
+right after a `bridge=yes` on the D918 (42.9634,-0.3423): IGN reads the valley floor under the bridge, not the deck.
+
+### Alto de l'Angliru (from La Vega de Riosa)
+
+```sh
+cargo run --release -- course "Alto de l'Angliru (Riosa)" -o courses/angliru-riosa.json \
+  43.230726,-5.883243 43.225081,-5.938947
+cargo run --release -- cap courses/angliru-riosa.json 23.5
+```
+
+Spain: elevation from the Terrain Tiles (SRTM / EU-DEM, ~30 m), smoothed over 100 m. No `--road`: the climb road
+("Carretera a L'Angliru") has no `ref` in OSM, and `--road` matches refs only (the finish would snap back onto the
+RI-2), so the route is the plain shortest path. It follows the real road (every point within ~15 m of the OSM way).
+Start = La Vega, on the AS-231 at the east end of the RI-2. Finish = high point of the road (1568 m); the road then
+drops ~14 m to the summit car park (finishing there gives 13.01 km and 1553 m).
+Result: 12.44 km, 327 m to 1568 m, +1244 m (net +1241), avg 10.0 %, max 23.5 % over 100 m (32.1 % before the cap).
+Reference: 12.4-12.55 km, La Vega 315 m to 1570-1573 m, +1266 m, 10.1 %, max 23.5 % (Cueña les Cabres, 1 km at
+17.3 %), first 5 km 5-9 %, km 6 ~2 %, last 6 km >13 %. Per-km: 4.7 / 8.4 / 8.5 / 8.4 / 5.9 / 2.6 / 14.7 / 12.8 / 12.2 /
+13.6 / 17.4 / 11.9 %. The 100 m max is a DEM artifact at Cueña les Cabres (10.15-10.45 km, 43.2350,-5.9395): the
+route is on the road, but the 30 m DEM squeezes the ramp into ~250 m (EU-DEM 25 m gives ~41 % there, SRTM ~27 %);
+the kilometre (17.4 %) matches the published 17.3 %, and the cap keeps it.
+
+### Lagos de Covadonga (from Covadonga, AS-262 / CO-4)
+
+```sh
+cargo run --release -- course "Lagos de Covadonga" -o courses/lagos-de-covadonga.json \
+  --road "AS-262" --road "CO-4" \
+  43.309300,-5.049850 43.273700,-4.983500
+```
+
+Spain: elevation from the Terrain Tiles, smoothed over 100 m. Start = below the Basilica, on the AS-262 ~270 m before
+the CO-4 (Carretera Covadonga - Los Lagos), where the Vuelta's 12.5 km climb is measured. Starting right at the CO-4
+puts the first point on a steep ramp and the smoothing reads it ~25 m high (243 m); starting from Soto de Cangas
+(AS-114 junction) adds ~6 km at 1-2 % (18.66 km). Finish = end of the CO-4 by Lago Ercina, past Lago Enol.
+Result: 12.66 km, 218 m to 1098 m, +974 m (net +880; the extra is the real descents), avg 7.0 %, max 17.7 % over
+100 m (La Huesera), min -12.1 %. Top of the road 1120 m at 10.9 km.
+Reference: Vuelta 12.5 km at 6.9 %; PJAMM 12.4 km, 219 m, top 1124 m at ~10.7 km, +964 m, 7.0 %, max ~15 %, La
+Huesera 3 km above 10 % with ramps of 14-17.5 %. Per-km: 6.8 / 9.8 / 10.2 / 6.5 / 10.2 / 10.8 / 12.1 / 6.6 / 6.7 / 1.7 /
+8.6 / -3.3 %: about 10 % through the forest, La Huesera ~11-12 % at km 5-7, easier after, a short descent near km 9,
+the top, then down to Lago Enol and up to Ercina.
+
+### Passo dello Stelvio (from Prato allo Stelvio, SS38)
+
+```sh
+cargo run --release -- course "Passo dello Stelvio (Prato)" -o courses/stelvio-prato.json \
+  --road "SS38" \
+  46.616779,10.590713 46.528618,10.453206
+cargo run --release -- cap courses/stelvio-prato.json 12
+```
+
+Italy: elevation from the Terrain Tiles (SRTM/EU-DEM), smoothed over 100 m. Start = SS38 (Hauptstraße) in the centre of
+Prato allo Stelvio (911 m). Finish = OSM pass node (2758 m); the smoothed top reads 2748 m. No via: the SS38 stays
+in the box through Gomagoi and Trafoi.
+Result: 24.75 km, 911 m to 2748 m, +1843 m (net +1837 m), avg 7.4 %, max 12.0 % over 100 m (19.7 % before the cap).
+Reference: 24.7-24.8 km from ~910 m, col 2757 m, +1846-1851 m, 7.4-7.5 %, max ~12 %, 48 hairpins. Per-km: 2.8 / 5.8 /
+6.4 / 5.5 / 5.2 / 7.6 / 5.6 / 7.6 / 7.5 / 6.5 / 7.7 / 7.4 / 8.4 / 6.9 / 10.4 / 7.8 / 10.6 / 8.5 / 8.1 / 8.7 / 9.0 / 8.5 /
+8.2 / 7.2 %.
+The 100 m max is the elevation data, not the road: in the hairpin stack above Trafoi (km 14-15, 46.5376,10.5005)
+the legs run 30-70 m apart, finer than the ~30 m data, so one leg reads flat and the next 19 %. OSM has only the
+SS38 there. Elsewhere the max is about 16 %, at the same stack. The cap spreads it; km 15 and 17 stay at 10.4 / 10.5 %.
+
+### Mortirolo (from Mazzo di Valtellina)
+
+```sh
+cargo run --release -- course "Mortirolo (Mazzo)" -o courses/mortirolo-mazzo.json \
+  46.258304,10.255453 46.254417,10.263058 46.247859,10.300372
+```
+
+Italy: elevation from the Terrain Tiles, smoothed over 100 m. The Mazzo road ("Strada del Mortirolo") has no `ref`, so
+no `--road`. Start = west end of Via Mortirolo, by the Santo Stefano church. Via = the lower Strada del Mortirolo
+(46.2544,10.2631): without it the shortest path takes the "via Orti" variant past San Matteo (11.37 km, 22.8 % at
+km 1.3). Finish = Passo della Foppa node (1852 m), where the classic 12.4 km is measured to.
+Result: 12.43 km, 555 m to 1857 m, +1302 m (gain = net), avg 10.5 %, max 18.7 % over 100 m. No cap needed.
+Reference: 12.3-12.4 km, 552 m to 1852 m, +1300 m, 10.5-10.6 %, steepest km 15 %, max 18-20 % (cyclingup,
+valtellinamobile, bormio.eu). Per-km: 3.3 / 10.4 / 11.5 / 10.9 / 15.5 / 14.1 / 11.2 / 12.2 / 11.3 / 9.1 / 9.9 / 7.8 %:
+the hardest kilometres around the Pantani monument (km 5-8), easier near the top.
+
 ## Climb records (duel)
 
 The page lets a rider duel the fastest ascent ever timed on a climb (`RECORDS` in web/index.html). Only public
@@ -248,4 +362,4 @@ Demo mode: click the profile to jump anywhere on the course.
 ## Next steps
 
 - Measure fps on real laptops and phones, then tune view radius / move meshing to a Web Worker.
-- Copernicus GLO-30 fallback outside France; tile the WMS request for routes longer than ~20 km across.
+- Tile the terrain request for routes longer than ~20 km across.

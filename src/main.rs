@@ -28,6 +28,14 @@ enum Cmd {
         /// Course JSON file
         course: String,
     },
+    /// Cap a course at its published steepest ramp, % over 100 m, where the ~30 m elevation outside France
+    /// squeezes it into a fake wall; rewrites the course and its terrain, see docs/courses.md
+    Cap {
+        /// Course JSON file
+        course: String,
+        /// Steepest grade, %
+        max: f32,
+    },
     /// (Re)build the 3D terrain of an existing course file
     Terrain {
         /// Course JSON file
@@ -139,6 +147,15 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Trainer { filter } => trainer_console(filter).await,
         Cmd::Stats { course } => {
             print_course_stats(&course, &Course::load(&course)?);
+            Ok(())
+        }
+        Cmd::Cap { course, max } => {
+            let mut c = Course::load(&course)?;
+            c.cap_grade(max);
+            std::fs::write(&course, serde_json::to_string(&c)?)?;
+            let path = course.clone();
+            tokio::task::spawn_blocking(move || build_terrain(&path)).await??;
+            print_course_stats(&course, &c);
             Ok(())
         }
         Cmd::Terrain { course } => tokio::task::spawn_blocking(move || build_terrain(&course)).await?,
