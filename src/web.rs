@@ -137,6 +137,8 @@ struct Presence {
     distance: f32,
     speed_kmh: f32,
     power: f32,
+    /// Power over the rider's own weight, for the board next to the road.
+    wkg: f32,
     /// `[lat, lon]` in an open city, where `distance` along each rider's own route means nothing to others.
     #[serde(skip_serializing_if = "Option::is_none")]
     pos: Option<[f64; 2]>,
@@ -622,6 +624,7 @@ fn presence(query: &str, sid: u64) -> Presence {
         distance: 0.0,
         speed_kmh: 0.0,
         power: 0.0,
+        wkg: 0.0,
         pos: None,
         bot: false,
         pid: param(query, "pid").filter(|p| valid_pid(p)).unwrap_or_default().to_owned(),
@@ -1294,7 +1297,7 @@ async fn beacon(t: Arc<Track>, e: Event) {
             let mut riders = t.riders.lock().unwrap_or_else(|e| e.into_inner());
             let p = riders.entry(id).or_insert_with(|| Presence {
                 id, sid: id, emote: None, emote_at: None, name: format!("Meneur · {:.1} W/kg", e.pace).replace('.', ","), color: "#f2cd37".into(), frame: "road",
-                country: None, distance: 0.0, speed_kmh: 0.0, power: 0.0, pos: None, bot: true, pid: String::new(), ridden: 0.0, event: Some(e.id.clone()),
+                country: None, distance: 0.0, speed_kmh: 0.0, power: 0.0, wkg: e.pace, pos: None, bot: true, pid: String::new(), ridden: 0.0, event: Some(e.id.clone()),
             });
             (p.distance, p.speed_kmh, p.power, p.ridden) = (ride.distance, ride.speed_kmh, ride.power, ride.ridden);
         }
@@ -1400,7 +1403,7 @@ async fn pacer(t: Arc<Track>, id: u64, k: usize) {
             ride.draft = draft_behind(riders.values().filter(|p| p.sid != id), ride.distance, pos, t.course.looped.then(|| t.course.length()));
             let p = riders.entry(id).or_insert_with(|| Presence {
                 id, sid: id, emote: None, emote_at: None, name: format!("{name} · {wkg:.1} W/kg").replace('.', ","), color: color.into(), frame: "road", country: None,
-                distance: 0.0, speed_kmh: 0.0, power: 0.0, pos: None, bot: true, pid: String::new(), ridden: 0.0, event: None,
+                distance: 0.0, speed_kmh: 0.0, power: 0.0, wkg, pos: None, bot: true, pid: String::new(), ridden: 0.0, event: None,
             });
             (p.distance, p.speed_kmh, p.power, p.pos) = (ride.distance, ride.speed_kmh, ride.power, pos.map(|x| x.0));
         }
@@ -1541,7 +1544,7 @@ async fn ride_session(
             let others = track.map_or(vec![], |t| {
                 let mut riders = t.riders.lock().unwrap_or_else(|e| e.into_inner());
                 let me = riders.get_mut(&sid).and_then(|me| {
-                    (me.distance, me.speed_kmh, me.power, me.ridden) = (ride.distance, ride.speed_kmh, ride.power, ride.ridden);
+                    (me.distance, me.speed_kmh, me.power, me.wkg, me.ridden) = (ride.distance, ride.speed_kmh, ride.power, ride.power / (ride.mass - rider::BIKE_KG).max(30.0), ride.ridden);
                     me.pos = city.map(|_| course.latlon_at(ride.distance));
                     me.pos
                 });
@@ -1723,7 +1726,7 @@ mod tests {
     }
 
     fn rider(id: u64, distance: f32) -> Presence {
-        Presence { id, sid: id, emote: None, emote_at: None, name: String::new(), color: String::new(), frame: "road", country: None, distance, speed_kmh: 0.0, power: 0.0, pos: None, bot: false, pid: String::new(), ridden: 0.0, event: None }
+        Presence { id, sid: id, emote: None, emote_at: None, name: String::new(), color: String::new(), frame: "road", country: None, distance, speed_kmh: 0.0, power: 0.0, wkg: 0.0, pos: None, bot: false, pid: String::new(), ridden: 0.0, event: None }
     }
 
     #[test]

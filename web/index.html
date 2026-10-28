@@ -251,7 +251,7 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .events-strip:empty, .home-event[hidden] { display:none }
 .events-strip, .home-event { display:flex; align-items:center; gap:12px; width:100%; margin:0 0 16px; padding:12px 16px; border-radius:16px; border:0; background:linear-gradient(90deg, #d0230f, #e9781a); color:#fff; font:inherit; text-align:left; cursor:pointer }
 .events-strip b, .home-event b { font:700 16px var(--font) } .events-strip span, .home-event span { flex:1 } .events-strip small, .home-event small { display:block; opacity:.85 }
-.event-box { position:absolute; left:16px; top:160px; z-index:1; width:270px; padding:12px 14px; border-radius:16px; background:rgba(17,21,28,.85); color:#fff; box-shadow:0 10px 26px rgba(0,0,0,.35); pointer-events:none }
+.event-box { position:absolute; left:50%; top:246px; transform:translateX(-50%); z-index:1; width:300px; text-align:center; padding:12px 14px; border-radius:16px; background:rgba(17,21,28,.85); color:#fff; box-shadow:0 10px 26px rgba(0,0,0,.35); pointer-events:none }
 .event-box > b { display:block; font:700 15px var(--font); margin-bottom:4px }
 .event-box .countdown { font:700 44px var(--font); font-variant-numeric:tabular-nums; text-align:center; letter-spacing:2px }
 .event-box .row { display:grid; grid-template-columns:22px 1fr auto auto; gap:6px; align-items:center; font-size:13px; padding:2px 0 }
@@ -331,7 +331,7 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .dev-diff { flex-direction:row; align-items:center; justify-content:space-between; gap:12px; font-size:13px }
 .dev-diff span { display:flex; align-items:center; gap:10px; flex:1; max-width:340px } .dev-diff output { font:700 14px var(--font); color:var(--ink); min-width:44px }
 /* Segments: the live banner, the result, the leaderboards */
-.seg-banner { position:absolute; left:50%; top:96px; transform:translateX(-50%); z-index:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 18px 10px; border-radius:16px; color:#fff; pointer-events:none; box-shadow:0 10px 26px rgba(0,0,0,.35); min-width:260px }
+.seg-banner { position:absolute; left:50%; top:300px; transform:translateX(-50%); z-index:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 18px 10px; border-radius:16px; color:#fff; pointer-events:none; box-shadow:0 10px 26px rgba(0,0,0,.35); min-width:260px }
 .seg-banner.kom { background:radial-gradient(circle, #c91a09 3px, transparent 3.5px) 0 0 / 14px 14px, #f4f4f4; color:#1b2a34 } .seg-banner.sprint { background:#2d8a48 }
 .seg-banner b { font:700 16px var(--font) } .seg-banner small { font:600 12.5px var(--font) }
 .seg-bar { width:100%; height:6px; border-radius:3px; background:rgba(0,0,0,.18); overflow:hidden } .seg-bar i { display:block; height:100%; background:var(--accent) }
@@ -465,6 +465,22 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .stats.col .finish { grid-row:auto }
 .stats.col { grid-auto-flow:row; grid-auto-columns:auto; grid-template-columns:150px; gap:6px }
 .ctrl { display:flex; flex-direction:column; gap:8px; padding:12px 16px; width:min(400px, calc(100vw - 32px)) }
+/* The road ahead: the next kilometres' profile, the grade now, the lap. Under the road figures, like Zwift's. */
+.ahead { width:min(520px, calc(100vw - 32px)); padding:10px 14px 8px } .ahead canvas { display:block; width:100%; height:78px; border-radius:8px }
+.ahead .lap { display:flex; align-items:center; gap:10px; margin-top:6px; font:700 12px var(--font); color:var(--muted); letter-spacing:.5px; text-transform:uppercase }
+.ahead .lap i { flex:1; height:6px; border-radius:3px; background:var(--edge); overflow:hidden; display:block } .ahead .lap i b { display:block; height:100%; background:var(--accent) }
+/* Riders around: the road's order, me in the middle; in a race, my place. */
+.board { width:300px; padding:10px 12px; font-size:13px }
+.board .head { display:flex; align-items:baseline; gap:8px; margin:0 0 6px; font:700 13px var(--font); color:var(--muted); text-transform:uppercase; letter-spacing:.5px }
+.board .head b { font:800 28px/1 var(--font); color:var(--ink) } .board .head b small { font:700 13px var(--font); color:var(--muted) }
+.board .row { display:grid; grid-template-columns:52px 1fr auto auto; gap:0 8px; align-items:center; padding:3px 6px; border-radius:8px; font-variant-numeric:tabular-nums; white-space:nowrap }
+.board .row .gap { font:700 13px var(--font); color:var(--muted) } .board .row.ahead-of .gap { color:#ff8a5a } .board .row.behind .gap { color:#5bd36a }
+.board .row .name { overflow:hidden; text-overflow:ellipsis } .board .row .name small { color:var(--muted); margin-left:4px }
+.board .row .wkg { font:700 12px var(--font) } .board .row .wkg small { font-weight:600; color:var(--muted) } .board .row .km { font-size:11.5px; color:var(--muted) }
+.board .row.me { background:var(--accent); color:#1b2a34 } .board .row.me .gap, .board .row.me .km, .board .row.me .wkg small, .board .row.me .name small { color:#1b2a34; opacity:.8 }
+.board .more { margin:4px 6px 0; font-size:11.5px; color:var(--muted) }
+/* Power of the last minutes along the bottom, by zone. */
+.strip { width:min(760px, calc(100vw - 32px)); height:64px; border-radius:10px; background:color-mix(in srgb, var(--panel) calc(var(--hud-alpha, .9) * 60%), transparent) }
 .ctrl .ride-head { margin:0 } .ctrl .ride-head span { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end }
 .map { padding:10px; width:min(520px, calc(100vw - 32px)) }
 .map.round { width:240px; height:240px; padding:0; border-radius:50%; background:none !important; border:0; box-shadow:0 12px 30px rgba(0,0,0,.45) }
@@ -893,6 +909,9 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     <!-- HUD widgets: each one placed by the rider (⚙), see placeHud -->
     <div class="block panel stats hud" id="stats" data-w="stats"></div>
     <div class="block panel hud zones" id="zones" data-w="zones"></div>
+    <div class="block panel hud ahead" id="ahead" data-w="ahead"><canvas id="aheadCanvas"></canvas><div class="lap" id="aheadLap"></div></div>
+    <div class="block panel hud board" id="board" data-w="board"></div>
+    <canvas class="hud strip" id="strip" data-w="strip" aria-label="Puissance des dernières minutes"></canvas>
     <div class="block panel hud ctrl" data-w="controls">
       <div class="ride-head">
         <h2 id="courseName"></h2>
@@ -2033,7 +2052,7 @@ function drawSteps(cv, steps, t, pad = { l:0, r:0, t:2, b:0 }) {
 
 function openWorkout(w) {
   ride.ended = false;
-  ride.samples = [];
+  ride.samples = []; ride.powerTrace = [];
   ride.energy = null; // full reserve at the start
   ride.full = []; // one sample a second, for the FIT export
   ride.windows = [];
@@ -2064,7 +2083,7 @@ function openWorkout(w) {
     recordSample();
     recordFull();
     if (ride.auto && ride.state.workout?.target > 0 && Math.round(ride.state.workout.target) !== +$('#watts').value) setPower(ride.state.workout.target);
-    renderStats(); renderZones(); drawProfile(); mixAmbience(); checkEnd();
+    renderStats(); renderZones(); renderStrip(); renderAhead(); renderBoard(); drawProfile(); mixAmbience(); checkEnd();
   };
   startAmbience().catch(() => {});
   resize();
@@ -2094,7 +2113,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
   $('.map').classList.toggle('round', kind === 'city'); // open worlds get the round minimap
   const zombie = kind === 'zombie';
   ride.ended = false;
-  ride.samples = [];
+  ride.samples = []; ride.powerTrace = [];
   ride.energy = null; // full reserve at the start
   ride.full = []; // one sample a second, for the FIT export
   ride.windows = [];
@@ -2139,7 +2158,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); renderFair(); renderZones(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); renderFair(); renderZones(); renderStrip(); renderAhead(); renderBoard(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -2375,20 +2394,20 @@ function renderStats() {
 // ---------- customizable ride HUD: presets, drag and drop, what to show, size and opacity (saved per profile) ----------
 // Widget x, y are fractions of the free space (0 left/top, 1 right/bottom), so a layout fits any screen.
 const HUD_PRESETS = {
-  cockpit: { v:2, name:'Cockpit', zones:{ x:0, y:0 }, stats:{ x:0.5, y:0 }, controls:{ x:1, y:0 }, power:{ x:0, y:1 }, map:{ x:1, y:1 }, mirror:{ x:0.5, y:0.3 }, col:false, hide:[], scale:1, alpha:0.85 },
-  sides: { v:2, name:'Côtés', zones:{ x:0, y:0 }, stats:{ x:0, y:0.55 }, controls:{ x:1, y:0 }, power:{ x:0.5, y:1 }, map:{ x:1, y:0.55 }, mirror:{ x:0.5, y:0 }, col:true, hide:[], scale:1, alpha:0.85 },
-  minimal: { v:2, name:'Minimal', zones:{ x:0, y:0 }, stats:{ x:0.5, y:0 }, controls:{ x:1, y:0 }, power:{ x:0, y:1 }, map:{ x:0.5, y:1, off:true }, mirror:{ x:1, y:0.2 }, col:true, hide:['distance', 'ele', 'time', 'session', 'wave', 'sprints'], scale:0.85, alpha:0.4 },
-  phone: { v:2, name:'Mobile', zones:{ x:0, y:0.2 }, stats:{ x:1, y:0.2 }, controls:{ x:0.5, y:0 }, power:{ x:0.5, y:1 }, map:{ x:0.5, y:0.8 }, mirror:{ x:1, y:0.16 }, col:true, hide:['ele'], scale:0.9, alpha:0.85 },
+  cockpit: { v:3, name:'Cockpit', zones:{ x:0, y:0 }, stats:{ x:0.5, y:0 }, ahead:{ x:0.5, y:0.13 }, controls:{ x:1, y:0 }, map:{ x:1, y:0.34 }, board:{ x:1, y:1 }, strip:{ x:0.32, y:1 }, power:{ x:0, y:1 }, mirror:{ x:0.5, y:0.4 }, col:false, hide:[], scale:1, alpha:0.85 },
+  sides: { v:3, name:'Côtés', zones:{ x:0, y:0 }, stats:{ x:0, y:0.5 }, ahead:{ x:0.5, y:0 }, board:{ x:1, y:0.35 }, strip:{ x:0.5, y:1 }, controls:{ x:1, y:0 }, power:{ x:0.5, y:1 }, map:{ x:1, y:0.55 }, mirror:{ x:0.5, y:0 }, col:true, hide:[], scale:1, alpha:0.85 },
+  minimal: { v:3, name:'Minimal', zones:{ x:0, y:0 }, stats:{ x:0.5, y:0 }, ahead:{ x:0.5, y:0.13, off:true }, board:{ x:1, y:1, off:true }, strip:{ x:0.5, y:1, off:true }, controls:{ x:1, y:0 }, power:{ x:0, y:1 }, map:{ x:0.5, y:1, off:true }, mirror:{ x:1, y:0.2 }, col:true, hide:['distance', 'ele', 'time', 'session', 'wave', 'sprints'], scale:0.85, alpha:0.4 },
+  phone: { v:3, name:'Mobile', zones:{ x:0, y:0.2 }, stats:{ x:1, y:0.2 }, ahead:{ x:0.5, y:0.5, off:true }, board:{ x:1, y:1, off:true }, strip:{ x:0.5, y:1, off:true }, controls:{ x:0.5, y:0 }, power:{ x:0.5, y:1 }, map:{ x:0.5, y:0.8 }, mirror:{ x:1, y:0.16 }, col:true, hide:['ele'], scale:0.9, alpha:0.85 },
 };
-const HUD_WIDGETS = { zones:'Cockpit (watts, zones, vitesses)', stats:'Route (vitesse, pente, distance…)', controls:'Commandes', power:'Puissance (démo)', map:'Profil / carte', mirror:'Rétro (zombies)' };
+const HUD_WIDGETS = { zones:'Cockpit (watts, zones, vitesses)', stats:'Route (vitesse, pente, distance…)', ahead:'Les prochains km', board:'Coureurs autour', strip:'Puissance des dernières minutes', controls:'Commandes', power:'Puissance (démo)', map:'Profil / carte', mirror:'Rétro (zombies)' };
 const STAT_KEYS = {
   workout:['energy', 'target', 'hr', 'cadence', 'interval', 'session', 'speed', 'distance'], zombie:['speed', 'gap', 'wave', 'time', 'sprints'],
-  ride:['energy', 'hr', 'cadence', 'speed', 'grade', 'draft', 'distance', 'ele', 'time', 'ghost'],
+  ride:['energy', 'hr', 'cadence', 'avg', 'kj', 'speed', 'grade', 'draft', 'distance', 'ele', 'time', 'ghost'],
 };
-const STAT_NAMES = { power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints', ghost:'Fantôme', hr:'Cardio', cadence:'Cadence', draft:'Aspiration', energy:'Réserve' };
+const STAT_NAMES = { avg:'Moyenne', kj:'Énergie (kJ)', power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints', ghost:'Fantôme', hr:'Cardio', cadence:'Cadence', draft:'Aspiration', energy:'Réserve' };
 const defaultHud = () => structuredClone(HUD_PRESETS[innerWidth <= 700 ? 'phone' : 'cockpit']);
 // Layouts saved before the cockpit (v2) start over from the default.
-const hud = () => (current?.hud?.v === 2 ? current.hud : null) ?? defaultHud();
+const hud = () => (current?.hud?.v === 3 ? current.hud : null) ?? defaultHud();
 
 function placeHud() {
   if ($('#ride').hidden) return;
@@ -2416,7 +2435,7 @@ function placeHud() {
 }
 
 function editHud(on) {
-  if (on && current.hud?.v !== 2) current.hud = defaultHud();
+  if (on && current.hud?.v !== 3) current.hud = defaultHud();
   $('#ride').classList.toggle('editing', on);
   $('#hudEdit').hidden = !on;
   if (!on) { persist(); return }
@@ -4862,6 +4881,8 @@ function cockpitChips(s) {
     s?.hr ? chip('hr', '❤', Math.round(s.hr), 'bpm') : '',
     s?.cadence != null ? chip('cadence', '⟳', Math.round(s.cadence), 'rpm') : '',
     ride.mode !== 'workout' ? chip('draft', 'Aspi', Math.round((s?.draft ?? 0) * 100), '%') : '',
+    s?.elapsed > 30 ? chip('avg', 'Moy', Math.round(s.energy_kj * 1000 / s.elapsed), 'W') : '',
+    s?.energy_kj >= 1 ? chip('kj', '🔥', Math.round(s.energy_kj), 'kJ') : '',
   ];
 }
 function renderZones() {
@@ -4883,6 +4904,101 @@ function renderZones() {
     h('div', { class:'bar', style:`--p:${Math.min(100, pct * 50)}%`, title:'Zones de 0 à 200 % de ta FTP' }, h('i')),
     h('div', { class:'chips-row' }, ...cockpitChips(s)),
     ...(pct >= 1.5 ? [h('div', { class:'wow' }, '🔥 WAHOU 🔥')] : pct >= 1.2 ? [h('div', { class:'wow' }, '🔥 EN FEU 🔥')] : []));
+}
+// The road ahead: the next 3 km of the course coloured by grade, me at the left, the grade now in a bubble, and
+// the lap or the route under it. Not in a city (every rider has their own route) nor in a workout.
+const AHEAD_M = 3000;
+function renderAhead() {
+  const el = $('#ahead'), s = ride.state, c = ride.course;
+  const on = !!s && !!c && ride.mode !== 'workout' && ride.mode !== 'city' && !el.classList.contains('off');
+  el.style.display = on ? '' : 'none';
+  if (!on) return;
+  const cv = $('#aheadCanvas'), dpr = Math.min(devicePixelRatio, 2), [W, H] = [cv.clientWidth, cv.clientHeight];
+  if (!W) return;
+  if (cv.width !== W * dpr || cv.height !== H * dpr) { cv.width = W * dpr; cv.height = H * dpr }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const pts = c.points, total = pts.at(-1).d, from = s.distance - AHEAD_M * 0.12, step = 50;
+  const at = d => { const dd = c.looped ? ((d % total) + total) % total : Math.max(0, Math.min(total, d)); return pts[Math.min(pts.length - 1, Math.round(dd / 10))].ele };
+  let lo = Infinity, hi = -Infinity;
+  for (let d = from; d <= from + AHEAD_M; d += step) { const e = at(d); if (e < lo) lo = e; if (e > hi) hi = e }
+  const span = Math.max(hi - lo, 40), x = d => (d - from) / AHEAD_M * W, y = e => H - 14 - (e - lo) / span * (H - 32);
+  for (let d = from; d < from + AHEAD_M; d += step) {
+    const [a, b] = [at(d), at(d + step)];
+    ctx.fillStyle = gradeColor((b - a) / step * 100);
+    ctx.globalAlpha = d + step <= s.distance ? 0.45 : 0.95;
+    ctx.beginPath(); ctx.moveTo(x(d), H); ctx.lineTo(x(d), y(a)); ctx.lineTo(x(d + step), y(b)); ctx.lineTo(x(d + step), H); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // Me: a marker on the slope; the grade in a bubble above it.
+  const mx = x(s.distance), my = y(at(s.distance));
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(mx, my, 4, 0, Math.PI * 2); ctx.fill();
+  const txt = `${s.grade.toFixed(1)} %`; ctx.font = '700 12px ' + getComputedStyle(document.body).getPropertyValue('--font');
+  const tw = ctx.measureText(txt).width + 12, bx = Math.min(W - tw, Math.max(0, mx - tw / 2));
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(bx, 2, tw, 18, 6); ctx.fill();
+  ctx.fillStyle = '#1b2a34'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, bx + tw / 2, 11);
+  // Kilometre marks along the bottom.
+  ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = '600 10px ' + getComputedStyle(document.body).getPropertyValue('--font'); ctx.textBaseline = 'alphabetic';
+  for (let km = Math.ceil(from / 1000); km * 1000 <= from + AHEAD_M; km++) { const d = km * 1000; if (d > from) ctx.fillText(`${c.looped ? ((km % Math.ceil(total / 1000)) + Math.ceil(total / 1000)) % Math.ceil(total / 1000) : km}`, x(d), H - 2) }
+  const e = s.event, laps = e?.laps ?? 1, lap = c.looped ? total : total, done = c.looped && e ? Math.min(e.done_m, e.race_m) : (c.looped ? s.distance % total : s.distance);
+  const goal = c.looped && e?.kind === 'race' ? e.race_m : total;
+  $('#aheadLap').replaceChildren(h('span', {}, c.looped && e?.kind === 'race' ? `Tour ${Math.min(laps, Math.floor(done / lap) + 1)}/${laps}` : c.looped ? `Tour ${(s.laps ?? 0) + 1}` : 'Parcours'),
+    h('i', {}, h('b', { style:`width:${(Math.min(1, done / goal) * 100).toFixed(1)}%` })), h('span', {}, `${((goal - Math.min(done, goal)) / 1000).toFixed(1)} km`));
+}
+
+// Riders around me, in the road's order: the ones ahead above me, the ones behind below, with their gap in time
+// at my speed, their W/kg and their distance. In a race, my place; in an event, the entrants' ranks.
+const BOARD_ROWS = 12;
+function renderBoard() {
+  const el = $('#board'), s = ride.state;
+  const on = !!s && ride.mode !== 'workout' && !el.classList.contains('off');
+  el.style.display = on ? '' : 'none';
+  if (!on) return;
+  const total = ride.course?.points.at(-1).d ?? 0, looped = !!ride.course?.looped, v = Math.max(2, s.speed_kmh / 3.6);
+  const gapOf = o => { let g = o.distance - s.distance; if (looped && total) { g = ((g % total) + total) % total; if (g > total / 2) g -= total } return g };
+  const e = s.event, cats = new Map((e?.board ?? []).map(r => [r.name, r.cat]));
+  const rows = (s.others ?? []).filter(o => ride.mode !== 'city' || o.pos).map(o => ({ o, g: ride.mode === 'city' ? 0 : gapOf(o) })).sort((a, b) => b.g - a.g);
+  const me = { o:{ name:current.name, country:current.country, wkg:s.power / current.weightKg, distance:s.distance, speed_kmh:s.speed_kmh }, g:0, me:true };
+  const i = rows.findIndex(r => r.g <= 0), half = Math.floor(BOARD_ROWS / 2);
+  const ahead = rows.slice(Math.max(0, (i < 0 ? rows.length : i) - half), i < 0 ? rows.length : i), behind = rows.slice(i < 0 ? rows.length : i, (i < 0 ? rows.length : i) + BOARD_ROWS - ahead.length);
+  const fmtGap = g => { const t = Math.abs(g) / v; return (g > 0 ? '-' : '+') + (t >= 60 ? `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}` : `0:${String(Math.floor(t)).padStart(2, '0')}`) };
+  const row = r => h('div', { class:'row' + (r.me ? ' me' : r.g > 0 ? ' ahead-of' : ' behind') },
+    h('span', { class:'gap' }, r.me ? '' : ride.mode === 'city' ? '' : fmtGap(r.g)),
+    h('span', { class:'name', title:r.o.name }, `${r.o.bot ? '🤖 ' : ''}${r.o.bot ? r.o.name.split(' · ')[0] : r.o.name}${r.o.country ? ' ' + flag(r.o.country) : ''}`, cats.get(r.o.name) && !r.me ? catChip(cats.get(r.o.name)) : ''),
+    h('span', { class:'wkg' }, (r.o.wkg ?? 0).toFixed(1), h('small', {}, ' w/kg')),
+    h('span', { class:'km' }, ride.mode === 'city' ? '' : `${(r.o.distance / 1000).toFixed(1)} km`));
+  const head = e?.kind === 'race' && e.phase === 'live' ? h('div', { class:'head' }, h('b', {}, e.finish ? `${e.finish[0]}e` : `${e.rank}e`, h('small', {}, ` / ${e.of}`)), h('span', {}, e.name))
+    : h('div', { class:'head' }, h('b', {}, rows.length + 1), h('span', {}, rows.length ? 'sur la route autour de toi' : 'seul sur la route'));
+  el.replaceChildren(head, ...ahead.map(row), row(me), ...behind.map(row), (s.others?.length ?? 0) > ahead.length + behind.length ? h('div', { class:'more' }, `+${s.others.length - ahead.length - behind.length} autres autour`) : '');
+}
+
+// Power of the last ten minutes along the bottom, a bar per sample, coloured by zone.
+const STRIP_S = 600;
+function renderStrip() {
+  const el = $('#strip'), s = ride.state;
+  const on = !!s && !el.classList.contains('off');
+  el.style.display = on ? '' : 'none';
+  if (!on) return;
+  ride.powerTrace ??= [];
+  if (!ride.powerTrace.length || s.elapsed - ride.powerTrace.at(-1)[0] >= 1) ride.powerTrace.push([s.elapsed, s.power]);
+  while (ride.powerTrace.length && ride.powerTrace[0][0] < s.elapsed - STRIP_S) ride.powerTrace.shift();
+  const dpr = Math.min(devicePixelRatio, 2), [W, H] = [el.clientWidth, el.clientHeight];
+  if (!W) return;
+  if (el.width !== W * dpr || el.height !== H * dpr) { el.width = W * dpr; el.height = H * dpr }
+  const ctx = el.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const ftp = current.ftp || 200, top = Math.max(ftp * 1.5, ...ride.powerTrace.map(t => t[1])) * 1.05, x0 = s.elapsed - STRIP_S;
+  for (const [t, p] of ride.powerTrace) {
+    const pct = p / ftp;
+    ctx.fillStyle = FTP_ZONES.find(z => pct < z[0])[3];
+    ctx.fillRect((t - x0) / STRIP_S * W, H - p / top * (H - 6), Math.max(1.2, W / STRIP_S), p / top * (H - 6));
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(0, H - ftp / top * (H - 6)); ctx.lineTo(W, H - ftp / top * (H - 6)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = '600 10px ' + getComputedStyle(document.body).getPropertyValue('--font'); ctx.textAlign = 'left';
+  ctx.fillText(`FTP ${ftp} W`, 4, H - ftp / top * (H - 6) - 3);
+  ctx.textAlign = 'right'; ctx.fillText('10 min', W - 4, 11);
 }
 addEventListener('keydown', e => {
   if ($('#ride').hidden || !$('#menu').hidden || e.target.matches?.('input, textarea')) return;
