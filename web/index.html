@@ -2320,7 +2320,7 @@ function zombieNews() {
 }
 
 function renderStats() {
-  queueMicrotask(placeHud); // stats change size: keep every widget where the rider put it
+  // Widgets that change size (digits, a chip) are re-placed by the ResizeObserver below, not every frame.
   const s = ride.state ?? { power:0, speed_kmh:0, grade:0, distance:0, ele:ride.course?.points[0].ele ?? 0, elapsed:0 };
   const t = Math.floor(s.elapsed), hms = `${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
   // key: what the rider can hide from the HUD (⚙)
@@ -2395,15 +2395,24 @@ function placeHud() {
   const L = hud(), box = $('#ride').getBoundingClientRect();
   document.documentElement.style.setProperty('--hud-alpha', L.alpha);
   $('#stats').classList.toggle('col', L.col);
-  for (const el of document.querySelectorAll('#ride .hud')) {
+  const els = [...document.querySelectorAll('#ride .hud')];
+  for (const el of els) {
     const c = L[el.dataset.w] ?? HUD_PRESETS.cockpit[el.dataset.w] ?? { x:0, y:0 }; // a widget newer than the saved layout
     el.classList.toggle('off', !!c.off && el.dataset.w !== 'controls'); // pause and turns must stay reachable
     el.style.transform = `scale(${L.scale})`;
-    const r = el.getBoundingClientRect();
-    el.style.left = `${c.x * Math.max(0, box.width - r.width)}px`;
-    el.style.top = `${c.y * Math.max(0, box.height - r.height)}px`;
   }
+  const rects = els.map(el => el.getBoundingClientRect()); // all reads, then all writes: one layout, not one per widget
+  els.forEach((el, i) => {
+    const c = L[el.dataset.w] ?? HUD_PRESETS.cockpit[el.dataset.w] ?? { x:0, y:0 };
+    el.style.left = `${c.x * Math.max(0, box.width - rects[i].width)}px`;
+    el.style.top = `${c.y * Math.max(0, box.height - rects[i].height)}px`;
+  });
   if (ride.course) drawProfile();
+}
+{
+  let placing = 0;
+  const ro = new ResizeObserver(() => { cancelAnimationFrame(placing); placing = requestAnimationFrame(placeHud) });
+  for (const el of document.querySelectorAll('#ride .hud')) ro.observe(el);
 }
 
 function editHud(on) {
@@ -2527,11 +2536,17 @@ function drawProfile() {
   }
   const cv = $('#profileCanvas'), dpr = Math.min(devicePixelRatio, 2);
   const [W, H] = [cv.clientWidth, cv.clientHeight];
-  cv.width = W * dpr; cv.height = H * dpr;
+  if (cv.width !== W * dpr || cv.height !== H * dpr) { cv.width = W * dpr; cv.height = H * dpr } // resizing clears and reallocates: only when needed
   const ctx = cv.getContext('2d');
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
   const pts = ride.course.points, total = pts.at(-1).d;
-  const lo = Math.min(...pts.map(p => p.ele)), hi = Math.max(...pts.map(p => p.ele));
+  if (ride.course.span?.n !== pts.length) { // the course's lowest and highest point, once
+    let lo = Infinity, hi = -Infinity;
+    for (const p of pts) { if (p.ele < lo) lo = p.ele; if (p.ele > hi) hi = p.ele }
+    ride.course.span = { n:pts.length, lo, hi };
+  }
+  const { lo, hi } = ride.course.span;
   const pad = { l:60, r:8, t:8, b:18 };
   const x = d => pad.l + d / total * (W - pad.l - pad.r);
   profileLayout = { left:pad.l, width:W - pad.l - pad.r, total };
@@ -3684,7 +3699,7 @@ async function loadBuildings(id) {
   if (!w3.T) return;
   w3.bld = parseBuildings(buf, w3.T);
   for (const m of w3.chunks.values()) { w3.group.remove(m); m.traverse(o => o.geometry?.dispose()) }
-  w3.chunks.clear(); // rebuilt with flat ground under the new buildings
+  w3.chunks.clear(); w3.chunksSettled = null; // rebuilt with flat ground under the new buildings
 }
 
 function farMesh(T) {
@@ -3957,6 +3972,7 @@ function figure(C, i, p, jump, raise, swing, wave = 0) {
   // Hand of the raised right arm: shoulder + 0.62 m along the arm.
   if (p.flag) C.parts.flag.setMatrixAt(i, L.compose(v.set(0, 1.42 - Math.cos(right) * 0.62, 0.43 + Math.sin(right) * 0.62), q.setFromEuler(e.set(0, wave, 0)), one).premultiply(B));
   else C.parts.flag.setMatrixAt(i, L.makeScale(0, 0, 0));
+  for (const m of C.meshes) m.instanceMatrix.addUpdateRange(i * 16, 16); // only this figure goes to the GPU, not the whole crowd
 }
 
 function updateCrowd(dt) {
@@ -4119,7 +4135,7 @@ function exit3d() {
   Object.assign(w3, { far:null, road:null, arrows:null, bld:null, group:null, T:null, bike:null, eagle:null, horde:null, bonus:null, mirror:null, sky:null, lamp:null, crowd:null, cars:null, pigeons:null, clouds:null, rain:null, weather:null, ghost:null, gt:0, landmarks:null, propCells:null });
   $('#mirror').hidden = true;
   renderNight();
-  w3.chunks.clear();
+  w3.chunks.clear(); w3.chunksSettled = null;
   w3.others.clear();
   $('#ride').classList.remove('world3d');
   world.visible = true;
@@ -4401,6 +4417,8 @@ function update3d(dt) {
 
   // Voxel chunks around the rider: build nearest first (one per frame), drop far ones.
   const [ci, cj] = [Math.floor((p.x - T.ox) / T.cx / CHUNK), Math.floor((p.z - T.oz) / T.cz / CHUNK)];
+  const here = `${ci},${cj}`;
+  if (w3.chunksSettled === here) return; // same chunk as last frame and nothing left to build
   const wanted = [];
   const R = T.island ? CHUNK_RADIUS + 1 : CHUNK_RADIUS; // island chunks are 160 m: see a bit further
   for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
@@ -4408,6 +4426,7 @@ function update3d(dt) {
     if (i >= 0 && j >= 0 && i * CHUNK < T.w && j * CHUNK < T.h && !w3.chunks.has(`${i},${j}`)) wanted.push([di * di + dj * dj, i, j]);
   }
   wanted.sort((a, b) => a[0] - b[0]);
+  w3.chunksSettled = wanted.length ? null : here;
   for (const [, i, j] of wanted.slice(0, w3.chunks.size ? 1 : 9)) {
     const m = chunkMesh(T, i, j), bld = w3.bld?.get(`${i},${j}`);
     if (bld) m.add(buildingMesh(bld));
@@ -4485,7 +4504,9 @@ function mixAmbience() {
   const high = Math.max(0, Math.min(1, ((s?.ele ?? 0) - 1500) / 800)); // fewer birds, more wind up high
   const near = { cow:Infinity, marmot:Infinity, deer:Infinity, chamois:Infinity };
   let [forest, grass, water] = [0, 0.6, 0]; // no terrain file: open meadow, no animals
-  if (w3.T && w3.bike) {
+  if (w3.T && w3.bike && amb.scan && amb.scan.key === `${Math.floor((w3.bike.position.x - w3.T.ox) / w3.T.cx / 3)},${Math.floor((w3.bike.position.z - w3.T.oz) / w3.T.cz / 3)}`) {
+    ({ forest, grass, water } = amb.scan); Object.assign(near, amb.scan.near); // same 15 m square as last time: the 7 000 cells read then still hold
+  } else if (w3.T && w3.bike) {
     const T = w3.T, p = w3.bike.position;
     const [c0, r0] = [Math.floor((p.x - T.ox) / T.cx), Math.floor((p.z - T.oz) / T.cz)];
     let [n, f, g, wd] = [0, 0, 0, Infinity];
@@ -4501,6 +4522,7 @@ function mixAmbience() {
       const kind = animalAt(T, c0 + dc, r0 + dr);
       if (kind) near[kind] = Math.min(near[kind], Math.hypot(dc * T.cx, dr * T.cz));
     }
+    amb.scan = { key:`${Math.floor(c0 / 3)},${Math.floor(r0 / 3)}`, forest, grass, water, near:{ ...near } };
   }
   const day = w3.sky?.visible ? 0 : 1; // night ride: birds and herds go quiet, streams and wind stay
   const set = (k, v) => amb.gains[k].gain.setTargetAtTime(v, t, 1.5);
@@ -4918,11 +4940,15 @@ async function connectPad() {
 }
 
 // Twice a second: what the sensors say goes to the server (the trainer's watts win over the demo slider).
+// Only when a figure changed, and every 3 s regardless: a steady ride is a request every 3 s, not 2 a second.
+let pushed = { q:'', at:0 };
 function pushSensors() {
   if ($('#ride').hidden || !ride.session || (!bt.trainer && !bt.hr)) return;
   const hr = bt.hr?.bpm ? `&hr=${bt.hr.bpm}` : '';
-  const q = bt.trainer ? `w=${Math.round(bt.trainer.power)}${bt.trainer.cadence != null ? `&cad=${Math.round(bt.trainer.cadence)}` : ''}&src=bt` : `w=${+$('#watts').value}`;
-  fetch(`/power?session=${ride.session}&${q}${hr}`).catch(() => {});
+  const q = (bt.trainer ? `w=${Math.round(bt.trainer.power)}${bt.trainer.cadence != null ? `&cad=${Math.round(bt.trainer.cadence)}` : ''}&src=bt` : `w=${+$('#watts').value}`) + hr;
+  if (q === pushed.q && performance.now() - pushed.at < 3000) return;
+  pushed = { q, at:performance.now() };
+  fetch(`/power?session=${ride.session}&${q}`).catch(() => {});
 }
 setInterval(pushSensors, 500);
 setInterval(driveTrainer, 1000);

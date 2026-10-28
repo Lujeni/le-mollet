@@ -49,7 +49,7 @@ compte*).
 
 ## Giving roles
 
-Roles are given by account name, in the server's database, at once (even while it runs):
+Roles are given by account name, in the server's database; the server rereads them every 5 s, even while it runs:
 
 ```sh
 cargo run -- role set julien admin --note "le patron"    # or organizer, rider

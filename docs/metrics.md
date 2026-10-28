@@ -47,7 +47,7 @@ Labels only take values from fixed sets (routes, kinds, reasons) or track ids, n
 | `le_mollet_frame_bytes_total` | counter | bytes of ride frames sent |
 | `le_mollet_db_seconds` | histogram | `op` (get, put, delete, replace, all) |
 | `le_mollet_db_errors_total` | counter | `op` |
-| `le_mollet_rejected_total` | counter | `reason` (cross_site, not_your_ride, profile_owner) |
+| `le_mollet_rejected_total` | counter | `reason` (cross_site, not_your_ride, profile_owner, rate_limit, host, slow_request, too_many_connections) |
 | `le_mollet_tracks` | gauge | `type` |
 | `le_mollet_trainer_connected`, `_uptime_seconds`, `_resident_memory_bytes` | gauge | |
 

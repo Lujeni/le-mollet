@@ -27,7 +27,8 @@ guests and in cloud mode.
   - A race finish that shows a rider too strong for the race's ranks (95 % of the race's best effort) is kept
     **out of the results** ("above rank"), and moves the rider up.
 - **Profile ids stay secret.** At home a profile id is the only key to a profile, so the server never sends one
-  to anybody: events and clubs mark the caller's own entries with `me` instead. In cloud mode a profile belongs
+  to anybody: events and clubs mark the caller's own entries with `me` instead, and leaderboards keep a hash of
+  the id, never the id. In cloud mode a profile belongs
   to the account that registered it, and only it may use its id.
 
 ## 2. The checks (`rider::Check`)
@@ -64,7 +65,20 @@ checks are for.
 - **CSRF**: every call but the page itself and the audio is refused when the browser says
   it comes from another site (`Sec-Fetch-Site: cross-site|same-site`, or an `Origin` that is not this host).
   A page elsewhere cannot make a visitor's browser cancel an event or leave a club.
-- **Passwords**: Argon2id hashes; five wrong passwords lock a name for 15 minutes (docs/rbac.md).
+- **Passwords**: Argon2id hashes; five wrong passwords from one client lock that name for that client for 15
+  minutes (another client cannot lock you out), and sign-ups and sign-ins are limited to 10 an hour per client.
+- **Names**: in cloud mode the name shown to others is the account's (with the club tag the server knows), never
+  the page's word; at home it is free text, as there is no account.
+- **Budgets**, per client address (behind the reverse proxy of cloud mode, the address it forwards): a world
+  generation 3 per 10 min, an event or a club 10 an hour, a profile update 30 an hour; 20 profiles per account,
+  500 entrants per event, 20 sessions per account, 12 open worlds in all (a new one waits until one is empty).
+- **Connections**: a request's head must arrive within 10 s, a ride frame must be taken within 5 s (else the
+  rider leaves the road), 64 connections per address and 4096 in all.
+- **Host**: a request for a name that is not ours is refused (421), so a page elsewhere cannot point its own
+  domain at a home server (DNS rebinding) and act as its admin. Ours: localhost, IP addresses, `.local` names,
+  the host of `LE_MOLLET_PUBLIC_URL`, and `LE_MOLLET_HOSTS` (comma-separated).
+- **Headers** on every response: `X-Frame-Options: DENY` and `frame-ancestors 'none'` (no clickjacking),
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`.
 - **Cookies**: the sign-in cookie is `HttpOnly; SameSite=Lax`, and `Secure` when `LE_MOLLET_PUBLIC_URL` is https.
 - **Cloud mode** sits behind an https reverse proxy: every request then comes from loopback, so a ride is bound
   to the signed-in account, not to an address.
@@ -74,4 +88,3 @@ checks are for.
 - A second power source (pedals or a crank meter next to the trainer), compared second by second, for a
   `verified` level that records and the Légende rank would ask for.
 - A moderation screen over `/admin/flags`, and a way to clear a flagged ride.
-- Rate limits per address and per account.

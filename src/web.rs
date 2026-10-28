@@ -110,7 +110,7 @@ impl Fnv {
 
 fn gzip(raw: &[u8]) -> Vec<u8> {
     use std::io::Write;
-    let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+    let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast()); // as small as best on terrain, 4x faster
     e.write_all(raw).expect("gzip into memory");
     e.finish().expect("gzip into memory")
 }
@@ -194,9 +194,9 @@ impl Track {
 
     /// One of its files gzipped, once (`course`, `terrain`, `buildings`).
     fn gz(&self, key: &'static str, raw: &[u8]) -> Arc<Vec<u8>> {
-        if let Some(z) = self.gz.lock().unwrap().get(key) { return z.clone() }
-        let z = Arc::new(gzip(raw)); // outside the lock: a big terrain takes a moment
-        self.gz.lock().unwrap().insert(key, z.clone());
+        if let Some(z) = self.gz.lock().unwrap_or_else(|e| e.into_inner()).get(key) { return z.clone() }
+        let z = Arc::new(tokio::task::block_in_place(|| gzip(raw))); // outside the lock, off the async threads: a big terrain takes a moment
+        self.gz.lock().unwrap_or_else(|e| e.into_inner()).insert(key, z.clone());
         z
     }
 
@@ -251,7 +251,7 @@ impl Track {
         json!({
             "id": self.id, "name": c.name, "country": c.country, "length": c.length(), "gain": c.elevation_gain().round(), "profile": profile,
             "terrain": self.terrain.is_some(), "looped": c.looped,
-            "relief": self.relief.map(Relief::label), "riders": self.riders.lock().unwrap().values().filter(|p| !p.bot).count(),
+            "relief": self.relief.map(Relief::label), "riders": self.riders.lock().unwrap_or_else(|e| e.into_inner()).values().filter(|p| !p.bot).count(),
             "city": self.city.as_ref().map(|c| c.streets.len()), "buildings": self.buildings.is_some(), "district": !self.district.is_empty(), "ortho": !self.ortho.is_empty(),
             "island": self.city.as_ref().is_some_and(|c| c.island), "props": self.city.as_ref().map(|c| &c.props), "starts": self.city.as_ref().map(|c| &c.starts), "bbox": self.bbox(),
             "preview": self.city.as_ref().map(|c| &c.preview), "preview_w": self.city.as_ref().map(|c| c.preview_w),
@@ -312,7 +312,24 @@ pub struct App {
     /// Who opened each ride: only they may steer it (power, pause, turns...).
     owners: Mutex<HashMap<u64, Owner>>,
     started: std::time::Instant,
+    /// Rate limits: calls left in the window and when it started, by "<what>:<client>" (docs/security.md).
+    limits: Mutex<HashMap<String, (u32, std::time::Instant)>>,
+    /// Open connections by client address, capped.
+    conns: Mutex<HashMap<std::net::IpAddr, u32>>,
+    /// Roles, reread from the database every few seconds (`le-mollet role` takes effect within that).
+    roles: Mutex<(Roles, std::time::Instant)>,
+    /// Last Ride On sent by each session: one every few seconds, so nobody floods an inbox.
+    rideons: Mutex<HashMap<u64, std::time::Instant>>,
 }
+
+/// Connections at once: in all, and per client address.
+const MAX_CONNS: usize = 4096;
+const MAX_CONNS_PER_IP: u32 = 64;
+/// A request's head must arrive within this; a ride frame must be taken within this, else the client is gone.
+const READ_TIMEOUT: Duration = Duration::from_secs(10);
+const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
+/// Roles are reread from the database after this.
+const ROLES_TTL: Duration = Duration::from_secs(5);
 
 /// A ride's owner: the browser's address and, signed in, the account.
 type Owner = (Option<std::net::IpAddr>, Option<u64>);
@@ -386,6 +403,10 @@ impl App {
             riders: Mutex::new(Riders::load(&db)?),
             owners: Mutex::new(HashMap::new()),
             started: std::time::Instant::now(),
+            limits: Mutex::new(HashMap::new()),
+            conns: Mutex::new(HashMap::new()),
+            roles: Mutex::new((Roles::load(&db)?, std::time::Instant::now())),
+            rideons: Mutex::new(HashMap::new()),
             db,
         })
     }
@@ -399,17 +420,33 @@ impl App {
     }
 
     /// Who sent a request, from its session cookie and, in local mode, where from: the server's own PC is admin.
-    /// Only signed-in requests read the roles file, so `le-mollet role` takes effect at once without a restart.
+    /// Roles come from the database, reread every `ROLES_TTL`: `le-mollet role` takes effect within seconds.
     /// Never trusted in cloud mode: behind a reverse proxy every request comes from loopback.
-    /// ponytail: one small database read per signed-in request; cache the roles if it ever shows up in a profile
     fn identify(&self, cookie: Option<&str>, peer: Option<std::net::IpAddr>) -> Identity {
         let owner = self.mode == Mode::Local && peer.is_some_and(|ip| ip.is_loopback());
-        let mut who = match cookie.and_then(|c| self.sessions.lock().unwrap().get(c).filter(|s| s.expires > std::time::SystemTime::now()).cloned()) {
-            Some(s) => Identity { role: Roles::load(&self.db).map_or(Role::Rider, |r| r.role_of(s.account)), name: Some(s.name), account: Some(s.account) },
+        let mut who = match cookie.and_then(|c| self.sessions.lock().unwrap_or_else(|e| e.into_inner()).get(c).filter(|s| s.expires > std::time::SystemTime::now()).cloned()) {
+            Some(s) => Identity { role: self.role_of(s.account), name: Some(s.name), account: Some(s.account) },
             None => Identity::ANONYMOUS,
         };
         if owner { who.role = Role::Admin }
         who
+    }
+
+    fn role_of(&self, account: u64) -> Role {
+        let mut roles = self.roles.lock().unwrap_or_else(|e| e.into_inner());
+        if roles.1.elapsed() > ROLES_TTL && let Ok(r) = Roles::load(&self.db) { *roles = (r, std::time::Instant::now()) }
+        roles.0.role_of(account)
+    }
+
+    /// Whether `client` may do `what` again: `max` times per `window`. Old windows are dropped as they are met.
+    fn allow(&self, what: &str, client: &str, max: u32, window: Duration) -> bool {
+        let mut limits = self.limits.lock().unwrap_or_else(|e| e.into_inner());
+        if limits.len() > 10_000 { limits.retain(|_, (_, t)| t.elapsed() < window) }
+        let e = limits.entry(format!("{what}:{client}")).or_insert((max, std::time::Instant::now()));
+        if e.1.elapsed() > window { *e = (max, std::time::Instant::now()) }
+        if e.0 == 0 { return false }
+        e.0 -= 1;
+        true
     }
 
     /// `/metrics`: the registry (src/metrics.rs), plus what is read off the server's state now.
@@ -418,13 +455,13 @@ impl App {
         let mut g: Vec<metrics::Gauge> = vec![];
         let mut types: std::collections::BTreeMap<&str, f64> = Default::default();
         for t in self.tracks.read().unwrap().iter() {
-            let riders = t.riders.lock().unwrap().values().filter(|p| !p.bot).count();
+            let riders = t.riders.lock().unwrap_or_else(|e| e.into_inner()).values().filter(|p| !p.bot).count();
             g.push(("le_mollet_riders_online", vec![("track", t.id.clone())], riders as f64));
             *types.entry(if t.city.is_some() { "city" } else if t.relief.is_some() { "world" } else if t.course.looped { "loop" } else { "climb" }).or_default() += 1.0;
         }
         g.extend(types.into_iter().map(|(k, n)| ("le_mollet_tracks", vec![("type", k.to_owned())], n)));
         {
-            let events = self.events.lock().unwrap();
+            let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
             for (kind, k) in [(EventKind::Race, "race"), (EventKind::Group, "group")] {
                 let live: Vec<_> = events.events.iter().filter(|e| e.kind == kind && e.phase(now) != Phase::Over).collect();
                 g.push(("le_mollet_events_upcoming", vec![("kind", k.into())], live.len() as f64));
@@ -432,16 +469,16 @@ impl App {
             }
         }
         {
-            let riders = self.riders.lock().unwrap();
+            let riders = self.riders.lock().unwrap_or_else(|e| e.into_inner());
             g.push(("le_mollet_riders_registered", vec![], riders.riders.len() as f64));
             g.push(("le_mollet_riders_flagged", vec![], riders.riders.values().filter(|r| !r.flags.is_empty()).count() as f64));
         }
         {
-            let clubs = self.clubs.lock().unwrap();
+            let clubs = self.clubs.lock().unwrap_or_else(|e| e.into_inner());
             g.push(("le_mollet_clubs", vec![], clubs.clubs.len() as f64));
             g.push(("le_mollet_club_members", vec![], clubs.clubs.iter().map(|c| c.members.len()).sum::<usize>() as f64));
         }
-        let signed_in = self.sessions.lock().unwrap().values().filter(|s| s.expires > std::time::SystemTime::now()).count();
+        let signed_in = self.sessions.lock().unwrap_or_else(|e| e.into_inner()).values().filter(|s| s.expires > std::time::SystemTime::now()).count();
         g.push(("le_mollet_signed_in", vec![], signed_in as f64));
         g.push(("le_mollet_trainer_connected", vec![], self.trainer.is_some() as u8 as f64));
         g.push(("le_mollet_uptime_seconds", vec![], self.started.elapsed().as_secs_f64()));
@@ -459,17 +496,22 @@ impl App {
         json!(real.chain(tracks.iter().filter(|t| t.relief.is_some())).map(|t| t.summary()).collect::<Vec<_>>()).to_string()
     }
 
-    fn add_world(&self, track: Track) -> String {
-        let id = track.id.clone();
+    /// Room for one more world: drops the oldest empty ones past the cap; false when every world is ridden.
+    fn make_room_for_world(&self) -> bool {
         let mut tracks = self.tracks.write().unwrap();
-        tracks.push(Arc::new(track));
-        while tracks.iter().filter(|t| t.relief.is_some()).count() > MAX_WORLDS {
+        while tracks.iter().filter(|t| t.relief.is_some()).count() >= MAX_WORLDS {
             // Worlds are kept in creation order after the climbs: drop the oldest empty one.
-            match tracks.iter().position(|t| t.relief.is_some() && t.riders.lock().unwrap().values().all(|p| p.bot)) {
+            match tracks.iter().position(|t| t.relief.is_some() && t.riders.lock().unwrap_or_else(|e| e.into_inner()).values().all(|p| p.bot)) {
                 Some(i) => drop(tracks.remove(i)),
-                None => break,
+                None => return false,
             }
         }
+        true
+    }
+
+    fn add_world(&self, track: Track) -> String {
+        let id = track.id.clone();
+        self.tracks.write().unwrap().push(Arc::new(track));
         id
     }
 }
@@ -478,13 +520,43 @@ pub async fn serve(addr: &str, app: Arc<App>) -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     spawn_pacers(&app);
     eprintln!("web UI on http://{addr}");
+    let slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONNS));
     loop {
-        let (sock, _) = listener.accept().await?;
+        let (sock, peer) = listener.accept().await?;
+        let Ok(slot) = slots.clone().try_acquire_owned() else { continue }; // full: the client retries
         let app = app.clone();
+        // Per address too, so one client cannot hold every slot.
+        {
+            let mut conns = app.conns.lock().unwrap_or_else(|e| e.into_inner());
+            let n = conns.entry(peer.ip()).or_insert(0);
+            if *n >= MAX_CONNS_PER_IP { metrics::inc("le_mollet_rejected_total", &[("reason", "too_many_connections")]); continue }
+            *n += 1;
+        }
         tokio::spawn(async move {
-            let _ = handle(sock, app).await; // client gone: nothing to do
+            let _ = handle(sock, app.clone()).await; // client gone: nothing to do
+            drop(slot);
+            let mut conns = app.conns.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(n) = conns.get_mut(&peer.ip()) { *n -= 1; if *n == 0 { conns.remove(&peer.ip()); } }
         });
     }
+}
+
+/// Who the client is for rate limits and connection caps: the peer, or behind the reverse proxy of cloud mode
+/// (every peer is loopback then) the address it forwards.
+fn client_ip(req: &str, peer: Option<std::net::IpAddr>, mode: Mode) -> String {
+    if mode == Mode::Cloud && peer.is_some_and(|p| p.is_loopback()) && let Some(ip) = header(req, "x-forwarded-for").and_then(|h| h.split(',').next()).map(str::trim).filter(|s| !s.is_empty()) { return ip.to_owned() }
+    peer.map_or_else(|| "?".into(), |p| p.to_string())
+}
+
+/// The Host the browser asked for must be one of ours: a name a page elsewhere could point at this server (DNS
+/// rebinding) is refused, since in local mode the server's own PC is admin. IP literals, localhost, mDNS names
+/// and the public URL's host are ours.
+fn host_ok(req: &str) -> bool {
+    let Some(host) = header(req, "host") else { return true }; // HTTP/1.0 tools
+    let name = host.trim_start_matches('[').split([']', ':']).next().unwrap_or("").to_ascii_lowercase();
+    name.is_empty() || name == "localhost" || name.ends_with(".local") || name.ends_with(".localhost") || name.parse::<std::net::IpAddr>().is_ok()
+        || std::env::var("LE_MOLLET_PUBLIC_URL").ok().and_then(|u| u.split("://").nth(1).map(|h| h.split(['/', ':']).next().unwrap_or("").to_ascii_lowercase())).is_some_and(|h| h == name)
+        || std::env::var("LE_MOLLET_HOSTS").is_ok_and(|hs| hs.split(',').any(|h| h.trim().eq_ignore_ascii_case(&name)))
 }
 
 fn param<'a>(query: &'a str, key: &str) -> Option<&'a str> {
@@ -560,15 +632,24 @@ fn presence(query: &str, sid: u64) -> Presence {
 
 async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let mut buf = [0u8; 16384]; // an imported workout travels in the query
-    let mut n = sock.read(&mut buf).await?;
-    // A form (sign-in) may come after the head in a later packet: read up to its Content-Length.
-    while let Some(end) = buf[..n].windows(4).position(|w| w == b"\r\n\r\n") {
-        let head = String::from_utf8_lossy(&buf[..end]);
-        let want = header(&head, "content-length").and_then(|l| l.parse::<usize>().ok()).unwrap_or(0);
-        if n >= (end + 4 + want).min(buf.len()) { break }
-        match sock.read(&mut buf[n..]).await? { 0 => break, k => n += k }
-    }
+    // The whole request within READ_TIMEOUT: a client that connects and says nothing holds no task.
+    let read = tokio::time::timeout(READ_TIMEOUT, async {
+        let mut n = sock.read(&mut buf).await?;
+        // A form (sign-in) may come after the head in a later packet: read up to its Content-Length.
+        while let Some(end) = buf[..n].windows(4).position(|w| w == b"\r\n\r\n") {
+            let head = String::from_utf8_lossy(&buf[..end]);
+            let want = header(&head, "content-length").and_then(|l| l.parse::<usize>().ok()).unwrap_or(0);
+            if n >= (end + 4 + want).min(buf.len()) { break }
+            match sock.read(&mut buf[n..]).await? { 0 => break, k => n += k }
+        }
+        Ok::<_, std::io::Error>(n)
+    }).await;
+    let Ok(Ok(n)) = read else { metrics::inc("le_mollet_rejected_total", &[("reason", "slow_request")]); return Ok(()) };
     let req = String::from_utf8_lossy(&buf[..n]);
+    if !host_ok(&req) {
+        metrics::inc("le_mollet_rejected_total", &[("reason", "host")]);
+        return reply(&mut sock, "421 Misdirected Request", "text/plain", b"this server is not reached by that name (LE_MOLLET_PUBLIC_URL or LE_MOLLET_HOSTS names it)").await;
+    }
     let target = req.split_whitespace().nth(1).unwrap_or("/");
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
     let route = route_label(path);
@@ -578,7 +659,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         // Open at home; on a public server only with LE_MOLLET_METRICS_TOKEN as a bearer token.
         let token = std::env::var("LE_MOLLET_METRICS_TOKEN").ok().filter(|t| !t.is_empty());
         let ok = match &token {
-            Some(t) => header(&req, "authorization").is_some_and(|h| h.strip_prefix("Bearer ").is_some_and(|b| b == t)),
+            Some(t) => header(&req, "authorization").is_some_and(|h| h.strip_prefix("Bearer ").is_some_and(|b| same_secret(b, t))),
             None => app.mode == Mode::Local,
         };
         if !ok { return reply(&mut sock, "404 Not Found", "text/plain", b"not found").await }
@@ -588,6 +669,20 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let session: Option<u64> = param(query, "session").and_then(|s| s.parse().ok());
     let peer = sock.peer_addr().ok().map(|a| a.ip());
     let who = app.identify(cookie(&req, SESSION_COOKIE), peer);
+    let client = client_ip(&req, peer, app.mode);
+    // What costs the server something (a password hash, a world, a row that stays) is counted per client.
+    let budget = match path {
+        "/auth/signup" => Some(("auth", 10, 3600)),
+        "/auth/login" => Some(("auth", 10, 3600)),
+        "/worlds/new" => Some(("world", 3, 600)),
+        "/club/create" | "/event/create" => Some(("create", 10, 3600)),
+        "/rider" if param(query, "weight").is_some() => Some(("rider", 30, 3600)),
+        _ => None,
+    };
+    if let Some((what, max, secs)) = budget && !app.allow(what, &client, max, Duration::from_secs(secs)) {
+        metrics::inc("le_mollet_rejected_total", &[("reason", "rate_limit")]);
+        return reply(&mut sock, "429 Too Many Requests", "text/plain", b"too many requests: try again later").await;
+    }
     // Cloud: only the page and the way to sign in are open to strangers.
     // The track files are open data (OSM, IGN...) and the same for everyone: public, so a CDN can keep them.
     let open = matches!(path, "/" | "/whoami" | "/course" | "/terrain" | "/buildings" | "/ortho" | "/district") || path.starts_with("/auth/") || path.starts_with("/audio/");
@@ -597,24 +692,33 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         metrics::inc("le_mollet_rejected_total", &[("reason", "cross_site")]);
         return reply(&mut sock, "403 Forbidden", "text/plain", b"cross-site request").await;
     }
-    // A ride is steered only by whoever opened it; the first call claims a fresh session.
+    // A ride is steered only by whoever opened it: opening the stream claims the session, the other calls need it.
     let owner: Owner = (peer, who.account);
-    if matches!(path, "/power" | "/seek" | "/turn" | "/powerup" | "/pause" | "/emote" | "/events")
-        && let Some(sid) = session
-        && *app.owners.lock().unwrap().entry(sid).or_insert(owner) != owner
-    {
-        metrics::inc("le_mollet_rejected_total", &[("reason", "not_your_ride")]);
-        return reply(&mut sock, "403 Forbidden", "text/plain", b"not your ride").await;
+    if matches!(path, "/power" | "/seek" | "/turn" | "/powerup" | "/pause" | "/emote" | "/events") && let Some(sid) = session {
+        let mine = {
+            let mut owners = app.owners.lock().unwrap_or_else(|e| e.into_inner());
+            if path == "/events" { *owners.entry(sid).or_insert(owner) == owner } else { owners.get(&sid) == Some(&owner) }
+        };
+        if !mine {
+            metrics::inc("le_mollet_rejected_total", &[("reason", "not_your_ride")]);
+            return reply(&mut sock, "403 Forbidden", "text/plain", b"not your ride").await;
+        }
     }
     // A profile id in the query: in cloud mode, only its owner may use it.
     let pid = param(query, "pid").filter(|p| valid_pid(p));
-    if pid.is_some_and(|p| !app.riders.lock().unwrap().may_use(p, who.account)) {
+    if pid.is_some_and(|p| !app.riders.lock().unwrap_or_else(|e| e.into_inner()).may_use(p, who.account)) {
         metrics::inc("le_mollet_rejected_total", &[("reason", "profile_owner")]);
         return reply(&mut sock, "403 Forbidden", "text/plain", b"this profile belongs to another account").await;
     }
     if app.mode == Mode::Cloud && who.account.is_none() && !open {
         return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await;
     }
+    // Cloud: a profile the server does not know yet cannot act (the page registers it on `/rider` first).
+    if app.mode == Mode::Cloud && (path.starts_with("/club") || path.starts_with("/event/")) && pid.is_some_and(|p| !app.riders.lock().unwrap_or_else(|e| e.into_inner()).riders.contains_key(p)) {
+        return reply(&mut sock, "403 Forbidden", "text/plain", b"unknown rider").await;
+    }
+    // Cloud: names come from the account, so nobody appears as someone else.
+    let me_name = who.name.clone().filter(|_| app.mode == Mode::Cloud);
     // The one gate: a permission per endpoint that is not plain riding.
     let needs = match path {
         "/worlds/new" => Some(Perm::CreateWorld),
@@ -640,23 +744,40 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/auth/signup" | "/auth/login", _) if req.starts_with("POST ") => {
             let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
             let (name, password) = (param(form, "name").map(decode).unwrap_or_default(), param(form, "password").map(decode).unwrap_or_default());
-            let key = name.to_ascii_lowercase();
-            // Five wrong passwords for a name: that name waits 15 minutes.
-            let locked = app.login_fails.lock().unwrap().get(&key).is_some_and(|(n, t)| *n >= 5 && t.elapsed().as_secs() < 900);
+            let name = name.trim().to_owned();
+            // Five wrong passwords for a name from one client: that client waits 15 minutes for that name (the
+            // per-client budget above slows the rest).
+            let key = format!("{client}:{}", name.to_ascii_lowercase());
+            let locked = {
+                let mut fails = app.login_fails.lock().unwrap_or_else(|e| e.into_inner());
+                fails.retain(|_, (_, t)| t.elapsed().as_secs() < 900);
+                fails.get(&key).is_some_and(|(n, _)| *n >= 5)
+            };
             let res = if locked { Err("too many tries: wait 15 minutes") } else if path == "/auth/signup" {
-                tokio::task::block_in_place(|| account::signup(&app.db, name.trim(), &password, unix_now())) // the hash takes a while, on purpose
+                tokio::task::block_in_place(|| account::signup(&app.db, &name, &password, unix_now())) // the hash takes a while, on purpose
             } else {
-                tokio::task::block_in_place(|| account::login(&app.db, name.trim(), &password))
+                tokio::task::block_in_place(|| account::login(&app.db, &name, &password))
             };
             match res {
                 Ok(a) => {
                     metrics::inc("le_mollet_signins_total", &[("result", if path == "/auth/signup" { "signup" } else { "ok" })]);
-                    app.login_fails.lock().unwrap().remove(&key);
+                    app.login_fails.lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
                     let id = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
                     let s = Session { account: a.id, name: a.name.clone(), expires: std::time::SystemTime::now() + SESSION_TTL };
                     if let Err(e) = app.db.put("sessions", &id, &s) { eprintln!("sessions: {e}") }
-                    app.sessions.lock().unwrap().insert(id.clone(), s);
-                    let secure = if std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("https://")) { "; Secure" } else { "" };
+                    {
+                        // Expired sessions go; an account keeps its 20 most recent (older browsers sign out).
+                        let mut sessions = app.sessions.lock().unwrap_or_else(|e| e.into_inner());
+                        let now = std::time::SystemTime::now();
+                        let gone: Vec<String> = sessions.iter().filter(|(_, s)| s.expires <= now).map(|(k, _)| k.clone()).collect();
+                        let mut mine: Vec<(String, std::time::SystemTime)> = sessions.iter().filter(|(_, s)| s.account == a.id).map(|(k, s)| (k.clone(), s.expires)).collect();
+                        mine.sort_by_key(|m| m.1);
+                        let extra: Vec<String> = mine.iter().rev().skip(19).map(|m| m.0.clone()).collect();
+                        for k in gone.iter().chain(&extra) { sessions.remove(k); if let Err(e) = app.db.delete("sessions", k) { eprintln!("sessions: {e}") } }
+                        sessions.insert(id.clone(), s);
+                    }
+                    // Cloud sits behind https; LE_MOLLET_PUBLIC_URL=http://... says otherwise (a test on a LAN).
+                    let secure = if app.mode == Mode::Cloud && !std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("http://")) || std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("https://")) { "; Secure" } else { "" };
                     let cookie = format!("{SESSION_COOKIE}={id}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}{secure}", SESSION_TTL.as_secs());
                     let body = json!({ "name": a.name, "account": a.id }).to_string();
                     let head = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nSet-Cookie: {cookie}\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
@@ -666,7 +787,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 }
                 Err(e) => {
                     if e == "wrong name or password" {
-                        let mut fails = app.login_fails.lock().unwrap();
+                        let mut fails = app.login_fails.lock().unwrap_or_else(|e| e.into_inner());
                         let f = fails.entry(key).or_insert((0, std::time::Instant::now()));
                         if f.1.elapsed().as_secs() >= 900 { *f = (0, std::time::Instant::now()) }
                         f.0 += 1;
@@ -678,7 +799,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         }
         ("/auth/logout", _) => {
             if let Some(c) = cookie(&req, SESSION_COOKIE) {
-                app.sessions.lock().unwrap().remove(c);
+                app.sessions.lock().unwrap_or_else(|e| e.into_inner()).remove(c);
                 if let Err(e) = app.db.delete("sessions", c) { eprintln!("sessions: {e}") }
             }
             redirect(&mut sock, "/", Some(&format!("{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"))).await
@@ -686,7 +807,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/admin/segments/reset", Some(t)) => {
             let name = param(query, "name").map(decode).unwrap_or_default();
             let done = {
-                let mut boards = app.boards.lock().unwrap();
+                let mut boards = app.boards.lock().unwrap_or_else(|e| e.into_inner());
                 let done = boards.reset(&format!("{}:{name}", t.id));
                 if done && let Err(e) = boards.save(&app.db, &format!("{}:{name}", t.id)) { eprintln!("leaderboards: {e}") }
                 done
@@ -699,8 +820,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let num = |k| param(query, k).and_then(|v| v.parse::<f32>().ok());
             let now = unix_now();
             let (status, body) = {
-                let mut riders = app.riders.lock().unwrap();
+                let mut riders = app.riders.lock().unwrap_or_else(|e| e.into_inner());
                 let res = match (num("weight"), num("ftp")) {
+                    (Some(_), Some(_)) if who.account.is_some() && !riders.riders.contains_key(pid) && riders.riders.values().filter(|r| r.owner == who.account).count() >= 20 => Err("too many profiles on this account"),
                     (Some(w), Some(f)) => riders.register(pid, who.account, w, f, now).cloned(),
                     _ => riders.riders.get(pid).cloned().ok_or("no such rider"),
                 };
@@ -718,7 +840,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         }
         ("/admin/flags", _) => {
             let body = {
-                let riders = app.riders.lock().unwrap();
+                let riders = app.riders.lock().unwrap_or_else(|e| e.into_inner());
                 let mut all: Vec<_> = riders.riders.values().flat_map(|r| r.flags.iter().cloned()).collect();
                 all.sort_by_key(|f| std::cmp::Reverse(f.at));
                 json!(all).to_string()
@@ -729,15 +851,17 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let e = param(query, "e").and_then(|e| EMOTES.iter().find(|x| **x == e).copied());
             let to = param(query, "to").and_then(|v| v.parse::<u64>().ok());
             let sent = session.zip(e).is_some_and(|(sid, e)| {
-                let mut riders = t.riders.lock().unwrap();
+                let mut riders = t.riders.lock().unwrap_or_else(|e| e.into_inner());
                 let now = std::time::Instant::now();
                 let Some(me) = riders.get_mut(&sid) else { return false };
                 (me.emote, me.emote_at) = (Some(e), Some(now));
                 metrics::inc("le_mollet_emotes_total", &[("e", e)]);
                 let from = me.name.clone();
                 if e == "rideon" && let Some(o) = to.and_then(|to| riders.values_mut().find(|p| p.id == to)) {
+                    // One Ride On every 5 s per sender, ten waiting at most per recipient: no flooding a screen.
+                    let fresh = { let mut r = app.rideons.lock().unwrap_or_else(|e| e.into_inner()); let ok = r.get(&sid).is_none_or(|t| t.elapsed().as_secs() >= 5); if ok { r.insert(sid, now); } ok };
                     if o.bot { (o.emote, o.emote_at) = (Some("wave"), Some(now)) } // pace partners wave back
-                    else { app.inbox.lock().unwrap().entry(o.sid).or_default().push(Notice { from, e }) }
+                    else if fresh { let mut inbox = app.inbox.lock().unwrap_or_else(|e| e.into_inner()); let q = inbox.entry(o.sid).or_default(); if q.len() < 10 { q.push(Notice { from, e }) } }
                 }
                 true
             });
@@ -749,10 +873,11 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 None => segment::course_windows(&t.course).into_iter().map(|w| (w.name, w.kind)).collect(),
             };
             let body = { // the lock must be gone before the await below
-                let (now, boards) = (unix_now(), app.boards.lock().unwrap());
+                let (now, boards) = (unix_now(), app.boards.lock().unwrap_or_else(|e| e.into_inner()));
                 let list: Vec<_> = defs.iter().map(|(name, kind)| {
                     let (all, today) = boards.top(&format!("{}:{name}", t.id), 10, now);
-                    json!({ "name": name, "kind": kind, "all": all, "today": today })
+                    let public = |l: Vec<Entry>| l.into_iter().map(|e| json!({ "name": e.name, "color": e.color, "time": e.time, "date": e.date })).collect::<Vec<_>>();
+                    json!({ "name": name, "kind": kind, "all": public(all), "today": public(today) })
                 }).collect();
                 serde_json::to_string(&list).unwrap_or_default()
             };
@@ -764,6 +889,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let (Some(length), Some(relief)) = (length, param(query, "relief").and_then(Relief::parse)) else {
                 return reply(&mut sock, "400 Bad Request", "text/plain", b"need length=5|10|20 and relief=flat|hills|mountains").await;
             };
+            if !app.make_room_for_world() {
+                return reply(&mut sock, "429 Too Many Requests", "text/plain", b"every open world is being ridden: join one, or try again later").await;
+            }
             let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1);
             let name = format!("Boucle {length} km {} n°{}", relief.label().to_lowercase(), seed % 1000);
             match tokio::task::spawn_blocking(move || world_track(seed, length, relief, name)).await {
@@ -802,7 +930,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 (Some(s), Some(w)) => {
                     let num = |k: &str, max: f32| param(query, k).and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=max).contains(v));
                     let sensors = Sensors { w, cadence: num("cad", 250.0), hr: num("hr", 250.0), live: param(query, "src") == Some("bt") };
-                    app.sensors.lock().unwrap().insert(s, sensors);
+                    app.sensors.lock().unwrap_or_else(|e| e.into_inner()).insert(s, sensors);
                     reply(&mut sock, "204 No Content", "text/plain", b"").await
                 }
                 _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and w in 0..=2000").await,
@@ -811,7 +939,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/seek", _) if app.trainer.is_none() => {
             match (session, param(query, "d").and_then(|d| d.parse::<f32>().ok()).filter(|d| d.is_finite() && *d >= 0.0)) {
                 (Some(s), Some(d)) => {
-                    app.demo_seek.lock().unwrap().insert(s, d);
+                    app.demo_seek.lock().unwrap_or_else(|e| e.into_inner()).insert(s, d);
                     reply(&mut sock, "204 No Content", "text/plain", b"").await
                 }
                 _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and d >= 0").await,
@@ -819,14 +947,14 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         }
         ("/turn", _) => match (session, param(query, "dir").and_then(Turn::parse)) {
             (Some(s), Some(t)) => {
-                app.turns.lock().unwrap().insert(s, t);
+                app.turns.lock().unwrap_or_else(|e| e.into_inner()).insert(s, t);
                 reply(&mut sock, "204 No Content", "text/plain", b"").await
             }
             _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and dir=left|straight|right").await,
         },
         ("/powerup", _) => match session {
             Some(s) => {
-                app.powerup.lock().unwrap().insert(s);
+                app.powerup.lock().unwrap_or_else(|e| e.into_inner()).insert(s);
                 metrics::inc("le_mollet_powerups_total", &[]);
                 reply(&mut sock, "204 No Content", "text/plain", b"").await
             }
@@ -837,7 +965,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let now = unix_now();
             let pid = pid.map(str::to_owned);
             let res: Result<serde_json::Value, &str> = (|| {
-                let mut events = app.events.lock().unwrap();
+                let mut events = app.events.lock().unwrap_or_else(|e| e.into_inner());
                 // Races by level on every half hour, on the short courses in turn (loops, climbs up to 15 km).
                 let short: Vec<_> = app.tracks.read().unwrap().iter().filter(|t| t.city.is_none() && t.relief.is_none() && (t.course.looped || t.course.length() <= 15_000.0))
                     .map(|t| (t.id.clone(), t.course.name.clone(), t.course.length(), t.course.looped)).collect();
@@ -847,11 +975,11 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     "/event/create" => {
                         let pid = pid.clone().ok_or("need pid")?;
                         // A club ride: the founder of the profile's club may schedule it; anything else needs manage_events.
-                        let club = (param(query, "club") == Some("1")).then(|| app.clubs.lock().unwrap().of(&pid).filter(|c| c.members[0].pid == pid).map(|c| c.tag.clone())).flatten();
+                        let club = (param(query, "club") == Some("1")).then(|| app.clubs.lock().unwrap_or_else(|e| e.into_inner()).of(&pid).filter(|c| c.members[0].pid == pid).map(|c| c.tag.clone())).flatten();
                         if !who.can(Perm::ManageEvents) && club.is_none() { return Err("needs manage_events, or to found a club for a club ride") }
                         let kind = match param(query, "kind") { Some("race") => EventKind::Race, _ => EventKind::Group };
                         let track = app.track(param(query, "track").unwrap_or("")).filter(|t| t.city.is_none()).ok_or("no such course")?;
-                        let start = param(query, "start").and_then(|s| s.parse::<u64>().ok()).filter(|&s| s + 60 >= now && s < now + 60 * 86_400).ok_or("start: a time in the next 60 days")?;
+                        let start = param(query, "start").and_then(|s| s.parse::<u64>().ok()).filter(|&s| s.saturating_add(60) >= now && s < now + 60 * 86_400).ok_or("start: a time in the next 60 days")?;
                         let name = text("name");
                         metrics::inc("le_mollet_events_created_total", &[("kind", if kind == EventKind::Race { "race" } else { "group" }), ("by", if club.is_some() { "club" } else { "organizer" })]);
                         events.events.push(Event {
@@ -865,7 +993,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                             cats: { let mut c: Vec<char> = text("cats").chars().filter(|c| TIERS.iter().any(|t| t.0 == *c)).collect(); c.sort(); c.dedup(); c.into_iter().collect() },
                             club,
                             by: pid,
-                            by_name: text("me"),
+                            by_name: me_name.clone().unwrap_or_else(|| text("me")),
                             entrants: vec![],
                             results: vec![],
                         });
@@ -873,8 +1001,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     }
                     "/event/join" => {
                         // The rank the server knows, never the page's word.
-                        let wkg = app.riders.lock().unwrap().riders.get(pid.as_deref().unwrap_or("")).map(|r| r.wkg(now)).ok_or("unknown rider")?;
-                        let e = events.join(param(query, "id").unwrap_or(""), pid.as_deref().ok_or("need pid")?, &text("me"), wkg, now)?;
+                        let wkg = app.riders.lock().unwrap_or_else(|e| e.into_inner()).riders.get(pid.as_deref().unwrap_or("")).map(|r| r.wkg(now)).ok_or("unknown rider")?;
+                        if events.get(param(query, "id").unwrap_or("")).is_some_and(|e| e.entrants.len() >= 500) { return Err("the event is full") }
+                        let e = events.join(param(query, "id").unwrap_or(""), pid.as_deref().ok_or("need pid")?, &me_name.clone().unwrap_or_else(|| text("me")), wkg, now)?;
                         metrics::inc("le_mollet_event_signups_total", &[("kind", if e.kind == EventKind::Race { "race" } else { "group" })]);
                         true
                     }
@@ -901,9 +1030,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 return reply(&mut sock, "400 Bad Request", "text/plain", b"need pid").await;
             };
             let text = |k| param(query, k).map(decode).unwrap_or_default().chars().filter(|c| !c.is_control()).take(30).collect::<String>();
-            let me = text("me");
+            let me = me_name.clone().unwrap_or_else(|| text("me"));
             let res = {
-                let mut clubs = app.clubs.lock().unwrap();
+                let mut clubs = app.clubs.lock().unwrap_or_else(|e| e.into_inner());
                 let res = match p {
                     "/club" => Ok(clubs.of(pid).cloned()),
                     "/club/create" => {
@@ -941,7 +1070,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/pause", _) => match (session, param(query, "on")) {
             (Some(s), Some(on)) => {
                 {
-                    let mut p = app.paused.lock().unwrap();
+                    let mut p = app.paused.lock().unwrap_or_else(|e| e.into_inner());
                     if on == "1" { p.insert(s) } else { p.remove(&s) };
                 }
                 reply(&mut sock, "204 No Content", "text/plain", b"").await
@@ -959,18 +1088,23 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let Some(sid) = session else { return reply(&mut sock, "400 Bad Request", "text/plain", b"need session").await };
             // Weight and FTP from the server's record of the profile, never from the query (docs/security.md).
             // A workout, alone on a flat road, races nobody: the page's mass does.
-            let known = pid.filter(|_| track.is_some()).and_then(|p| app.riders.lock().unwrap().riders.get(p).cloned());
+            let known = pid.filter(|_| track.is_some()).and_then(|p| app.riders.lock().unwrap_or_else(|e| e.into_inner()).riders.get(p).cloned());
             let asked = param(query, "mass").and_then(|m| m.parse::<f32>().ok()).filter(|m| (30.0..=250.0).contains(m));
             let mass = known.as_ref().map(|r| r.weight + rider::BIKE_KG).or(asked);
             let mut check = Check::new(known.as_ref().map(|r| r.ftp_now(unix_now())), mass.unwrap_or(83.0) - rider::BIKE_KG);
-            sock.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n").await?;
+            sock.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n{SAFE_HEADERS}\r\n").as_bytes()).await?;
             app.driver.store(sid, Ordering::Relaxed);
             let plan = workout.zip(ftp).filter(|_| track.is_none());
             let game = ftp.filter(|_| track.is_some() && param(query, "mode") == Some("zombie")).map(Game::new);
             // An event on this course: held in its pen, then raced or ridden behind its leader.
-            let event = param(query, "event").and_then(|id| app.events.lock().unwrap().get(id).cloned()).filter(|e| track.as_ref().is_some_and(|t| t.id == e.track));
+            let event = param(query, "event").and_then(|id| app.events.lock().unwrap_or_else(|e| e.into_inner()).get(id).cloned()).filter(|e| track.as_ref().is_some_and(|t| t.id == e.track));
             if let Some(t) = &track {
-                t.riders.lock().unwrap().insert(sid, Presence { event: event.as_ref().map(|e| e.id.clone()), ..presence(query, sid) });
+                let mut p = presence(query, sid);
+                if let Some(n) = &me_name { // the account's name, with the club's tag the server knows
+                    let tag = pid.and_then(|p| app.clubs.lock().unwrap_or_else(|e| e.into_inner()).of(p).map(|c| c.tag.clone()));
+                    p.name = match tag { Some(t) => format!("[{t}] {n}"), None => n.clone() };
+                }
+                t.riders.lock().unwrap_or_else(|e| e.into_inner()).insert(sid, Presence { event: event.as_ref().map(|e| e.id.clone()), ..p });
             }
             let start = param(query, "start").and_then(|s| s.parse::<usize>().ok());
             let kind = match (&plan, &game, &event, &track) {
@@ -1000,20 +1134,21 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 let seen = [check.seen_ftp(), check.race_ftp].into_iter().flatten().reduce(f32::max);
                 let flagged = (check.trust() == Trust::Flagged).then(|| Flagged { at: now, track: t.id.clone(), name: presence(query, sid).name, why: check.why() });
                 if let Some(f) = &flagged { eprintln!("fair play: {} flagged on {}: {}", f.name, f.track, f.why.join(", ")) }
-                let mut riders = app.riders.lock().unwrap();
+                let mut riders = app.riders.lock().unwrap_or_else(|e| e.into_inner());
                 riders.ride_done(pid.unwrap_or(""), seen.filter(|s| *s > r.ftp_now(now)), flagged, now);
                 if let Err(e) = riders.save(&app.db, pid.unwrap_or("")) { eprintln!("riders: {e}") }
             }
-            if let Some(me) = track.as_ref().and_then(|t| t.riders.lock().unwrap().remove(&sid)).filter(|p| !p.pid.is_empty() && ride.ridden >= 100.0) {
-                let mut clubs = app.clubs.lock().unwrap();
+            if let Some(me) = track.as_ref().and_then(|t| t.riders.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid)).filter(|p| !p.pid.is_empty() && ride.ridden >= 100.0) {
+                let mut clubs = app.clubs.lock().unwrap_or_else(|e| e.into_inner());
                 if clubs.add_km(&me.pid, &me.name, ride.ridden / 1000.0, club::week(unix_now())) && let Err(e) = clubs.save(&app.db) { eprintln!("clubs: {e}") }
             }
-            app.sensors.lock().unwrap().remove(&sid);
-            app.paused.lock().unwrap().remove(&sid);
-            app.turns.lock().unwrap().remove(&sid);
-            app.inbox.lock().unwrap().remove(&sid);
-            app.powerup.lock().unwrap().remove(&sid);
-            app.owners.lock().unwrap().remove(&sid);
+            app.sensors.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid);
+            app.paused.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid);
+            app.turns.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid);
+            app.inbox.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid);
+            app.powerup.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid);
+            app.owners.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid);
+            app.rideons.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid);
             res
         }
         _ => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
@@ -1154,7 +1289,7 @@ async fn beacon(t: Arc<Track>, e: Event) {
         ride.tick(&t.course, DT);
         n += 1;
         if n % 3 == 0 {
-            let mut riders = t.riders.lock().unwrap();
+            let mut riders = t.riders.lock().unwrap_or_else(|e| e.into_inner());
             let p = riders.entry(id).or_insert_with(|| Presence {
                 id, sid: id, emote: None, emote_at: None, name: format!("Meneur · {:.1} W/kg", e.pace).replace('.', ","), color: "#f2cd37".into(), frame: "road",
                 country: None, distance: 0.0, speed_kmh: 0.0, power: 0.0, pos: None, bot: true, pid: String::new(), ridden: 0.0, event: Some(e.id.clone()),
@@ -1162,7 +1297,7 @@ async fn beacon(t: Arc<Track>, e: Event) {
             (p.distance, p.speed_kmh, p.power, p.ridden) = (ride.distance, ride.speed_kmh, ride.power, ride.ridden);
         }
     }
-    t.riders.lock().unwrap().remove(&id);
+    t.riders.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
 }
 
 fn now_f() -> f64 {
@@ -1259,7 +1394,7 @@ async fn pacer(t: Arc<Track>, id: u64, k: usize) {
         ride.tick(course, DT);
         if n % 3 == 0 {
             let pos = route.as_ref().map(|r| (r.course.latlon_at(ride.distance), r.course.latlon_at(ride.distance + 5.0)));
-            let mut riders = t.riders.lock().unwrap();
+            let mut riders = t.riders.lock().unwrap_or_else(|e| e.into_inner());
             ride.draft = draft_behind(riders.values().filter(|p| p.sid != id), ride.distance, pos, t.course.looped.then(|| t.course.length()));
             let p = riders.entry(id).or_insert_with(|| Presence {
                 id, sid: id, emote: None, emote_at: None, name: format!("{name} · {wkg:.1} W/kg").replace('.', ","), color: color.into(), frame: "road", country: None,
@@ -1301,22 +1436,24 @@ async fn ride_session(
     let (mut sent_windows, mut legs_seen, mut timer, mut result) = (0, 0, segment::Timer::default(), None::<SegResult>);
     let key = |w: &Window| format!("{}:{}", track.map_or("", |t| t.id.as_str()), w.name);
     let mut tick = tokio::time::interval(Duration::from_secs_f32(DT));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay); // behind: no burst of catch-up ticks
+    let (mut beacon_spawned, mut tick_work) = (false, 0.0f64);
     let (mut n, mut sent) = (0u32, None::<f32>);
     loop {
         tick.tick().await;
         let t0 = std::time::Instant::now();
-        let seek = app.demo_seek.lock().unwrap().remove(&sid).filter(|_| event.is_none()); // no shortcuts in an event
+        let seek = app.demo_seek.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid).filter(|_| event.is_none()); // no shortcuts in an event
         if let (Some(c), Some(r)) = (city, route.as_mut()) {
-            if let Some(t) = app.turns.lock().unwrap().remove(&sid) {
+            if let Some(t) = app.turns.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid) {
                 r.next = t;
             }
             r.extend(c, seek.unwrap_or(0.0).max(ride.distance)); // a demo jump ahead: grow the road there first
         }
         let course = route.as_ref().map_or(base, |r| &r.course);
-        let sensors = app.sensors.lock().unwrap().get(&sid).copied().unwrap_or_default();
+        let sensors = app.sensors.lock().unwrap_or_else(|e| e.into_inner()).get(&sid).copied().unwrap_or_default();
         (ride.power, ride.cadence, ride.hr) = match app.trainer {
             Some(_) if !sensors.live => {
-                let (w, cadence) = *app.trainer_sample.lock().unwrap();
+                let (w, cadence) = *app.trainer_sample.lock().unwrap_or_else(|e| e.into_inner());
                 (w, cadence, sensors.hr)
             }
             _ => (sensors.w, sensors.cadence, sensors.hr),
@@ -1328,13 +1465,13 @@ async fn ride_session(
         // Paused: time, distance and totals freeze; frames keep flowing so the page stays live.
         // Caught by the zombies: the ride freezes like a finish line.
         let caught = game.as_ref().is_some_and(|g| g.over);
-        let paused = app.paused.lock().unwrap().contains(&sid);
-        if app.powerup.lock().unwrap().remove(&sid) { ride.use_powerup() }
+        let paused = app.paused.lock().unwrap_or_else(|e| e.into_inner()).contains(&sid);
+        if app.powerup.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid) { ride.use_powerup() }
         // An event: on the start line until the gun.
         let phase = event.as_ref().map(|e| e.phase(unix_now()));
         let held = matches!(phase, Some(Phase::Upcoming | Phase::Pen));
         if held { (ride.distance, ride.speed_kmh) = (0.0, 0.0) }
-        if let (Some(e), Some(Phase::Live)) = (&event, phase) && e.kind == EventKind::Group && app.beacons.lock().unwrap().insert(e.id.clone())
+        if let (Some(e), Some(Phase::Live)) = (&event, phase) && e.kind == EventKind::Group && !beacon_spawned && { beacon_spawned = true; app.beacons.lock().unwrap_or_else(|e| e.into_inner()).insert(e.id.clone()) }
             && let Some(t) = app.track(&e.track)
         {
             tokio::spawn(beacon(t, e.clone()));
@@ -1346,7 +1483,7 @@ async fn ride_session(
             if let (Some(e), Some(Phase::Live), None, None) = (&event, phase, finish, unranked)
                 && e.kind == EventKind::Race
                 && ride.ridden >= e.distance(base.length(), base.looped)
-                && let Some(me) = track.and_then(|t| t.riders.lock().unwrap().get(&sid).cloned())
+                && let Some(me) = track.and_then(|t| t.riders.lock().unwrap_or_else(|e| e.into_inner()).get(&sid).cloned())
                 && e.entrants.iter().any(|x| x.pid == me.pid)
             {
                 let time = (now_f() - e.start as f64) as f32;
@@ -1361,7 +1498,7 @@ async fn ride_session(
                 };
                 metrics::inc("le_mollet_race_finishes_total", &[("result", unranked.unwrap_or("ranked"))]);
                 if unranked.is_none() {
-                    let mut events = app.events.lock().unwrap();
+                    let mut events = app.events.lock().unwrap_or_else(|e| e.into_inner());
                     finish = events.finish(&e.id, &me.pid, &me.name, time).map(|(o, c)| (o, c, time));
                     if let Err(err) = events.save(&app.db) { eprintln!("events: {err}") }
                 }
@@ -1382,11 +1519,12 @@ async fn ride_session(
         }
         if !paused && let Some((i, time)) = timer.update(&windows, ride.distance, ride.elapsed)
             && check.trust() == Trust::Device // only believed rides on the leaderboards
-            && let Some(me) = track.and_then(|t| t.riders.lock().unwrap().get(&sid).cloned())
+            && let Some(me) = track.and_then(|t| t.riders.lock().unwrap_or_else(|e| e.into_inner()).get(&sid).cloned())
         {
             let w = &windows[i];
-            let who = if me.pid.is_empty() { sid.to_string() } else { me.pid };
-            let mut boards = app.boards.lock().unwrap();
+            // A hash of the profile id: enough to keep one line per rider, and not the id itself (docs/security.md).
+            let who = { let mut h = Fnv::default(); h.add(if me.pid.is_empty() { sid.to_string() } else { me.pid }.as_bytes()); h.hex() };
+            let mut boards = app.boards.lock().unwrap_or_else(|e| e.into_inner());
             let rank = boards.record(&key(w), Entry { who, name: me.name, color: me.color, time, date: unix_now() });
             if let Err(e) = boards.save(&app.db, &key(w)) { eprintln!("leaderboards: {e}") }
             metrics::inc("le_mollet_segment_efforts_total", &[("kind", if w.kind == Kind::Kom { "kom" } else { "sprint" })]);
@@ -1399,7 +1537,7 @@ async fn ride_session(
             // Publish where we are, read where the others are: the nearest ones, they are the ones on screen.
             let mut live = None;
             let others = track.map_or(vec![], |t| {
-                let mut riders = t.riders.lock().unwrap();
+                let mut riders = t.riders.lock().unwrap_or_else(|e| e.into_inner());
                 let me = riders.get_mut(&sid).and_then(|me| {
                     (me.distance, me.speed_kmh, me.power, me.ridden) = (ride.distance, ride.speed_kmh, ride.power, ride.ridden);
                     me.pos = city.map(|_| course.latlon_at(ride.distance));
@@ -1423,17 +1561,24 @@ async fn ride_session(
             });
             let segment = timer.running().map(|(i, t0)| {
                 let w = &windows[i];
-                let best = app.boards.lock().unwrap().0.get(&key(w)).and_then(|l| l.first()).map(|e| e.time);
+                let best = app.boards.lock().unwrap_or_else(|e| e.into_inner()).0.get(&key(w)).and_then(|l| l.first()).map(|e| e.time);
                 SegLive { name: w.name.clone(), kind: w.kind, done: ride.distance - w.d0, len: w.d1 - w.d0, time: ride.elapsed - t0, best }
             });
             let new_windows = windows[sent_windows..].to_vec();
             sent_windows = windows.len();
-            let frame = Frame { fair: Fair { trust: check.trust(), why: check.why() }, event: live, ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take(), inbox: app.inbox.lock().unwrap().remove(&sid).unwrap_or_default() };
-            let json = serde_json::to_string(&frame).expect("frame serializes");
-            metrics::add("le_mollet_frame_bytes_total", &[], json.len() as f64 + 8.0);
-            sock.write_all(format!("data: {json}\n\n").as_bytes()).await?;
+            let frame = Frame { fair: Fair { trust: check.trust(), why: check.why() }, event: live, ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take(), inbox: app.inbox.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid).unwrap_or_default() };
+            let mut json = serde_json::to_vec(&frame).expect("frame serializes");
+            json.splice(0..0, *b"data: ");
+            json.extend_from_slice(b"\n\n");
+            metrics::add("le_mollet_frame_bytes_total", &[], json.len() as f64);
+            // A client that stops taking frames is gone: its rider leaves the road instead of standing there.
+            match tokio::time::timeout(WRITE_TIMEOUT, sock.write_all(&json)).await {
+                Ok(r) => r?,
+                Err(_) => return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "client stopped reading")),
+            }
         }
-        metrics::observe("le_mollet_ride_tick_seconds", &[], t0.elapsed().as_secs_f64());
+        tick_work += t0.elapsed().as_secs_f64();
+        if n.is_multiple_of(10) { metrics::observe("le_mollet_ride_tick_seconds", &[], tick_work / 10.0); tick_work = 0.0 }
         // Workout: ERG holds the target watts. Course: grade scaled by difficulty.
         // ponytail: 1 W / 0.2 % deadbands at 1 Hz keep BLE writes low, tune if it feels steppy
         if let Some(t) = &app.trainer
@@ -1541,14 +1686,22 @@ async fn reply_static(sock: &mut TcpStream, req: &str, query: &str, ctype: &str,
         (None, false) => ("200 OK", raw, ""),
     };
     metrics::inc("le_mollet_http_responses_total", &[("code", &status[..3])]);
-    let head = format!("HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\n{enc}Content-Length: {}\r\nCache-Control: {cache}\r\nETag: {etag}\r\nVary: Accept-Encoding\r\nConnection: close\r\n\r\n", body.len());
+    let head = format!("HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\n{enc}Content-Length: {}\r\nCache-Control: {cache}\r\nETag: {etag}\r\nVary: Accept-Encoding\r\n{SAFE_HEADERS}Connection: close\r\n\r\n", body.len());
     sock.write_all(head.as_bytes()).await?;
     sock.write_all(body).await
 }
 
+/// Headers every response carries: never framed by another site, no content sniffing, no referrer leaks.
+const SAFE_HEADERS: &str = "X-Frame-Options: DENY\r\nContent-Security-Policy: frame-ancestors 'none'\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n";
+
+/// Equal, in time that does not depend on where they differ.
+fn same_secret(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 async fn reply(sock: &mut TcpStream, status: &str, ctype: &str, body: &[u8]) -> std::io::Result<()> {
     metrics::inc("le_mollet_http_responses_total", &[("code", status.get(..3).unwrap_or("?"))]);
-    let head = format!("HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+    let head = format!("HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\n{SAFE_HEADERS}Connection: close\r\n\r\n", body.len());
     sock.write_all(head.as_bytes()).await?;
     sock.write_all(body).await
 }
