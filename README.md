@@ -174,6 +174,12 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 Bluetooth smart trainers speaking FTMS (most recent trainers), with the Wahoo proprietary protocol as a fallback
 for older KICKRs, plus Bluetooth heart rate straps. Each rider connects their own from the browser (Chrome, Edge).
 
+**Virtual gears.** A Zwift Ride controller (firmware up to 1.2: later ones only answer Zwift once locked) connects
+from the same screen: its shifters change between 24 virtual gears like Zwift's (the `+` and `-` keys too), and the
+grade sent to the trainer is the one that asks, at the speed it measures, the power the virtual gear would take at
+the same cadence. Its other buttons ride the game: Z a Ride On, power-up the road bonus, arrows the turns in a city,
+Y the pause. The controller's protocol as [BikeControl](https://github.com/jonasbark/swiftcontrol) documents it.
+
 Tested hardware:
 
 | Trainer | Protocol | Connection | Speed | Power | Grade / ERG control |

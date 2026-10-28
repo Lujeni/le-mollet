@@ -276,7 +276,7 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 #devicesScreen { flex:1; display:flex; align-items:center; justify-content:center; padding:0 22px 22px; min-height:0 }
 .devs { width:min(640px, 100%); max-height:100%; overflow:auto; padding:28px; display:flex; flex-direction:column; gap:14px }
 .devs .ride-head { margin:0 } .devs > .muted { margin:0 }
-.devices { display:grid; grid-template-columns:1fr 1fr; gap:12px }
+.devices { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px }
 .dev { display:flex; flex-direction:column; align-items:flex-start; gap:6px; padding:18px; min-height:170px; text-align:left; cursor:pointer; color:var(--ink); font:inherit; background:var(--glass-hi); border:1px solid var(--edge); border-radius:18px; transition:background .15s, transform .12s }
 .dev:hover:not(:disabled) { background:var(--glass-hi2); transform:translateY(-2px) } .dev:disabled { opacity:.5; cursor:not-allowed }
 .dev.on { border-color:#4bd06a; box-shadow:inset 0 0 0 1px #4bd06a }
@@ -598,6 +598,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
       <div class="devices">
         <button class="dev" id="devTrainer"></button>
         <button class="dev" id="devHr"></button>
+        <button class="dev" id="devPad"></button>
       </div>
       <label class="dev-diff">Difficulté des pentes<span><input type="range" id="difficulty" min="0" max="100" step="5"><output id="difficultyOut"></output></span></label>
       <small class="muted dev-diff-hint">Part de la vraie pente envoyée au home trainer : 100 % = comme sur la route.</small>
@@ -858,6 +859,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <span>
           <button class="btn" id="hudBtn" aria-label="Personnaliser l'affichage" title="Personnaliser l'affichage">⚙</button>
           <span class="chip fair" id="fairChip" hidden></span>
+          <span class="chip" id="gearChip" hidden title="Vitesse virtuelle : + et − sur la manette, ou les touches + et −"></span>
           <span class="chip" id="weatherChip" hidden></span>
           <button class="btn" id="night" aria-label="Moment de la journée : suit l'heure, ou fixé" hidden></button>
           <button class="btn" id="mute" aria-label="Couper ou remettre le son"></button>
@@ -2094,7 +2096,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); renderFair(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); renderFair(); renderGear(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -4682,7 +4684,7 @@ $('#histBack').addEventListener('click', () => showHome());
 // Wahoo control point on older KICKRs) and heart rate, sends them to the server, and drives the trainer:
 // the road grade (times the difficulty) on a ride, the target watts (ERG) in a workout.
 const BT = { FTMS:0x1826, BIKE_DATA:0x2ad2, CONTROL:0x2ad9, CPS:0x1818, CPS_MEAS:0x2a63, HRS:0x180d, HR_MEAS:0x2a37, WAHOO:'a026e005-0a7d-4ab3-97fa-f1500f9feb8b' };
-const bt = { trainer:null, hr:null, q:Promise.resolve(), sent:null };
+const bt = { trainer:null, hr:null, pad:null, q:Promise.resolve(), sent:null };
 
 // Writes queued one after the other: a GATT write while another is in flight fails.
 const btWrite = bytes => { const t = bt.trainer; if (t?.ctrl) bt.q = bt.q.then(() => t.ctrl.writeValue(new Uint8Array(bytes))).catch(() => {}) };
@@ -4731,7 +4733,7 @@ async function connectHr() {
 function parseBikeData(v) {
   const f = v.getUint16(0, true), out = {};
   let i = 2;
-  if (!(f & 1)) i += 2; // speed
+  if (!(f & 1)) { out.kmh = v.getUint16(2, true) / 100; i += 2 } // speed, for the virtual gears
   if (f & 2) i += 2; // average speed
   if (f & 4) { out.cadence = v.getUint16(i, true) / 2; i += 2 }
   if (f & 8) i += 2; // average cadence
@@ -4761,12 +4763,90 @@ function driveTrainer() {
   if (!t?.ctrl || !s || $('#ride').hidden) return;
   const paused = !$('#menu').hidden || s.finished || s.zombie?.over;
   const erg = ride.mode === 'workout' && s.workout?.target > 0; // a free block rides on a flat road
-  const value = erg ? Math.round(s.workout.target) : paused ? 0 : Math.round(s.grade * (current.difficulty ?? 0.5) * 10) / 10;
+  const road = s.grade * (current.difficulty ?? 0.5);
+  const value = erg ? Math.round(s.workout.target) : paused ? 0 : Math.round(virtualGrade(road, t, gears.i, current.weightKg + 8) * 10) / 10;
   if (bt.sent && bt.sent.erg === !!erg && Math.abs(bt.sent.value - value) < (erg ? 1 : 0.2)) return;
   bt.sent = { erg:!!erg, value };
   if (t.kind === 'ftms') btWrite(erg ? [0x05, ...le16(value)] : [0x11, 0, 0, ...le16(Math.round(value * 100) & 0xffff), 40, 51]);
   else btWrite(erg ? [0x42, ...le16(value)] : [0x46, ...le16(Math.round((Math.max(-1, Math.min(1, value / 100)) + 1) * 32768) & 0xffff)]);
 }
+// ---------- virtual gears: 24 like Zwift's, shifted from a Zwift Ride controller or the keyboard ----------
+// The trainer has one real gear. To ride gear n, the grade sent to it is the one that makes it ask, at the speed
+// it measures, the power the virtual gear would take at the same cadence: harder gear, faster virtual speed,
+// more watts. Speed in the game still comes from the watts alone, as in Zwift.
+const GEARS = Array.from({ length:24 }, (_, i) => 0.75 * (5.49 / 0.75) ** (i / 23)); // chainring/cog ratio
+const gears = { i:11, on:false };
+const WHEEL_M = 2.105, CW = 0.51, CRR = 0.004, G = 9.81; // what the trainer is told (wahooSim, FTMS sim command)
+function virtualGrade(road, t, i, kg) {
+  if (!gears.on || !t?.kmh || !(t.cadence > 20)) return road; // no shifting, or not pedalling: the road as it is
+  const rev = t.cadence / 60, vReal = t.kmh / 3.6, vGear = rev * GEARS[i] * WHEEL_M; // m/s
+  const force = kg * G * (Math.sin(Math.atan(road / 100)) + CRR) + CW * vGear * vGear; // N, at the virtual speed
+  const grade = (force * vGear / vReal - CW * vReal * vReal) / (kg * G) - CRR; // same power at the trainer's speed
+  return Math.max(-10, Math.min(25, grade * 100));
+}
+function shift(d) {
+  if ($('#ride').hidden || ride.mode === 'workout') return;
+  gears.on = true;
+  gears.i = Math.max(0, Math.min(GEARS.length - 1, gears.i + d));
+  bt.sent = null; // the next drive sends the new grade
+  renderGear();
+}
+function renderGear() {
+  $('#gearChip').hidden = !gears.on || ride.mode === 'workout';
+  $('#gearChip').textContent = `⚙ ${gears.i + 1}/${GEARS.length}`;
+}
+addEventListener('keydown', e => {
+  if ($('#ride').hidden || !$('#menu').hidden || e.target.matches?.('input, textarea')) return;
+  const d = { '+':1, '=':1, '-':-1 }[e.key];
+  if (d) { e.preventDefault(); shift(d) }
+});
+
+// Zwift Ride controllers (Zwift's own Bluetooth protocol, as BikeControl documents it): after "RideOn" written to
+// the sync characteristic, each change of the buttons comes as opcode 0x23 and a protobuf whose field 1 is the
+// button bit map, active low (a cleared bit is a pressed button). Only the Ride's firmware up to 1.2 talks to
+// apps other than Zwift: 1.3 hides the service until unlocked in Zwift.
+const ZW = { RIDE:0xfc82, PLAY:'00000001-19ca-4651-86e5-fa29dcdd09d1', ASYNC:'00000002-19ca-4651-86e5-fa29dcdd09d1', RX:'00000003-19ca-4651-86e5-fa29dcdd09d1', TX:'00000004-19ca-4651-86e5-fa29dcdd09d1' };
+const PAD = { left:1, up:2, right:4, down:8, a:16, b:32, y:64, z:256, shiftUpL:512, shiftDnL:1024, powerL:2048, shiftUpR:8192, shiftDnR:16384, powerR:65536 };
+// What each button does in the game, on its press.
+const PAD_ACTIONS = {
+  shiftUpL:() => shift(1), shiftUpR:() => shift(1), shiftDnL:() => shift(-1), shiftDnR:() => shift(-1),
+  powerL:() => usePowerup(), powerR:() => usePowerup(), z:() => sendEmote('rideon'),
+  left:() => ride.mode === 'city' && turnTo('left'), right:() => ride.mode === 'city' && turnTo('right'), up:() => ride.mode === 'city' && turnTo('straight'),
+  y:() => { if ($('#ride').hidden) return; if ($('#menu').hidden) openMenu('pause'); else if (!$('#resume').hidden) resumeRide() },
+};
+// The first protobuf varint of a message: field 1, the button map.
+function padButtons(bytes) {
+  if (bytes[0] !== 0x23 || bytes[1] !== 0x08) return null;
+  let map = 0, mul = 1;
+  for (let i = 2; i < bytes.length && i < 8; i++) { map += (bytes[i] & 0x7f) * mul; mul *= 128; if (!(bytes[i] & 0x80)) break }
+  return map;
+}
+async function connectPad() {
+  const device = await navigator.bluetooth.requestDevice({ filters:[{ manufacturerData:[{ companyIdentifier:0x094a }] }, { services:[ZW.RIDE] }, { namePrefix:'Zwift' }], optionalServices:[ZW.RIDE, ZW.PLAY] });
+  const server = await device.gatt.connect();
+  const svc = await server.getPrimaryService(ZW.RIDE).catch(() => server.getPrimaryService(ZW.PLAY))
+    .catch(() => { throw new Error('manette verrouillée ou inconnue : seules les Zwift Ride en firmware 1.2 ou avant parlent à d\'autres apps que Zwift.') });
+  const p = { device, name:device.name ?? 'Zwift Ride', held:0, presses:0 };
+  const onData = e => {
+    const map = padButtons(new Uint8Array(e.target.value.buffer));
+    if (map == null) return;
+    const down = Object.entries(PAD).filter(([, m]) => !(map & m)).map(([k]) => k);
+    for (const k of down) if (!(p.held & PAD[k])) { p.presses++; PAD_ACTIONS[k]?.() } // on the press, not while held
+    p.held = down.reduce((a, k) => a | PAD[k], 0);
+    renderSensors();
+  };
+  for (const id of [ZW.ASYNC, ZW.TX]) {
+    const ch = await svc.getCharacteristic(id);
+    ch.addEventListener('characteristicvaluechanged', onData);
+    await ch.startNotifications();
+  }
+  await (await svc.getCharacteristic(ZW.RX)).writeValueWithoutResponse(new TextEncoder().encode('RideOn'));
+  device.addEventListener('gattserverdisconnected', () => { if (bt.pad === p) bt.pad = null; renderSensors() });
+  bt.pad = p;
+  gears.on = true;
+  renderSensors();
+}
+
 // Twice a second: what the sensors say goes to the server (the trainer's watts win over the demo slider).
 function pushSensors() {
   if ($('#ride').hidden || !ride.session || (!bt.trainer && !bt.hr)) return;
@@ -4795,7 +4875,12 @@ function renderSensors() {
   $('#devHr').classList.toggle('on', !!hr);
   $('#devHr').replaceChildren(h('i', {}, '❤️'), h('b', {}, 'Cardio'), chip(hr, hr ? hr.name : 'non connecté'),
     hr ? h('span', { class:'live' }, hr.bpm ?? '…', h('small', {}, 'bpm')) : '', h('span', { class:'act' }, hr ? 'Connecté' : 'Connecter une ceinture'));
-  for (const id of ['#devTrainer', '#devHr']) $(id).disabled = !ok;
+  const pad = bt.pad;
+  $('#devPad').classList.toggle('on', !!pad);
+  $('#devPad').replaceChildren(h('i', {}, '🎮'), h('b', {}, 'Manette Zwift Ride'), chip(pad, pad ? pad.name : 'non connectée'),
+    pad ? h('span', { class:'live' }, `⚙ ${gears.i + 1}`, h('small', {}, `/${GEARS.length}`)) : '',
+    h('span', { class:'act' }, pad ? 'Appuie sur + ou − : la vitesse change' : 'Vitesses virtuelles et boutons du jeu'));
+  for (const id of ['#devTrainer', '#devHr', '#devPad']) $(id).disabled = !ok;
   $('#devGo').textContent = t ? "C'est parti ›" : 'Continuer en mode démo ›';
   $('#homeDevices').replaceChildren(chip(t, t ? `${t.name} · ${Math.round(t.power)} W` : ride.list?.trainer ? `Trainer du serveur : ${ride.list.trainer}` : 'Mode démo (curseur)'), ...(hr ? [chip(true, `${hr.bpm ?? '…'} bpm`)] : []));
   $('#devHint').textContent = ok ? (ride.list?.trainer ? `Le serveur pilote aussi « ${ride.list.trainer} » : ton trainer à toi passe en priorité.` : 'Chrome ou Edge : connecte ton home trainer (FTMS, KICKR) et ta ceinture cardio, sans rien installer.')
@@ -4806,6 +4891,7 @@ function renderSensors() {
 const btTry = fn => () => fn().catch(e => { if (e.name !== 'NotFoundError') alert(`Bluetooth : ${e.message}`) }); // NotFoundError: the picker was closed
 $('#devTrainer').addEventListener('click', btTry(connectTrainer));
 $('#devHr').addEventListener('click', btTry(connectHr));
+$('#devPad').addEventListener('click', btTry(connectPad));
 $('#difficulty').addEventListener('input', e => { current.difficulty = +e.target.value / 100; persist(); bt.sent = null; renderSensors() });
 setInterval(() => { if ((!$('#home').hidden || !$('#devicesScreen').hidden) && (bt.trainer || bt.hr)) renderSensors() }, 500);
 $('#devGo').addEventListener('click', () => showHome());
