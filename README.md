@@ -173,6 +173,8 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 
 Bluetooth smart trainers speaking FTMS (most recent trainers), with the Wahoo proprietary protocol as a fallback
 for older KICKRs, plus Bluetooth heart rate straps. Each rider connects their own from the browser (Chrome, Edge).
+On Linux, Chrome hides Web Bluetooth behind a setting: enable `chrome://flags/#enable-experimental-web-platform-features`
+and relaunch (the equipment screen says so when it is off). Open the page on `localhost` or over https.
 
 **Virtual gears.** A Zwift Ride controller (firmware up to 1.2: later ones only answer Zwift once locked) connects
 from the same screen: its shifters change between 24 virtual gears like Zwift's (the `+` and `-` keys too), and the
@@ -197,6 +199,7 @@ Tested hardware:
 - [Accounts and roles](docs/rbac.md): Le Mollet accounts, roles and permissions.
 - [Fair play and security](docs/security.md): what the server trusts, the power checks, CSRF.
 - [Metrics](docs/metrics.md): Prometheus metrics on usage and performance, `/metrics`.
+- [New hardware](docs/hardware.md): `le-mollet probe`, the Bluetooth capture to send to support a device.
 - [Contributing](docs/CONTRIBUTING.md): principles, checks, commits, testing a trainer.
 
 ## Contributing

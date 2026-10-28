@@ -15,6 +15,7 @@ pub mod island;
 pub mod ortho;
 pub mod metrics;
 pub mod physics;
+pub mod probe;
 pub mod protocol;
 pub mod ride;
 pub mod rider;

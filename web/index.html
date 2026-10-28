@@ -285,6 +285,44 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .dev .live { font:700 30px var(--font); font-variant-numeric:tabular-nums } .dev .live small { font-size:14px; color:var(--muted); margin-left:4px }
 .dev .act { margin-top:auto; font:600 13px var(--font); color:var(--accent-ink) }
 .dev-diff-hint { margin-top:-10px !important; font-size:12px }
+.dev-help { margin:0 0 14px; font-size:14px; color:var(--muted) } .dev-help ol { margin:6px 0 0; padding-left:20px } .dev-help li { margin:3px 0 }
+.dev-help b { color:var(--ink) } .dev-help code { font-size:12.5px; padding:1px 6px; border-radius:6px; background:var(--glass-hi2); color:var(--ink); user-select:all }
+.dev-help.warn { padding:12px 14px; border-radius:14px; background:color-mix(in srgb, #e9a21a 18%, transparent); border:1px solid #e9a21a; color:var(--ink) }
+.dev .act::after { content:' ›' }
+.dev.just { animation:devjoy .7s cubic-bezier(.3,.7,.4,1.5); box-shadow:0 0 0 3px #4bd06a, 0 0 30px rgba(75,208,106,.55) }
+@keyframes devjoy { 30% { transform:scale(1.06) rotate(-1deg) } 60% { transform:scale(.98) rotate(1deg) } }
+.dev-cheer { position:relative; min-height:0; text-align:center; font:800 20px var(--font); color:#4bd06a }
+.dev-cheer:not(:empty) { margin:0 0 12px; animation:cheer 2.6s ease-out forwards }
+@keyframes cheer { 0% { transform:scale(.6); opacity:0 } 12% { transform:scale(1.12); opacity:1 } 20% { transform:scale(1) } 80% { opacity:1 } 100% { opacity:0 } }
+.brick-burst { position:fixed; z-index:9; width:14px; height:9px; border-radius:2px; pointer-events:none; box-shadow:inset 0 -2px 0 rgba(0,0,0,.25); animation:burst 1.1s cubic-bezier(.2,.6,.4,1) forwards }
+@keyframes burst { to { transform:translate(var(--dx), var(--dy)) rotate(var(--r)); opacity:0 } }
+/* Ride: power by FTP zone, and the virtual gear; on fire above 120 % of FTP */
+.zones { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:8px 14px; padding:14px 18px; width:380px; --z:#8a8f98; transition:box-shadow .3s }
+.zones .watts { position:relative; z-index:0; font:800 46px/1 var(--font); color:var(--z); font-variant-numeric:tabular-nums; text-shadow:0 2px 0 rgba(0,0,0,.25) }
+.zones .watts small { font:700 14px var(--font); color:var(--muted); margin-left:4px }
+.zones .zone { white-space:nowrap } .zones .zone b { display:block; font:800 16px var(--font); color:var(--z) } .zones .zone small { font-size:12.5px; color:var(--muted) }
+.zones .bar { grid-column:1 / -1; position:relative; height:10px; border-radius:5px;
+  background:linear-gradient(90deg, #8a8f98 0 27.5%, #2f6fd6 0 37.5%, #2d8a48 0 45%, #e9c21a 0 52.5%, #e9781a 0 60%, #d0230f 0 75%, #8a3fb0 0) }
+.zones .bar i { position:absolute; top:-4px; left:calc(var(--p) - 3px); width:6px; height:18px; border-radius:3px; background:#fff; box-shadow:0 0 0 2px rgba(0,0,0,.45); transition:left .4s }
+.zones .gear { grid-row:1; grid-column:3; display:grid; justify-items:center; gap:3px; padding-left:14px; border-left:1px solid var(--edge) }
+.zones .gear b { font:800 38px/1 var(--font); font-variant-numeric:tabular-nums } .zones .gear b small { font-size:14px; color:var(--muted) }
+.zones .gear.shifted b { animation:gearpop .35s cubic-bezier(.3,.7,.4,1.6) }
+@keyframes gearpop { 40% { transform:scale(1.35); color:var(--accent) } }
+.zones .cassette { display:flex; align-items:flex-end; gap:2px; height:20px }
+.zones .cassette i { width:3px; border-radius:1px; background:var(--muted); opacity:.35 } .zones .cassette i.on { opacity:1; background:var(--accent); width:5px }
+.zones.hot { box-shadow:0 0 0 2px #e9781a, 0 0 28px rgba(255,110,20,.65) }
+.zones.hot .watts::before { content:''; position:absolute; z-index:-1; inset:-34px -16px -4px; border-radius:50% 50% 30% 30%;
+  background:radial-gradient(ellipse at 50% 100%, #fff3a0 0 18%, #ffb020 30%, #ff5a1a 55%, transparent 72%); filter:blur(5px); transform-origin:50% 100%; animation:flame .28s infinite alternate }
+@keyframes flame { from { transform:scale(1, .9) skewX(-3deg); opacity:.75 } to { transform:scale(1.08, 1.2) skewX(3deg); opacity:1 } }
+.zones.inferno { animation:rumble .12s infinite }
+.zones.inferno .watts::before { inset:-52px -26px -6px }
+@keyframes rumble { 50% { translate:1px -1px } }
+.zones .chips-row { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:6px }
+.zones .cchip { display:flex; align-items:baseline; gap:4px; padding:4px 9px; border-radius:10px; background:var(--glass-hi); font-size:12px; color:var(--muted) }
+.zones .cchip b { font:700 16px var(--font); color:var(--ink); font-variant-numeric:tabular-nums } .zones .cchip i { font-style:normal }
+.zones .cchip[data-key=energy] { background:linear-gradient(90deg, color-mix(in srgb, var(--e) 35%, transparent) var(--pct), var(--glass-hi) 0) }
+.zones .wow { grid-column:1 / -1; justify-self:center; font:900 18px var(--font); letter-spacing:2px; color:#ffb020; text-shadow:0 0 10px #ff5a1a; animation:blink .5s infinite }
+@media (prefers-reduced-motion:reduce) { .zones.hot .watts::before, .zones.inferno, .zones .wow, .zones .gear.shifted b, .dev.just, .dev-cheer:not(:empty) { animation:none } .brick-burst { display:none } }
 #devGo { padding:14px; font-size:17px }
 .dev-status { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:-8px 0 20px; padding:8px 8px 8px 14px; border-radius:14px; background:var(--glass-hi); font-size:13px }
 .dev-status > span { display:flex; flex-wrap:wrap; gap:4px 14px }
@@ -594,7 +632,8 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <div><p class="kicker">Avant de rouler</p><h1>Tes équipements</h1></div>
         <button class="btn" id="devBack">‹ Profils</button>
       </div>
-      <p class="muted" id="devHint"></p>
+      <div class="dev-help" id="devHint"></div>
+      <div class="dev-cheer" id="devCheer" role="status" aria-live="polite"></div>
       <div class="devices">
         <button class="dev" id="devTrainer"></button>
         <button class="dev" id="devHr"></button>
@@ -853,13 +892,13 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   <main id="ride" hidden>
     <!-- HUD widgets: each one placed by the rider (⚙), see placeHud -->
     <div class="block panel stats hud" id="stats" data-w="stats"></div>
+    <div class="block panel hud zones" id="zones" data-w="zones"></div>
     <div class="block panel hud ctrl" data-w="controls">
       <div class="ride-head">
         <h2 id="courseName"></h2>
         <span>
           <button class="btn" id="hudBtn" aria-label="Personnaliser l'affichage" title="Personnaliser l'affichage">⚙</button>
           <span class="chip fair" id="fairChip" hidden></span>
-          <span class="chip" id="gearChip" hidden title="Vitesse virtuelle : + et − sur la manette, ou les touches + et −"></span>
           <span class="chip" id="weatherChip" hidden></span>
           <button class="btn" id="night" aria-label="Moment de la journée : suit l'heure, ou fixé" hidden></button>
           <button class="btn" id="mute" aria-label="Couper ou remettre le son"></button>
@@ -2025,7 +2064,7 @@ function openWorkout(w) {
     recordSample();
     recordFull();
     if (ride.auto && ride.state.workout?.target > 0 && Math.round(ride.state.workout.target) !== +$('#watts').value) setPower(ride.state.workout.target);
-    renderStats(); drawProfile(); mixAmbience(); checkEnd();
+    renderStats(); renderZones(); drawProfile(); mixAmbience(); checkEnd();
   };
   startAmbience().catch(() => {});
   resize();
@@ -2096,7 +2135,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); renderFair(); renderGear(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); renderFair(); renderZones(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -2282,22 +2321,12 @@ function renderStats() {
   const t = Math.floor(s.elapsed), hms = `${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
   // key: what the rider can hide from the HUD (⚙)
   const stat = (key, label, value, unit) => hud().hide.includes(key) ? '' : h('div', { class:'stat', 'data-key':key }, h('small', {}, label), h('b', {}, value), h('i', {}, unit));
-  // Energy reserve: green, then yellow, red when an attack would blow you up.
-  const energy = () => {
-    const e = ride.energy;
-    if (!e || hud().hide.includes('energy')) return '';
-    const pct = Math.round(e.bal / e.w * 100), color = pct > 60 ? '#5bd36a' : pct > 25 ? '#f2cd37' : '#ff5a4a';
-    return h('div', { class:'stat energy', 'data-key':'energy', style:`--pct:${pct}%;--e:${color}`, title:`Réserve au-dessus de ta FTP : ${(e.bal / 1000).toFixed(1)} / ${(e.w / 1000).toFixed(1)} kJ` },
-      h('small', {}, 'Réserve'), h('b', {}, pct), h('i', {}, `% · ${Math.round(e.bal / (0.2 * current.ftp))} s à 120 %`));
-  };
+  // Power, reserve, heart rate and cadence live in the cockpit (renderZones); this bar is the road.
   if (ride.mode === 'workout') {
     const w = s.workout ?? { target:0, step_left:ride.workout.steps[0].secs, done:false };
     const total = ride.workout.steps.reduce((a, st) => a + st.secs, 0);
     $('#stats').replaceChildren(
-      stat('power', 'Puissance', Math.round(s.power), 'W'),
-      energy(),
       ride.workout.steps[w.step ?? 0]?.from < 0 ? stat('target', 'Cible', ride.workout.id === 'test-ftp' ? 'À fond !' : 'Libre', '') : stat('target', 'Cible', Math.round(w.target), 'W'),
-      ...(s.hr ? [stat('hr', 'Cardio', Math.round(s.hr), 'bpm')] : []), ...(s.cadence != null ? [stat('cadence', 'Cadence', Math.round(s.cadence), 'rpm')] : []),
       stat('interval', 'Intervalle', mmss(w.step_left), ''),
       stat('session', 'Séance', mmss(Math.min(s.elapsed, total)), `/ ${mmss(total)}`),
       stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
@@ -2314,7 +2343,6 @@ function renderStats() {
       : s.elapsed === 0 ? 'Pédale, la horde arrive !'
       : `Prochain sprint dans ${Math.max(0, Math.ceil(z.next_sprint - s.elapsed))} s`;
     $('#stats').replaceChildren(
-      stat('power', 'Puissance', Math.round(s.power), 'W'),
       stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
       stat('gap', 'Horde', Math.round(z.gap), `m${z.shield ? ' 🛡' : ''}${z.boost_left > 0 ? ' ⚡' : ''}`),
       stat('wave', `Vague ${z.wave}`, Math.round(z.horde_kmh), 'km/h'),
@@ -2326,12 +2354,8 @@ function renderStats() {
   }
   const total = ride.course.points.at(-1).d;
   $('#stats').replaceChildren(
-    stat('power', 'Puissance', Math.round(s.power), 'W'),
-    energy(),
-    ...(s.hr ? [stat('hr', 'Cardio', Math.round(s.hr), 'bpm')] : []), ...(s.cadence != null ? [stat('cadence', 'Cadence', Math.round(s.cadence), 'rpm')] : []),
     stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
     stat('grade', 'Pente', s.grade.toFixed(1), '%'),
-    stat('draft', 'Aspiration', Math.round((s.draft ?? 0) * 100), '%'),
     ride.mode === 'city'
       ? stat('distance', 'Distance', (s.ridden / 1000).toFixed(2), 'km')
       :     ride.course.looped
@@ -2347,19 +2371,20 @@ function renderStats() {
 // ---------- customizable ride HUD: presets, drag and drop, what to show, size and opacity (saved per profile) ----------
 // Widget x, y are fractions of the free space (0 left/top, 1 right/bottom), so a layout fits any screen.
 const HUD_PRESETS = {
-  cockpit: { name:'Cockpit', stats:{ x:0, y:0 }, controls:{ x:1, y:0 }, power:{ x:0, y:1 }, map:{ x:1, y:1 }, mirror:{ x:0, y:0 }, col:false, hide:[], scale:1, alpha:0.85 },
-  sides: { name:'Côtés', stats:{ x:0, y:0.3 }, controls:{ x:1, y:0 }, power:{ x:0.5, y:1 }, map:{ x:1, y:0.55 }, mirror:{ x:0.5, y:0 }, col:true, hide:[], scale:1, alpha:0.85 },
-  minimal: { name:'Minimal', stats:{ x:0, y:0 }, controls:{ x:1, y:0 }, power:{ x:0, y:1 }, map:{ x:0.5, y:1, off:true }, mirror:{ x:1, y:0.2 }, col:true, hide:['distance', 'ele', 'time', 'session', 'wave', 'sprints'], scale:0.85, alpha:0.4 },
-  phone: { name:'Mobile', stats:{ x:0, y:0.22 }, controls:{ x:0.5, y:0 }, power:{ x:0.5, y:1 }, map:{ x:0.5, y:0.8 }, mirror:{ x:1, y:0.16 }, col:true, hide:['ele'], scale:0.9, alpha:0.85 },
+  cockpit: { v:2, name:'Cockpit', zones:{ x:0, y:0 }, stats:{ x:0.5, y:0 }, controls:{ x:1, y:0 }, power:{ x:0, y:1 }, map:{ x:1, y:1 }, mirror:{ x:0.5, y:0.3 }, col:false, hide:[], scale:1, alpha:0.85 },
+  sides: { v:2, name:'Côtés', zones:{ x:0, y:0 }, stats:{ x:0, y:0.55 }, controls:{ x:1, y:0 }, power:{ x:0.5, y:1 }, map:{ x:1, y:0.55 }, mirror:{ x:0.5, y:0 }, col:true, hide:[], scale:1, alpha:0.85 },
+  minimal: { v:2, name:'Minimal', zones:{ x:0, y:0 }, stats:{ x:0.5, y:0 }, controls:{ x:1, y:0 }, power:{ x:0, y:1 }, map:{ x:0.5, y:1, off:true }, mirror:{ x:1, y:0.2 }, col:true, hide:['distance', 'ele', 'time', 'session', 'wave', 'sprints'], scale:0.85, alpha:0.4 },
+  phone: { v:2, name:'Mobile', zones:{ x:0, y:0.2 }, stats:{ x:1, y:0.2 }, controls:{ x:0.5, y:0 }, power:{ x:0.5, y:1 }, map:{ x:0.5, y:0.8 }, mirror:{ x:1, y:0.16 }, col:true, hide:['ele'], scale:0.9, alpha:0.85 },
 };
-const HUD_WIDGETS = { stats:'Chiffres', controls:'Commandes', power:'Puissance (démo)', map:'Profil / carte', mirror:'Rétro (zombies)' };
+const HUD_WIDGETS = { zones:'Cockpit (watts, zones, vitesses)', stats:'Route (vitesse, pente, distance…)', controls:'Commandes', power:'Puissance (démo)', map:'Profil / carte', mirror:'Rétro (zombies)' };
 const STAT_KEYS = {
-  workout:['power', 'energy', 'target', 'hr', 'cadence', 'interval', 'session', 'speed', 'distance'], zombie:['power', 'speed', 'gap', 'wave', 'time', 'sprints'],
-  ride:['power', 'energy', 'hr', 'cadence', 'speed', 'grade', 'draft', 'distance', 'ele', 'time', 'ghost'],
+  workout:['energy', 'target', 'hr', 'cadence', 'interval', 'session', 'speed', 'distance'], zombie:['speed', 'gap', 'wave', 'time', 'sprints'],
+  ride:['energy', 'hr', 'cadence', 'speed', 'grade', 'draft', 'distance', 'ele', 'time', 'ghost'],
 };
 const STAT_NAMES = { power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints', ghost:'Fantôme', hr:'Cardio', cadence:'Cadence', draft:'Aspiration', energy:'Réserve' };
 const defaultHud = () => structuredClone(HUD_PRESETS[innerWidth <= 700 ? 'phone' : 'cockpit']);
-const hud = () => current?.hud ?? defaultHud();
+// Layouts saved before the cockpit (v2) start over from the default.
+const hud = () => (current?.hud?.v === 2 ? current.hud : null) ?? defaultHud();
 
 function placeHud() {
   if ($('#ride').hidden) return;
@@ -2367,7 +2392,7 @@ function placeHud() {
   document.documentElement.style.setProperty('--hud-alpha', L.alpha);
   $('#stats').classList.toggle('col', L.col);
   for (const el of document.querySelectorAll('#ride .hud')) {
-    const c = L[el.dataset.w] ?? { x:0, y:0 };
+    const c = L[el.dataset.w] ?? HUD_PRESETS.cockpit[el.dataset.w] ?? { x:0, y:0 }; // a widget newer than the saved layout
     el.classList.toggle('off', !!c.off && el.dataset.w !== 'controls'); // pause and turns must stay reachable
     el.style.transform = `scale(${L.scale})`;
     const r = el.getBoundingClientRect();
@@ -2378,11 +2403,13 @@ function placeHud() {
 }
 
 function editHud(on) {
-  if (on && !current.hud) current.hud = defaultHud();
+  if (on && current.hud?.v !== 2) current.hud = defaultHud();
   $('#ride').classList.toggle('editing', on);
   $('#hudEdit').hidden = !on;
   if (!on) { persist(); return }
-  const L = current.hud, check = (label, checked, onchange) => h('label', {}, h('input', { type:'checkbox', ...(checked && { checked:'' }), onchange }), label);
+  const L = current.hud;
+  for (const k of Object.keys(HUD_WIDGETS)) L[k] ??= structuredClone(HUD_PRESETS.cockpit[k]);
+  const check = (label, checked, onchange) => h('label', {}, h('input', { type:'checkbox', ...(checked && { checked:'' }), onchange }), label);
   $('#hudPresets').replaceChildren(...Object.entries(HUD_PRESETS).map(([k, p]) => h('button', { onclick: () => { current.hud = structuredClone(p); editHud(true); placeHud(); renderStats() } }, p.name)));
   $('#hudWidgets').replaceChildren(...Object.entries(HUD_WIDGETS).filter(([k]) => k !== 'controls').map(([k, name]) =>
     check(name, !L[k]?.off, e => { L[k].off = !e.target.checked; placeHud() })));
@@ -4684,7 +4711,7 @@ $('#histBack').addEventListener('click', () => showHome());
 // Wahoo control point on older KICKRs) and heart rate, sends them to the server, and drives the trainer:
 // the road grade (times the difficulty) on a ride, the target watts (ERG) in a workout.
 const BT = { FTMS:0x1826, BIKE_DATA:0x2ad2, CONTROL:0x2ad9, CPS:0x1818, CPS_MEAS:0x2a63, HRS:0x180d, HR_MEAS:0x2a37, WAHOO:'a026e005-0a7d-4ab3-97fa-f1500f9feb8b' };
-const bt = { trainer:null, hr:null, pad:null, q:Promise.resolve(), sent:null };
+const bt = { trainer:null, hr:null, pads:[], q:Promise.resolve(), sent:null };
 
 // Writes queued one after the other: a GATT write while another is in flight fails.
 const btWrite = bytes => { const t = bt.trainer; if (t?.ctrl) bt.q = bt.q.then(() => t.ctrl.writeValue(new Uint8Array(bytes))).catch(() => {}) };
@@ -4716,6 +4743,7 @@ async function connectTrainer() {
   device.addEventListener('gattserverdisconnected', () => { if (bt.trainer === t) bt.trainer = null; renderSensors() });
   bt.sent = null;
   renderSensors();
+  celebrate($('#devTrainer'), `🎉 ${t.name} connecté : pédale !`);
 }
 
 async function connectHr() {
@@ -4727,6 +4755,7 @@ async function connectHr() {
   device.addEventListener('gattserverdisconnected', () => { if (bt.hr === h) bt.hr = null; renderSensors() });
   bt.hr = h;
   renderSensors();
+  celebrate($('#devHr'), `❤️ ${h.name} connecté`);
 }
 
 // FTMS Indoor Bike Data: flags, then optional fields in order (bit 0 inverted: speed present when clear).
@@ -4792,8 +4821,42 @@ function shift(d) {
   renderGear();
 }
 function renderGear() {
-  $('#gearChip').hidden = !gears.on || ride.mode === 'workout';
-  $('#gearChip').textContent = `⚙ ${gears.i + 1}/${GEARS.length}`;
+  gears.shifted = performance.now();
+  renderZones();
+}
+// Power by FTP zone (Coggan's seven), the virtual gear, and fire above 120 % of FTP. Power smoothed over ~3 s.
+const FTP_ZONES = [[0.55, 'Z1', 'Récup', '#8a8f98'], [0.75, 'Z2', 'Endurance', '#2f6fd6'], [0.90, 'Z3', 'Tempo', '#2d8a48'], [1.05, 'Z4', 'Seuil', '#e9c21a'],
+  [1.20, 'Z5', 'PMA', '#e9781a'], [1.50, 'Z6', 'Anaérobie', '#d0230f'], [Infinity, 'Z7', 'Sprint', '#8a3fb0']];
+// The small figures under the watts: reserve (W′), heart rate, cadence, draft; each can be hidden (⚙).
+function cockpitChips(s) {
+  const L = hud(), chip = (key, label, value, unit, extra = {}) => L.hide.includes(key) ? '' : h('span', { class:'cchip', 'data-key':key, ...extra }, h('small', {}, label), h('b', {}, value), unit ? h('i', {}, unit) : '');
+  const e = ride.energy, pct = e ? Math.round(e.bal / e.w * 100) : null;
+  return [
+    e ? chip('energy', 'Réserve', pct, '%', { style:`--e:${pct > 60 ? '#5bd36a' : pct > 25 ? '#f2cd37' : '#ff5a4a'};--pct:${pct}%`, title:`Réserve au-dessus de ta FTP : ${(e.bal / 1000).toFixed(1)} / ${(e.w / 1000).toFixed(1)} kJ · ${Math.round(e.bal / (0.2 * current.ftp))} s à 120 %` }) : '',
+    s?.hr ? chip('hr', '❤', Math.round(s.hr), 'bpm') : '',
+    s?.cadence != null ? chip('cadence', '⟳', Math.round(s.cadence), 'rpm') : '',
+    ride.mode !== 'workout' ? chip('draft', 'Aspi', Math.round((s?.draft ?? 0) * 100), '%') : '',
+  ];
+}
+function renderZones() {
+  const el = $('#zones'), s = ride.state;
+  if (!el || $('#ride').hidden) return;
+  ride.pow3 = (ride.pow3 ?? 0) * 0.8 + (s?.power ?? 0) * 0.2;
+  const pct = ride.pow3 / (current.ftp || 200), [, zone, name, color] = FTP_ZONES.find(z => pct < z[0]);
+  const showGear = gears.on && ride.mode !== 'workout';
+  el.style.setProperty('--z', color);
+  el.classList.toggle('hot', pct >= 1.2);
+  el.classList.toggle('inferno', pct >= 1.5);
+  const gear = showGear ? h('div', { class:'gear' + (performance.now() - (gears.shifted ?? 0) < 400 ? ' shifted' : ''), title:'Braquet virtuel : boutons noirs de la manette, ou + et −' },
+    h('small', {}, 'Braquet'), h('b', {}, gears.i + 1, h('small', {}, `/${GEARS.length}`)),
+    h('span', { class:'cassette' }, ...GEARS.map((_, i) => h('i', { class:i === gears.i ? 'on' : '', style:`height:${6 + i * 0.6}px` })))) : '';
+  el.replaceChildren(
+    h('div', { class:'watts' }, Math.round(s?.power ?? 0), h('small', {}, 'W')),
+    h('div', { class:'zone' }, h('b', {}, `${zone} · ${name}`), h('small', {}, `${Math.round(pct * 100)} % FTP`)),
+    gear,
+    h('div', { class:'bar', style:`--p:${Math.min(100, pct * 50)}%`, title:'Zones de 0 à 200 % de ta FTP' }, h('i')),
+    h('div', { class:'chips-row' }, ...cockpitChips(s)),
+    ...(pct >= 1.5 ? [h('div', { class:'wow' }, '🔥 WAHOU 🔥')] : pct >= 1.2 ? [h('div', { class:'wow' }, '🔥 EN FEU 🔥')] : []));
 }
 addEventListener('keydown', e => {
   if ($('#ride').hidden || !$('#menu').hidden || e.target.matches?.('input, textarea')) return;
@@ -4804,12 +4867,14 @@ addEventListener('keydown', e => {
 // Zwift Ride controllers (Zwift's own Bluetooth protocol, as BikeControl documents it): after "RideOn" written to
 // the sync characteristic, each change of the buttons comes as opcode 0x23 and a protobuf whose field 1 is the
 // button bit map, active low (a cleared bit is a pressed button). Only the Ride's firmware up to 1.2 talks to
-// apps other than Zwift: 1.3 hides the service until unlocked in Zwift.
+// apps other than Zwift: 1.3 hides the service until unlocked in Zwift. Each hood is a device of its own; their
+// bits never overlap, so one table serves both (measured with `le-mollet probe` on firmware 1.1.0, docs/hardware.md).
 const ZW = { RIDE:0xfc82, PLAY:'00000001-19ca-4651-86e5-fa29dcdd09d1', ASYNC:'00000002-19ca-4651-86e5-fa29dcdd09d1', RX:'00000003-19ca-4651-86e5-fa29dcdd09d1', TX:'00000004-19ca-4651-86e5-fa29dcdd09d1' };
-const PAD = { left:1, up:2, right:4, down:8, a:16, b:32, y:64, z:256, shiftUpL:512, shiftDnL:1024, powerL:2048, shiftUpR:8192, shiftDnR:16384, powerR:65536 };
-// What each button does in the game, on its press.
+const PAD = { left:1, up:2, right:4, down:8, a:16, b:32, y:64, z:128, shiftL1:256, shiftL2:512, powerL:1024, shiftR1:4096, shiftR2:8192, powerR:16384 };
+// What each button does in the game, on its press. Sequential shifting, like Zwift's default: the black buttons of
+// the left hood shift down, those of the right hood up.
 const PAD_ACTIONS = {
-  shiftUpL:() => shift(1), shiftUpR:() => shift(1), shiftDnL:() => shift(-1), shiftDnR:() => shift(-1),
+  shiftL1:() => shift(-1), shiftL2:() => shift(-1), shiftR1:() => shift(1), shiftR2:() => shift(1),
   powerL:() => usePowerup(), powerR:() => usePowerup(), z:() => sendEmote('rideon'),
   left:() => ride.mode === 'city' && turnTo('left'), right:() => ride.mode === 'city' && turnTo('right'), up:() => ride.mode === 'city' && turnTo('straight'),
   y:() => { if ($('#ride').hidden) return; if ($('#menu').hidden) openMenu('pause'); else if (!$('#resume').hidden) resumeRide() },
@@ -4841,10 +4906,11 @@ async function connectPad() {
     await ch.startNotifications();
   }
   await (await svc.getCharacteristic(ZW.RX)).writeValueWithoutResponse(new TextEncoder().encode('RideOn'));
-  device.addEventListener('gattserverdisconnected', () => { if (bt.pad === p) bt.pad = null; renderSensors() });
-  bt.pad = p;
+  device.addEventListener('gattserverdisconnected', () => { bt.pads = bt.pads.filter(x => x !== p); renderSensors() });
+  bt.pads = [...bt.pads.filter(x => x.device.id !== device.id), p];
   gears.on = true;
   renderSensors();
+  celebrate($('#devPad'), bt.pads.length > 1 ? '🎮 Les deux poignées sont prêtes : à droite ça monte, à gauche ça descend !' : '🎮 Une poignée connectée : clique encore pour l\'autre');
 }
 
 // Twice a second: what the sensors say goes to the server (the trainer's watts win over the demo slider).
@@ -4871,22 +4937,54 @@ function renderSensors() {
   $('#devTrainer').classList.toggle('on', !!t);
   $('#devTrainer').replaceChildren(h('i', {}, '🚲'), h('b', {}, 'Home trainer'), chip(t, t ? t.name : 'non connecté'),
     t ? h('span', { class:'live' }, Math.round(t.power), h('small', {}, 'W'), t.cadence != null ? ` ${Math.round(t.cadence)}` : '', t.cadence != null ? h('small', {}, 'rpm') : '') : '',
-    h('span', { class:'act' }, t ? 'Pédale : les watts doivent bouger' : 'Connecter (FTMS, KICKR)'));
+    h('span', { class:'act' }, t ? 'Pédale : les watts doivent bouger' : 'Cliquer pour chercher (FTMS, KICKR)'));
   $('#devHr').classList.toggle('on', !!hr);
   $('#devHr').replaceChildren(h('i', {}, '❤️'), h('b', {}, 'Cardio'), chip(hr, hr ? hr.name : 'non connecté'),
-    hr ? h('span', { class:'live' }, hr.bpm ?? '…', h('small', {}, 'bpm')) : '', h('span', { class:'act' }, hr ? 'Connecté' : 'Connecter une ceinture'));
-  const pad = bt.pad;
-  $('#devPad').classList.toggle('on', !!pad);
-  $('#devPad').replaceChildren(h('i', {}, '🎮'), h('b', {}, 'Manette Zwift Ride'), chip(pad, pad ? pad.name : 'non connectée'),
-    pad ? h('span', { class:'live' }, `⚙ ${gears.i + 1}`, h('small', {}, `/${GEARS.length}`)) : '',
-    h('span', { class:'act' }, pad ? 'Appuie sur + ou − : la vitesse change' : 'Vitesses virtuelles et boutons du jeu'));
+    hr ? h('span', { class:'live' }, hr.bpm ?? '…', h('small', {}, 'bpm')) : '', h('span', { class:'act' }, hr ? 'Connecté' : 'Cliquer pour chercher une ceinture'));
+  const pads = bt.pads.length;
+  $('#devPad').classList.toggle('on', pads > 0);
+  $('#devPad').replaceChildren(h('i', {}, '🎮'), h('b', {}, 'Manette Zwift Ride'), chip(pads, pads ? `${pads} poignée${pads > 1 ? 's' : ''} sur 2` : 'non connectée'),
+    pads ? h('span', { class:'live' }, `⚙ ${gears.i + 1}`, h('small', {}, `/${GEARS.length}`)) : '',
+    h('span', { class:'act' }, pads === 1 ? 'Clique encore pour l\'autre poignée' : pads ? 'Boutons noirs : à droite ça monte, à gauche ça descend' : 'Cliquer pour chercher : vitesses virtuelles et boutons du jeu'));
   for (const id of ['#devTrainer', '#devHr', '#devPad']) $(id).disabled = !ok;
   $('#devGo').textContent = t ? "C'est parti ›" : 'Continuer en mode démo ›';
   $('#homeDevices').replaceChildren(chip(t, t ? `${t.name} · ${Math.round(t.power)} W` : ride.list?.trainer ? `Trainer du serveur : ${ride.list.trainer}` : 'Mode démo (curseur)'), ...(hr ? [chip(true, `${hr.bpm ?? '…'} bpm`)] : []));
-  $('#devHint').textContent = ok ? (ride.list?.trainer ? `Le serveur pilote aussi « ${ride.list.trainer} » : ton trainer à toi passe en priorité.` : 'Chrome ou Edge : connecte ton home trainer (FTMS, KICKR) et ta ceinture cardio, sans rien installer.')
-    : 'Bluetooth indisponible ici : utilise Chrome ou Edge, sur localhost ou en https.';
+  renderDevHelp(ok);
   $('#difficulty').value = Math.round((current?.difficulty ?? 0.5) * 100);
   $('#difficultyOut').textContent = `${$('#difficulty').value} %`;
+}
+// How to connect, step by step; and when the browser has no Bluetooth, how to get it.
+function renderDevHelp(ok) {
+  const el = $('#devHint'), ua = navigator.userAgent, chromium = /Chrome|Edg\//.test(ua) && !/Firefox/.test(ua);
+  el.classList.toggle('warn', !ok);
+  if (ok) return el.replaceChildren(
+    ride.list?.trainer ? h('p', {}, `Le serveur pilote aussi « ${ride.list.trainer} » : ton trainer à toi passe en priorité.`) : '',
+    h('ol', {},
+      h('li', {}, h('b', {}, 'Réveille ton matériel'), ' : pédale un coup, appuie sur un bouton de la manette. Ferme Zwift s\'il est ouvert ailleurs.'),
+      h('li', {}, h('b', {}, 'Clique sur une carte'), ' ci-dessous : le navigateur ouvre la liste des appareils Bluetooth autour.'),
+      h('li', {}, h('b', {}, 'Choisis le tien'), ' dans la liste, puis « Associer ». La carte passe au vert. Pour la manette Zwift Ride, une fois par poignée.')));
+  el.replaceChildren(h('b', {}, 'Le Bluetooth n\'est pas activé dans ce navigateur.'), h('ol', {},
+    ...(!chromium ? [h('li', {}, 'Ouvre cette page dans ', h('b', {}, 'Google Chrome'), ' ou ', h('b', {}, 'Microsoft Edge'), ' : Firefox et Safari n\'ont pas le Bluetooth web.')]
+      : /Linux/.test(ua) && !/Android/.test(ua) ? [
+        h('li', {}, 'Sous Linux, Chrome le cache derrière un réglage : ouvre ', h('code', {}, 'chrome://flags/#enable-experimental-web-platform-features')),
+        h('li', {}, 'Passe ', h('b', {}, 'Experimental Web Platform features'), ' sur ', h('b', {}, 'Enabled'), ', puis clique ', h('b', {}, 'Relaunch'), '.'),
+        h('li', {}, 'Reviens ici : les cartes ne sont plus grisées.')]
+      : [h('li', {}, 'Mets à jour ton navigateur, et vérifie que le Bluetooth de l\'ordinateur est allumé.')]),
+    location.hostname !== 'localhost' && location.hostname !== '127.0.0.1' && location.protocol !== 'https:'
+      ? h('li', {}, 'Ouvre la page par ', h('code', {}, `http://localhost:${location.port || 80}`), ' (ou en https) : le Bluetooth web ne marche que là.') : ''));
+}
+// Connected: the card jumps, a word of joy, and a burst of Lego bricks from it.
+function celebrate(card, text) {
+  card.classList.remove('just'); void card.offsetWidth; card.classList.add('just');
+  setTimeout(() => card.classList.remove('just'), 900);
+  $('#devCheer').replaceChildren(text); void $('#devCheer').offsetWidth;
+  const r = card.getBoundingClientRect(), colors = ['#c91a09', '#0055bf', '#f2cd37', '#4b9f4a', '#fe8a18', '#fff'];
+  for (let i = 0; i < 16; i++) {
+    const a = Math.random() * Math.PI * 2, d = 60 + Math.random() * 110;
+    const b = h('i', { class:'brick-burst', style:`left:${r.left + r.width / 2}px;top:${r.top + r.height / 2}px;background:${colors[i % colors.length]};--dx:${Math.cos(a) * d}px;--dy:${Math.sin(a) * d - 40}px;--r:${Math.random() * 720 - 360}deg` });
+    document.body.append(b);
+    setTimeout(() => b.remove(), 1200);
+  }
 }
 const btTry = fn => () => fn().catch(e => { if (e.name !== 'NotFoundError') alert(`Bluetooth : ${e.message}`) }); // NotFoundError: the picker was closed
 $('#devTrainer').addEventListener('click', btTry(connectTrainer));

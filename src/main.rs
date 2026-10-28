@@ -23,6 +23,17 @@ enum Cmd {
         /// Name substring, e.g. "kickr"
         filter: Option<String>,
     },
+    /// Everything a Bluetooth device says, to support new hardware: lists devices, or maps one and logs it (docs/hardware.md)
+    Probe {
+        /// Name substring or address of the device to map; none: list the devices around
+        target: Option<String>,
+        /// How long to log notifications, s
+        #[arg(long, default_value_t = 60)]
+        seconds: u64,
+        /// Send once subscribed, repeatable: <characteristic uuid>=<hex> or =text:<ascii>, e.g. a handshake
+        #[arg(long)]
+        write: Vec<String>,
+    },
     /// Print the validation figures of a course file (see courses/AGENTS.md)
     Stats {
         /// Course JSON file
@@ -146,6 +157,10 @@ enum Cmd {
 async fn main() -> anyhow::Result<()> {
     match Cli::parse().cmd {
         Cmd::Trainer { filter } => trainer_console(filter).await,
+        Cmd::Probe { target, seconds, write } => {
+            let writes = write.iter().map(|w| le_mollet::probe::parse_write(w)).collect::<anyhow::Result<Vec<_>>>()?;
+            le_mollet::probe::run(target.as_deref(), seconds, &writes).await
+        }
         Cmd::Stats { course } => {
             print_course_stats(&course, &Course::load(&course)?);
             Ok(())

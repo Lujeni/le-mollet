@@ -124,6 +124,7 @@ Always build it with `--release`: Bevy is too slow unoptimized.
 | `stats <course.json>` | validation figures of a course |
 | `terrain <course.json>` | (re)build the 3D terrain of a course |
 | `city <name> -o <file> --relation <osm id> --start <lat,lon>` | build an open city, see [city.md](city.md) |
+| `probe [name]` | list Bluetooth devices, or map one and log what it sends, see [hardware.md](hardware.md) |
 | `role set <account> <role>` | give an account a role, see [rbac.md](rbac.md) |
 | `island <map.json>` | build the hand-made Lego island, see [island.md](island.md) |
 
