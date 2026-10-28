@@ -3161,6 +3161,7 @@ dependencies = [
  "btleplug",
  "clap",
  "dbus",
+ "flate2",
  "futures",
  "jpeg-decoder",
  "png 0.17.16",

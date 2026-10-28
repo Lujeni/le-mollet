@@ -89,6 +89,31 @@ const AUDIO: &[(&str, &[u8])] = &[
     ("/audio/deer.mp3", include_bytes!("../web/audio/deer.mp3")),
 ];
 const DT: f32 = 0.1;
+static PAGE_GZ: std::sync::LazyLock<Arc<Vec<u8>>> = std::sync::LazyLock::new(|| Arc::new(gzip(PAGE.as_bytes())));
+static PAGE_TAG: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    let mut h = Fnv::default();
+    h.add(PAGE.as_bytes());
+    h.hex()
+});
+
+/// FNV-1a, 64 bits: a fingerprint for cache tags, not a security hash.
+struct Fnv(u64);
+impl Default for Fnv {
+    fn default() -> Self { Self(0xcbf2_9ce4_8422_2325) }
+}
+impl Fnv {
+    fn add(&mut self, b: &[u8]) {
+        for x in b { self.0 = (self.0 ^ *x as u64).wrapping_mul(0x0100_0000_01b3) }
+    }
+    fn hex(&self) -> String { format!("{:016x}", self.0) }
+}
+
+fn gzip(raw: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+    e.write_all(raw).expect("gzip into memory");
+    e.finish().expect("gzip into memory")
+}
 const DISTRICT_FILES: [&str; 7] = ["meta.json", "dem.bin", "ortho.jpg", "trees.json", "buildings.bin", "osm.json", "surface.bin"];
 // ponytail: worlds live in memory, oldest empty ones dropped past this; persist them if people want to keep maps
 const MAX_WORLDS: usize = 12;
@@ -143,12 +168,36 @@ struct Track {
     /// Aerial photo files by name (meta.json, overview.jpg, <i>_<j>.jpg).
     ortho: HashMap<String, Vec<u8>>,
     riders: Mutex<HashMap<u64, Presence>>,
+    /// Fingerprint of all its files, for caching (see `reply_static`); and its files gzipped, made on first ask.
+    tag: std::sync::OnceLock<String>,
+    gz: Mutex<HashMap<&'static str, Arc<Vec<u8>>>>,
 }
 
 impl Track {
     fn new(id: String, course: Course, terrain: Option<Vec<u8>>, relief: Option<Relief>) -> anyhow::Result<Self> {
         let json = serde_json::to_string(&course)?;
-        Ok(Self { id, course, json, terrain, relief, city: None, buildings: None, district: HashMap::new(), ortho: HashMap::new(), riders: Mutex::new(HashMap::new()) })
+        Ok(Self { id, course, json, terrain, relief, city: None, buildings: None, district: HashMap::new(), ortho: HashMap::new(), riders: Mutex::new(HashMap::new()), tag: Default::default(), gz: Default::default() })
+    }
+
+    /// Changes when any of its files does: a cache may keep a URL carrying it for good.
+    fn tag(&self) -> &str {
+        self.tag.get_or_init(|| {
+            let mut h = Fnv::default();
+            h.add(self.json.as_bytes());
+            for b in [&self.terrain, &self.buildings].into_iter().flatten() { h.add(b) }
+            let mut files: Vec<(&str, &Vec<u8>)> = self.ortho.iter().map(|(k, v)| (k.as_str(), v)).chain(self.district.iter().map(|(k, v)| (*k, v))).collect();
+            files.sort_by_key(|f| f.0);
+            for (k, v) in files { h.add(k.as_bytes()); h.add(v) }
+            h.hex()
+        })
+    }
+
+    /// One of its files gzipped, once (`course`, `terrain`, `buildings`).
+    fn gz(&self, key: &'static str, raw: &[u8]) -> Arc<Vec<u8>> {
+        if let Some(z) = self.gz.lock().unwrap().get(key) { return z.clone() }
+        let z = Arc::new(gzip(raw)); // outside the lock: a big terrain takes a moment
+        self.gz.lock().unwrap().insert(key, z.clone());
+        z
     }
 
     /// An open city: its course is only the first street, each rider grows their own route.
@@ -540,7 +589,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let peer = sock.peer_addr().ok().map(|a| a.ip());
     let who = app.identify(cookie(&req, SESSION_COOKIE), peer);
     // Cloud: only the page and the way to sign in are open to strangers.
-    let open = matches!(path, "/" | "/whoami") || path.starts_with("/auth/") || path.starts_with("/audio/");
+    // The track files are open data (OSM, IGN...) and the same for everyone: public, so a CDN can keep them.
+    let open = matches!(path, "/" | "/whoami" | "/course" | "/terrain" | "/buildings" | "/ortho" | "/district") || path.starts_with("/auth/") || path.starts_with("/audio/");
     // Another site's page must not drive this one in the visitor's browser (CSRF): every call but a visit is refused
     // when the browser says it comes from elsewhere.
     if !(path == "/" || path.starts_with("/audio/")) && cross_site(&req) {
@@ -575,9 +625,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         return reply(&mut sock, "403 Forbidden", "text/plain", format!("needs {p:?}").as_bytes()).await;
     }
     match (path, track) {
-        ("/", _) => reply(&mut sock, "200 OK", "text/html; charset=utf-8", PAGE.as_bytes()).await,
+        // The page: always asked again (a new version shows at once), gzipped, 304 when unchanged.
+        ("/", _) => reply_static(&mut sock, &req, "", "text/html; charset=utf-8", PAGE.as_bytes(), Some(PAGE_GZ.clone()), &PAGE_TAG).await,
         (p, _) if p.starts_with("/audio/") => match AUDIO.iter().find(|a| a.0 == p) {
-            Some((_, bytes)) => reply(&mut sock, "200 OK", "audio/mpeg", bytes).await,
+            Some((_, bytes)) => reply_static(&mut sock, &req, "", "audio/mpeg", bytes, None, &PAGE_TAG).await, // they ship with the page
             None => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
         },
         ("/workouts", _) => reply(&mut sock, "200 OK", "application/json", app.workouts_json.as_bytes()).await,
@@ -724,21 +775,24 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 _ => reply(&mut sock, "500 Internal Server Error", "text/plain", b"world generation failed").await,
             }
         }
-        ("/course", Some(t)) => reply(&mut sock, "200 OK", "application/json", t.json.as_bytes()).await,
+        // A track's files: its tag as ETag, gzipped, cached for good when the URL carries the tag (`&v=`).
+        ("/course", Some(t)) => reply_static(&mut sock, &req, query, "application/json", t.json.as_bytes(), Some(t.gz("course", t.json.as_bytes())), t.tag()).await,
         ("/terrain", Some(t)) if t.terrain.is_some() => {
-            reply(&mut sock, "200 OK", "application/octet-stream", t.terrain.as_deref().unwrap()).await
+            let raw = t.terrain.as_deref().unwrap();
+            reply_static(&mut sock, &req, query, "application/octet-stream", raw, Some(t.gz("terrain", raw)), t.tag()).await
         }
         ("/buildings", Some(t)) if t.buildings.is_some() => {
-            reply(&mut sock, "200 OK", "application/octet-stream", t.buildings.as_deref().unwrap()).await
+            let raw = t.buildings.as_deref().unwrap();
+            reply_static(&mut sock, &req, query, "application/octet-stream", raw, Some(t.gz("buildings", raw)), t.tag()).await
         }
         ("/ortho", Some(t)) => match param(query, "f").and_then(|f| t.ortho.get(f)) {
-            Some(b) => reply(&mut sock, "200 OK", if param(query, "f").is_some_and(|f| f.ends_with(".json")) { "application/json" } else { "image/jpeg" }, b).await,
+            Some(b) => reply_static(&mut sock, &req, query, if param(query, "f").is_some_and(|f| f.ends_with(".json")) { "application/json" } else { "image/jpeg" }, b, None, t.tag()).await,
             None => reply(&mut sock, "404 Not Found", "text/plain", b"no such ortho file").await,
         },
         ("/district", Some(t)) => match param(query, "f").and_then(|f| t.district.get(f)) {
             Some(b) => {
                 let ctype = match param(query, "f") { Some("ortho.jpg") => "image/jpeg", Some(f) if f.ends_with(".json") => "application/json", _ => "application/octet-stream" };
-                reply(&mut sock, "200 OK", ctype, b).await
+                reply_static(&mut sock, &req, query, ctype, b, None, t.tag()).await
             }
             None => reply(&mut sock, "404 Not Found", "text/plain", b"no such district file").await,
         },
@@ -1472,6 +1526,24 @@ impl Drop for Timed {
     fn drop(&mut self) {
         metrics::observe("le_mollet_http_request_duration_seconds", &[("route", self.0)], self.1.elapsed().as_secs_f64());
     }
+}
+
+/// A static file: `tag` as ETag (304 when the browser or a CDN has it), gzipped when the client takes it, and
+/// cached for a year when the URL names this very version (`v=<tag>`), else revalidated each time.
+async fn reply_static(sock: &mut TcpStream, req: &str, query: &str, ctype: &str, raw: &[u8], gz: Option<Arc<Vec<u8>>>, tag: &str) -> std::io::Result<()> {
+    let etag = format!("W/\"{tag}\"");
+    let cache = if param(query, "v") == Some(tag) { "public, max-age=31536000, immutable" } else { "public, no-cache" };
+    let gz = gz.filter(|_| header(req, "accept-encoding").is_some_and(|a| a.contains("gzip")));
+    let fresh = header(req, "if-none-match").is_some_and(|h| h.split(',').any(|t| t.trim() == etag));
+    let (status, body, enc) = match (&gz, fresh) {
+        (_, true) => ("304 Not Modified", &[][..], ""),
+        (Some(z), false) => ("200 OK", &z[..], "Content-Encoding: gzip\r\n"),
+        (None, false) => ("200 OK", raw, ""),
+    };
+    metrics::inc("le_mollet_http_responses_total", &[("code", &status[..3])]);
+    let head = format!("HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\n{enc}Content-Length: {}\r\nCache-Control: {cache}\r\nETag: {etag}\r\nVary: Accept-Encoding\r\nConnection: close\r\n\r\n", body.len());
+    sock.write_all(head.as_bytes()).await?;
+    sock.write_all(body).await
 }
 
 async fn reply(sock: &mut TcpStream, status: &str, ctype: &str, body: &[u8]) -> std::io::Result<()> {

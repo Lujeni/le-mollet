@@ -2104,7 +2104,11 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
   ride.mode = kind;
   ride.zombie = { prev:null, toast:'', toastUntil:0 };
   $('#leave').textContent = '‖ Pause';
-  ride.course = await (await fetch(`/course?id=${encodeURIComponent(id)}`)).json();
+  // The course's ETag names this version of all its files: terrain and buildings URLs carry it, so the browser
+  // (and a CDN) keep them for good and fetch again only when they change.
+  const res = await fetch(`/course?id=${encodeURIComponent(id)}`);
+  ride.course = await res.json();
+  ride.v = (res.headers.get('ETag') ?? '').replace(/^W\//, '').replaceAll('"', '');
   const listed = ride.list.cities?.find(c => c.id === id);
   [ride.island, ride.props] = [kind === 'city' && !!listed?.island, listed?.props ?? ride.course.props ?? []]; // a course carries its own decor (le-mollet decor)
   startGhost(id);
@@ -2129,7 +2133,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
   ride.events = new EventSource(`/events?course=${encodeURIComponent(id)}&mass=${current.weightKg + 8}&session=${ride.session}${me}${game}${start != null ? `&start=${start}` : ''}${event ? `&event=${event}` : ''}`);
   if (hasTerrain) {
     $('#attrib').textContent = 'Chargement du terrain…';
-    const buf = await (await fetch(`/terrain?id=${encodeURIComponent(id)}`)).arrayBuffer();
+    const buf = await (await fetch(`/terrain?id=${encodeURIComponent(id)}&v=${ride.v}`)).arrayBuffer();
     $('#attrib').textContent = attribution();
     if (!$('#ride').hidden) enter3d(buf);
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
@@ -3676,7 +3680,7 @@ function buildingMesh(list) {
 }
 
 async function loadBuildings(id) {
-  const buf = await (await fetch(`/buildings?id=${encodeURIComponent(id)}`)).arrayBuffer();
+  const buf = await (await fetch(`/buildings?id=${encodeURIComponent(id)}&v=${ride.v ?? ''}`)).arrayBuffer();
   if (!w3.T) return;
   w3.bld = parseBuildings(buf, w3.T);
   for (const m of w3.chunks.values()) { w3.group.remove(m); m.traverse(o => o.geometry?.dispose()) }
