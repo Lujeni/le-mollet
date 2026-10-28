@@ -860,7 +860,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <div><p class="kicker">Rouler ensemble</p><h1>Événements</h1></div>
         <button class="btn" id="eventsBack">‹ Rouler</button>
       </div>
-      <p class="muted">Sorties de groupe derrière un meneur, courses par rang, de Bronze à Légende, toutes les demi-heures. Inscris-toi, attends en salle d'attente : le sas ouvre 10 min avant le départ et tout le monde part en même temps.</p>
+      <p class="muted">Un départ toutes les 15 minutes : courses par rang, de Bronze à Légende, aux heures et demies ; sorties de groupe derrière un meneur (balade 1,5, tempo 2,5, costaud 3,5 W/kg) aux quarts. Inscris-toi, attends en salle d'attente : le sas ouvre 10 min avant le départ et tout le monde part en même temps.</p>
       <div class="seg event-filter" id="eventFilter"></div>
       <div id="eventList" class="event-list"></div>
       <details class="event-create" id="eventCreate" hidden>
@@ -5617,7 +5617,7 @@ const isMine = e => e.entrants.some(x => x.me); // the server never sends profil
 // Like the server (src/event.rs): a race for a rank takes that rank and the weaker ones, who may race up.
 const openTo = (e, cat = myCat()) => !e.cats || [...e.cats].some(c => TIER[c]?.rank <= TIER[cat].rank);
 // "My rank": events I may join, and of the races by rank scheduled every half hour, only my own.
-const forMe = e => isMine(e) || (e.by === 'auto' ? e.cats === myCat() : openTo(e));
+const forMe = e => isMine(e) || (e.by === 'auto' && e.kind === 'race' ? e.cats === myCat() : openTo(e));
 const EV_ERRORS = { 'unknown rider':'Le serveur ne connaît pas encore ce profil : réessaie dans un instant.', 'not your category':'Course d\'un autre rang : on peut courir au-dessus du sien, pas en dessous.', 'the race has started':'La course est partie.' };
 let evFilter = 'mine';
 function keepEvents(r) { Object.assign(evs, { list:r.events, now:r.now, at:Date.now() }); return evs.list }

@@ -17,6 +17,11 @@ pub const SLOT_S: u64 = 1800;
 pub const AHEAD_S: u64 = 3600;
 /// Their length, about, m: laps of a loop, or a climb once.
 const AUTO_M: f32 = 15_000.0;
+/// Scheduled group rides start on the quarter hours between the races (:15, :45), so something starts every
+/// 15 minutes; one per pace, behind a leader; each is kept this long.
+pub const GROUP_SLOT_S: u64 = 900;
+pub const GROUP_PACES: [(f32, &str); 3] = [(1.5, "Balade"), (2.5, "Tempo"), (3.5, "Costaud")];
+pub const GROUP_KEEP_S: u64 = 2700;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -44,6 +49,9 @@ pub struct Event {
     /// Ranks it is open to (codes of `TIERS`), e.g. "O" or "PO"; empty: everyone.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub cats: String,
+    /// How long after the start it stays, s; 0 means `KEEP_S`.
+    #[serde(default, skip_serializing_if = "u64_is_zero")]
+    pub keep: u64,
     /// Club tag when it is a club ride.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub club: Option<String>,
@@ -105,12 +113,17 @@ fn rank(c: char) -> usize {
     TIERS.iter().position(|t| t.0 == c).unwrap_or(TIERS.len())
 }
 
+fn u64_is_zero(n: &u64) -> bool {
+    *n == 0
+}
+
 impl Event {
     pub fn phase(&self, now: u64) -> Phase {
+        let keep = if self.keep > 0 { self.keep } else { KEEP_S };
         match now {
             t if t + PEN_S < self.start => Phase::Upcoming,
             t if t < self.start => Phase::Pen,
-            t if t < self.start + KEEP_S => Phase::Live,
+            t if t < self.start + keep => Phase::Live,
             _ => Phase::Over,
         }
     }
@@ -164,8 +177,9 @@ impl Events {
         Ok(e)
     }
 
-    /// A race per rank on every half hour of the next hour, so one always starts soon; on `tracks` in turn
-    /// (id, name, lap m, looped). Returns whether it added any.
+    /// A race per rank on every half hour of the next hour, and a group ride per pace on the quarter hours
+    /// between (loops first: a bunch rides round and round), so something always starts within 15 minutes; on
+    /// `tracks` in turn (id, name, lap m, looped). Returns whether it added any.
     /// ponytail: an organizer deleting a scheduled race sees it come back; keep a list of skipped ids if that bothers
     pub fn schedule(&mut self, now: u64, tracks: &[(String, String, f32, bool)]) -> bool {
         if tracks.is_empty() { return false }
@@ -183,7 +197,35 @@ impl Events {
                     start: slot * SLOT_S,
                     laps: if *looped { (AUTO_M / lap_m).round().max(1.0) as u32 } else { 1 },
                     pace: 0.0,
+                    keep: 0,
                     cats: cat.into(),
+                    club: None,
+                    by: "auto".into(),
+                    by_name: "le-mollet".into(),
+                    entrants: vec![],
+                    results: vec![],
+                });
+                added = true;
+            }
+        }
+        let loops: Vec<_> = tracks.iter().filter(|t| t.3).collect();
+        let rides = if loops.is_empty() { tracks.iter().collect() } else { loops };
+        for slot in now / GROUP_SLOT_S + 1..=(now + AHEAD_S) / GROUP_SLOT_S {
+            if (slot * GROUP_SLOT_S).is_multiple_of(SLOT_S) { continue } // the races' half hours
+            let (track, name, ..) = rides[slot as usize % rides.len()];
+            for (i, (pace, label)) in GROUP_PACES.iter().enumerate() {
+                let id = format!("auto-g{slot}-{i}");
+                if self.get(&id).is_some() { continue }
+                self.events.push(Event {
+                    id,
+                    kind: Kind::Group,
+                    name: format!("{label} · {name}"),
+                    track: track.clone(),
+                    start: slot * GROUP_SLOT_S,
+                    laps: 1,
+                    pace: *pace,
+                    keep: GROUP_KEEP_S,
+                    cats: String::new(),
                     club: None,
                     by: "auto".into(),
                     by_name: "le-mollet".into(),
@@ -219,7 +261,7 @@ mod tests {
     use super::*;
 
     fn race(start: u64) -> Event {
-        Event { id: "e1".into(), kind: Kind::Race, name: "Critérium".into(), track: "longchamp".into(), start, laps: 5, pace: 0.0, cats: String::new(), club: None, by: "a".into(), by_name: "Ana".into(), entrants: vec![], results: vec![] }
+        Event { id: "e1".into(), kind: Kind::Race, name: "Critérium".into(), track: "longchamp".into(), start, laps: 5, pace: 0.0, keep: 0, cats: String::new(), club: None, by: "a".into(), by_name: "Ana".into(), entrants: vec![], results: vec![] }
     }
 
     #[test]
@@ -249,7 +291,11 @@ mod tests {
         let tracks = [("longchamp".to_string(), "Longchamp".to_string(), 3540.0, true), ("alpe".into(), "Alpe".into(), 13_600.0, false)];
         let now = 100 * SLOT_S + 60;
         assert!(ev.schedule(now, &tracks) && !ev.schedule(now, &tracks)); // once
-        assert_eq!(ev.events.len(), 14); // the next two half hours, a race per rank
+        assert_eq!(ev.events.len(), 20); // the next two half hours, a race per rank, and two quarter hours, a group ride per pace
+        let g = ev.get("auto-g201-1").unwrap(); // :15 past the first half hour, the Tempo ride, on the loop
+        assert_eq!((g.kind, g.start, g.track.as_str(), g.pace), (Kind::Group, 201 * GROUP_SLOT_S, "longchamp", 2.5));
+        assert_eq!([g.phase(g.start), g.phase(g.start + GROUP_KEEP_S)], [Phase::Live, Phase::Over]); // kept 45 min, not 3 h
+        assert!(ev.join("auto-g201-0", "a", "Ana", 4.2, now).is_ok() && ev.join("auto-g201-0", "b", "Bob", 1.2, now).is_ok()); // open to all
         let b = ev.get("auto-101-P").unwrap();
         assert_eq!((b.start, b.track.as_str(), b.laps), (101 * SLOT_S, "alpe", 1));
         assert_eq!(ev.get("auto-102-L").unwrap().laps, 4); // ~15 km of a 3.5 km loop

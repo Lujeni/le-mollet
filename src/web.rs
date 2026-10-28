@@ -966,7 +966,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let pid = pid.map(str::to_owned);
             let res: Result<serde_json::Value, &str> = (|| {
                 let mut events = app.events.lock().unwrap_or_else(|e| e.into_inner());
-                // Races by level on every half hour, on the short courses in turn (loops, climbs up to 15 km).
+                // Races by rank on every half hour and group rides on the quarter hours between, on the short courses
+                // in turn (loops, climbs up to 15 km).
                 let short: Vec<_> = app.tracks.read().unwrap().iter().filter(|t| t.city.is_none() && t.relief.is_none() && (t.course.looped || t.course.length() <= 15_000.0))
                     .map(|t| (t.id.clone(), t.course.name.clone(), t.course.length(), t.course.looped)).collect();
                 if events.schedule(now, &short) && let Err(e) = events.save(&app.db) { eprintln!("events: {e}") }
@@ -990,6 +991,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                             start,
                             laps: if track.course.looped { param(query, "laps").and_then(|l| l.parse().ok()).unwrap_or(3u32).clamp(1, 50) } else { 1 },
                             pace: param(query, "pace").and_then(|p| p.parse().ok()).unwrap_or(2.5f32).clamp(1.0, 5.0),
+                            keep: 0,
                             cats: { let mut c: Vec<char> = text("cats").chars().filter(|c| TIERS.iter().any(|t| t.0 == *c)).collect(); c.sort(); c.dedup(); c.into_iter().collect() },
                             club,
                             by: pid,
