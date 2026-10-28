@@ -40,8 +40,7 @@ editing them.
 ## Before opening a pull request
 
 ```sh
-cargo fmt
-cargo clippy --all-targets   # must stay clean, no new warnings
+cargo clippy --all-targets -- -D warnings   # what the CI runs: must stay clean
 cargo test
 ```
 
@@ -62,6 +61,19 @@ cargo test
 - Comments explain *why*, not *what*. Deliberate shortcuts are marked so they can be found later:
   `// ponytail: <what was simplified>, <when to do better>`.
 - No dead code, no speculative abstractions, no config for values that never change.
+
+## Releasing
+
+A tag `v*` on `main` makes the release: the workflow in `.github/workflows/release.yml` builds the binary for
+Linux (x86_64, ARM), macOS (Apple Silicon, Intel) and Windows, packs each with the courses and the docs, writes
+`SHA256SUMS`, and publishes a GitHub release with generated notes.
+
+1. Bump `version` in `Cargo.toml` (semver: breaking → major, feature → minor, fix → patch) and commit it.
+2. `git tag v0.2.0 && git push origin v0.2.0`.
+3. Watch the Actions tab; the release appears under Releases when the five builds are done.
+
+Every push and pull request runs `.github/workflows/ci.yml`: `cargo clippy --all-targets -- -D warnings` and
+`cargo test`. The code is not run through rustfmt (its dense style is on purpose), so there is no format gate.
 
 ## Commits and pull requests
 

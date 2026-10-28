@@ -2,6 +2,25 @@
 
 Run le-mollet locally, with or without a smart trainer.
 
+## Download a release (no build)
+
+Each [release](https://github.com/Lujeni/le-mollet/releases) ships one archive per platform: Linux (x86_64,
+ARM), macOS (Apple Silicon, Intel), Windows. Inside: the `le-mollet` binary (the web page is built in), the
+courses, the docs.
+
+```sh
+tar xzf le-mollet-v*-linux-x86_64.tar.gz && cd le-mollet-v*-linux-x86_64
+./le-mollet serve
+```
+
+Then open http://localhost:8080 in Chrome or Edge. On Windows, unzip and run `le-mollet.exe serve` from a
+terminal in that folder. On macOS the binary is not notarized: the first run needs
+`xattr -d com.apple.quarantine le-mollet` (or right-click, Open).
+
+The 3D terrains are not in the archive (they are big and built from IGN and OpenStreetMap data): build the ones
+you want once, with network access, `./le-mollet terrain courses/alpe-dhuez.json`, see [3D terrain](#3d-terrain-for-the-climbs).
+Everything the server keeps lands next to it in `le-mollet.db`.
+
 ## Prerequisites
 
 - **Rust 1.85 or newer** (edition 2024). Install with [rustup](https://rustup.rs), or use `mise use rust@latest`.

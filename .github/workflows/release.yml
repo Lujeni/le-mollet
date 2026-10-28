@@ -1,0 +1,70 @@
+# A release on every tag v*: one archive per platform (the binary, the courses, the docs), checksums, and the
+# GitHub release itself with generated notes. See docs/CONTRIBUTING.md, "Releasing".
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, name: linux-x86_64 }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, name: linux-aarch64 }
+          - { os: macos-14, target: aarch64-apple-darwin, name: macos-apple-silicon }
+          - { os: macos-13, target: x86_64-apple-darwin, name: macos-intel }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, name: windows-x86_64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          set -eu
+          v=${GITHUB_REF_NAME}
+          dir=le-mollet-$v-${{ matrix.name }}
+          mkdir -p "$dir/courses"
+          cp courses/*.json courses/AGENTS.md "$dir/courses/"
+          cp README.md LICENSE-MIT LICENSE-APACHE "$dir/"
+          cp -r docs "$dir/docs"
+          if [ "${{ matrix.os }}" = windows-latest ]; then
+            cp target/${{ matrix.target }}/release/le-mollet.exe "$dir/"
+            7z a "$dir.zip" "$dir" > /dev/null
+          else
+            cp target/${{ matrix.target }}/release/le-mollet "$dir/"
+            tar czf "$dir.tar.gz" "$dir"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: le-mollet-*.tar.gz le-mollet-*.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "le-mollet $GITHUB_REF_NAME" --generate-notes

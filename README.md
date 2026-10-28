@@ -10,6 +10,8 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
   and a password ([accounts and roles](docs/rbac.md)).
 - **Self-hostable.** Run the whole thing at home, on your own machine or LAN.
 - **Highly modular.** Trainers, courses, terrain and UI are independent pieces you can swap or extend.
+- **One binary.** Download a [release](https://github.com/Lujeni/le-mollet/releases) for Linux, macOS or Windows, run
+  `le-mollet serve`, open the page ([getting started](docs/getting-started.md)).
 - **Just a browser.** No heavy client to install: the UI runs in any modern web browser. An optional, experimental
   native 3D client is in the works for more realistic rendering.
 
@@ -95,9 +97,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
   follows a yellow pace leader at a set W/kg, and anyone up to 200 m behind rides on the bunch's wheel. A race
   shows the live order with each rider's rank, counts the laps and records the finish, overall and
   per rank.
-- **Races by rank.** Riders get a rank from their W/kg, like a game ladder: Bronze, Argent, Or, Platine, Diamant,
-  Maître and, from 5 W/kg, Légende. The server schedules a race per rank on every half hour, on the short courses in
-  turn, so one always starts soon; organizers can also restrict their own races to some ranks. Riders may race up
+- **Something starts every 15 minutes.** Riders get a rank from their W/kg, like a game ladder: Bronze, Argent, Or,
+  Platine, Diamant, Maître and, from 5 W/kg, Légende. The server schedules a race per rank on every half hour and,
+  on the quarter hours between, a group ride per pace (1.5, 2.5, 3.5 W/kg) behind a leader, on the short courses
+  and loops in turn, so one always starts soon; organizers can also restrict their own races to some ranks. Riders may race up
   a rank, never down. Signed up, you wait in a waiting room: the countdown, who is in at each rank, a warm-up
   hint, and into the start pen on your own when it opens, 10 min before the gun.
 - **Fair play.** The server simulates every ride and keeps each rider's weight and rank itself; it checks every
@@ -200,7 +203,7 @@ Contributions are welcome: bug reports, tested trainers, new climbs, code and do
 
 - Found a bug or have an idea? [Open an issue](https://github.com/Lujeni/le-mollet/issues/new/choose).
 - Own a smart trainer? Test it and add a row to [docs/hardware.md](docs/hardware.md).
-- Want to code? Run `cargo fmt`, `cargo clippy --all-targets` and `cargo test`, use
+- Want to code? Run `cargo clippy --all-targets -- -D warnings` and `cargo test`, use
   [Conventional Commits](https://www.conventionalcommits.org), and open a pull request.
 
 Everything else is in the [contributing guide](docs/CONTRIBUTING.md).
