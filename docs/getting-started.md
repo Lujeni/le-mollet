@@ -87,7 +87,7 @@ LE_MOLLET_RAW=1 cargo run -- trainer kickr    # also dumps raw BLE frames (telem
 ```
 
 Supported: FTMS trainers, with the Wahoo proprietary protocol as a fallback for older KICKRs. What has been
-verified on which trainer is listed in the README ("Tested hardware"). When you test a trainer, run the console
+verified on which trainer is listed in [hardware.md](hardware.md) ("Tested hardware"). When you test a trainer, run the console
 above with `LE_MOLLET_RAW=1`, pedal above 20 km/h, try `erg 150` and `grade 5`, and update that table.
 
 ## Play on the LAN

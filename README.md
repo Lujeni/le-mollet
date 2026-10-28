@@ -179,16 +179,9 @@ and relaunch (the equipment screen says so when it is off). Open the page on `lo
 **Virtual gears.** 24 virtual gears, shifted with the `+` and `-` keys or a Bluetooth handlebar controller
 connected from the same screen: the grade sent to the trainer is the one that asks, at the speed it measures, the
 power the virtual gear would take at the same cadence. A controller's other buttons ride the game (Ride On, road
-bonus, turns in a city, pause). Another device to support? See [debugging hardware](docs/CONTRIBUTING.md#debugging-hardware).
+bonus, turns in a city, pause).
 
-Tested hardware:
-
-| Trainer | Protocol | Connection | Speed | Power | Grade / ERG control |
-|---|---|---|---|---|---|
-| Wahoo KICKR CORE | FTMS | ✅ | ✅ | ⚠️ only 0 W seen so far, at low speed | ⏳ not verified yet |
-| Older Wahoo KICKR (no FTMS) | Wahoo proprietary | ⏳ implemented, untested | ⏳ | ⏳ | ⏳ |
-
-✅ verified on the device · ⚠️ partial · ⏳ not tested yet. Tested another trainer? Add a row.
+Which trainers, straps and controllers have been verified, and how to get yours supported: [hardware](docs/hardware.md).
 
 ## Docs
 
@@ -198,7 +191,7 @@ Tested hardware:
 - [Accounts and roles](docs/rbac.md): Le Mollet accounts, roles and permissions.
 - [Fair play and security](docs/security.md): what the server trusts, the power checks, CSRF.
 - [Metrics](docs/metrics.md): Prometheus metrics on usage and performance, `/metrics`.
-- [New hardware](docs/hardware.md): `le-mollet probe`, the Bluetooth capture to send to support a device (and [debugging hardware](docs/CONTRIBUTING.md#debugging-hardware)).
+- [Hardware](docs/hardware.md): tested trainers and controllers, `le-mollet probe` to get a new device supported (and [debugging hardware](docs/CONTRIBUTING.md#debugging-hardware)).
 - [Contributing](docs/CONTRIBUTING.md): principles, checks, commits, testing a trainer.
 
 ## Contributing
@@ -206,7 +199,7 @@ Tested hardware:
 Contributions are welcome: bug reports, tested trainers, new climbs, code and docs.
 
 - Found a bug or have an idea? [Open an issue](https://github.com/Lujeni/le-mollet/issues/new/choose).
-- Own a smart trainer? Test it and add a row to the table above.
+- Own a smart trainer? Test it and add a row to [docs/hardware.md](docs/hardware.md).
 - Want to code? Run `cargo fmt`, `cargo clippy --all-targets` and `cargo test`, use
   [Conventional Commits](https://www.conventionalcommits.org), and open a pull request.
 

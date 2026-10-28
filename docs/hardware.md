@@ -1,4 +1,28 @@
-# Supporting new hardware: `le-mollet probe`
+# Hardware
+
+## Tested hardware
+
+✅ verified on the device · ⚠️ partial · ⏳ not tested yet. Tested something? Add a row (see
+[Testing a trainer](CONTRIBUTING.md#testing-a-trainer)).
+
+| Trainer | Firmware | Protocol | Connection | Speed | Cadence | Power | Grade (ride) | ERG (workout) |
+|---|---|---|---|---|---|---|---|---|
+| Wahoo KICKR CORE | 1.3.17 | FTMS | ✅ | ✅ | ✅ | ✅ | ✅ from the browser | ⏳ |
+| Older Wahoo KICKR (no FTMS) | | Wahoo proprietary | ⏳ implemented, untested | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+
+| Controller | Firmware | Connection | Virtual gears | Other buttons |
+|---|---|---|---|---|
+| Zwift Ride (both hoods) | 1.1.0 | ✅ one per hood | ✅ right shifts up, left down | ✅ Ride On, power-up, turns, pause; brake levers read, unused |
+
+| Heart rate strap | Connection | Heart rate |
+|---|---|---|
+| any Bluetooth strap (Heart Rate service) | ⏳ implemented, untested | ⏳ |
+
+The KICKR CORE was verified with the probe below (speed, cadence and power once a second on both FTMS and Cycling
+Power) and by riding with the virtual gears from the page. The Zwift Ride's two hoods were mapped button by button
+(see "Known devices").
+
+## Supporting new hardware: `le-mollet probe`
 
 A trainer, a power meter, a controller that le-mollet does not know yet? Run the probe and send its output: it is
 what is needed to write the support. It uses the computer's own Bluetooth (Windows 10+, macOS, Linux), not the
@@ -7,7 +31,7 @@ browser, so it sees every service, even the proprietary ones.
 Before starting: wake the device (pedal, press a button), and **close Zwift and any other app** that could be
 connected to it. A Bluetooth device talks to one app at a time.
 
-## 1. List the devices around
+### 1. List the devices around
 
 ```sh
 le-mollet probe
@@ -15,7 +39,7 @@ le-mollet probe
 
 Each device with its name, address, the services it advertises and its maker data. Find yours in the list.
 
-## 2. Map it and record what it sends
+### 2. Map it and record what it sends
 
 ```sh
 le-mollet probe "KICKR" > probe.txt        # a part of its name, or its address
@@ -36,7 +60,7 @@ Send `probe.txt` with what you did and when. The lines look like:
   12.408s 00000002-19ca-4651-86e5-fa29dcdd09d1 Zwift async (notify)  23 08 ff ff ff ff 0f
 ```
 
-## 3. Devices that wait for a word first
+### 3. Devices that wait for a word first
 
 Some devices stay silent until the app says something. `--write` sends bytes once everything is subscribed,
 as hex or text (repeatable):
@@ -48,7 +72,7 @@ le-mollet probe "Zwift" --write 00000003-19ca-4651-86e5-fa29dcdd09d1=text:RideOn
 le-mollet probe "KICKR" --write 2ad9=00 --write 2ad9=07
 ```
 
-## Running it
+### Running it
 
 There is no installer yet: build it once with [Rust](https://rustup.rs) (on Windows, rustup installs the Visual
 Studio build tools it needs), then:

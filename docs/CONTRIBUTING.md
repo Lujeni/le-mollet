@@ -9,7 +9,7 @@ all welcome. This page explains how to help and what a change needs before it is
 |---|---|
 | A bug | Open a [bug report](https://github.com/Lujeni/le-mollet/issues/new?template=bug_report.yml). |
 | An idea | Open a [feature request](https://github.com/Lujeni/le-mollet/issues/new?template=feature_request.yml) before writing code. |
-| A smart trainer | Test it and add a row to the README "Tested hardware" table (see [Testing a trainer](#testing-a-trainer)). |
+| A smart trainer | Test it and add a row to the "Tested hardware" tables in [hardware.md](hardware.md) (see [Testing a trainer](#testing-a-trainer)). |
 | A favorite climb | Add it as a course: follow [courses/AGENTS.md](../courses/AGENTS.md). |
 | Some time | Pick an open issue, say in a comment that you take it, then open a pull request. |
 
@@ -93,7 +93,7 @@ Pull requests:
 
 ## Testing a trainer
 
-The README lists which trainers have been verified. To add yours:
+[hardware.md](hardware.md) lists which trainers have been verified. To add yours:
 
 ```sh
 LE_MOLLET_RAW=1 cargo run -- trainer <name>
@@ -102,7 +102,7 @@ LE_MOLLET_RAW=1 cargo run -- trainer <name>
 1. Pedal above 20 km/h and check that power, cadence and speed look right.
 2. Type `erg 150`, then `grade 5`, and feel the resistance change.
 3. Type `quit`, then ride a course with `cargo run -- serve --trainer <name>`.
-4. Add or update the row in the README table (✅ / ⚠️ / ⏳) and open a pull request. If something fails, open a
+4. Add or update the row in [hardware.md](hardware.md) (✅ / ⚠️ / ⏳) and open a pull request. If something fails, open a
    bug report with the raw frames instead.
 
 ## Debugging hardware
