@@ -6,8 +6,8 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 
 - **Free forever.** No subscription, no paywall, ever.
 - **No account required.** Run it on your PC and ride: no sign-up, everything stays local, you are admin. Open it to
-  your LAN with `serve --lan`. A public server (`--mode cloud`) asks riders to sign in with Strava
-  ([accounts and roles](docs/rbac.md)).
+  your LAN with `serve --lan`. A public server (`--mode cloud`) asks riders for a Le Mollet account, a name
+  and a password ([accounts and roles](docs/rbac.md)).
 - **Self-hostable.** Run the whole thing at home, on your own machine or LAN.
 - **Highly modular.** Trainers, courses, terrain and UI are independent pieces you can swap or extend.
 - **Just a browser.** No heavy client to install: the UI runs in any modern web browser. An optional, experimental
@@ -188,7 +188,7 @@ Tested hardware:
 - [Getting started](docs/getting-started.md): run it locally, connect a trainer, play on the LAN, develop.
 - [Adding a course](courses/AGENTS.md): turn a real climb into a ridable course.
 - [How courses are built](docs/courses.md): data sources, smoothing, validation, recipes.
-- [Accounts and roles](docs/rbac.md): sign in with Strava, roles and permissions.
+- [Accounts and roles](docs/rbac.md): Le Mollet accounts, roles and permissions.
 - [Fair play and security](docs/security.md): what the server trusts, the power checks, CSRF.
 - [Metrics](docs/metrics.md): Prometheus metrics on usage and performance, `/metrics`.
 - [Contributing](docs/CONTRIBUTING.md): principles, checks, commits, testing a trainer.

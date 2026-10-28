@@ -5,17 +5,16 @@
 | | `serve` (local, default) | `serve --lan` | `serve --mode cloud` |
 |---|---|---|---|
 | Listens on | this PC only | the whole network | `--addr` |
-| Account | none | none (Strava optional) | **required** |
-| Admin | the browser on this PC | the browser on this PC | athletes given `admin` (`le-mollet role`) |
-| Others | | LAN guests ride as Riders | signed-in athletes ride as Riders |
+| Account | none | none (optional) | **required** |
+| Admin | the browser on this PC | the browser on this PC | accounts given `admin` (`le-mollet role`) |
+| Others | | LAN guests ride as Riders | signed-in accounts ride as Riders |
 
 In local mode, profiles, history and progression stay in the browser; the server keeps leaderboards and roles
 next to it. "This PC" means requests from loopback: cloud mode never trusts that, since behind a reverse proxy
 every request comes from loopback.
 
-Cloud mode refuses to start without a sign-in provider, and answers `401` to everything but the page,
-`/whoami` and `/auth/*` until the rider signs in; the page then shows only the sign-in. Strava is the only
-provider for now.
+Cloud mode answers `401` to everything but the page, `/whoami` and `/auth/*` until the rider signs in; the
+page then shows only the sign-in.
 
 ## Roles and permissions
 
@@ -33,42 +32,29 @@ To protect a new endpoint: add a `Perm` variant if none fits, a line in `Role::c
 the top of `handle` in `src/web.rs`. The page asks `/whoami` for the caller's permissions (`can('moderate')`)
 to show or hide controls; the server checks again on every request.
 
-## Sign in with Strava
+## Accounts
 
-Sign-in uses Strava's OAuth 2 flow, run by the [`oauth2`](https://crates.io/crates/oauth2) crate: the server sends
-the browser to Strava, checks the `state` it gets back (CSRF), trades the code for the athlete and their tokens,
-and sets an `lm_session` cookie (HttpOnly, SameSite=Lax, 30 days). Sessions live in memory: a restart signs
-everyone out.
+A Le Mollet account is a name and a password, nothing else (`src/account.rs`), created from the page: **the
+sign-in screen** in cloud mode, or **Profile > Compte** elsewhere (same form: *Se connecter* or *Créer un
+compte*).
 
-1. Create an app on [strava.com/settings/api](https://www.strava.com/settings/api). **Authorization Callback
-   Domain**: the host riders use (`localhost` works for testing).
-2. Start the server with its credentials (never commit them):
-
-   ```sh
-   LE_MOLLET_STRAVA_CLIENT_ID=12345 \
-   LE_MOLLET_STRAVA_CLIENT_SECRET=... \
-   LE_MOLLET_PUBLIC_URL=http://localhost:8080 \
-   cargo run --release -- serve
-   ```
-
-   `LE_MOLLET_PUBLIC_URL` is where riders reach the server; the callback is `<it>/auth/strava/callback`. With
-   `https://`, the session cookie is also `Secure`.
-3. In the page: **Profile > Compte > Se connecter avec Strava**.
-
-Scopes asked: `read,activity:write`, so a later version can upload rides to Strava. The tokens are kept in
-the server's database, `le-mollet.db` (readable by the server's user only, git-ignored).
-
-Strava limits a new app to its creator ("single player mode"); raise it to 10 athletes in the app settings, and
-ask Strava for a review beyond that. Fine for a club, a bottleneck for a public server.
+- **Name**: 3 to 24 letters, digits, `-` or `_`; "Julien" and "julien" are one account.
+- **Password**: 8 to 128 characters, stored as an Argon2id hash (its own salt, PHC string), never as such.
+- `POST /auth/signup` or `/auth/login` with `name` and `password` (form-encoded) set an `lm_session` cookie:
+  HttpOnly, SameSite=Lax, 30 days, and `Secure` when `LE_MOLLET_PUBLIC_URL` starts with `https://`. Sessions are
+  kept in the database: a restart signs nobody out. `/auth/logout` ends one.
+- **Password guessing**: five wrong passwords for a name lock that name for 15 minutes. A wrong name and a wrong
+  password get the same answer.
+- Requests from another site's page are refused, sign-in included (docs/security.md).
 
 ## Giving roles
 
-Roles are given by Strava athlete id (shown in Profile > Compte once signed in), in the server's database, at once (even while it runs):
+Roles are given by account name, in the server's database, at once (even while it runs):
 
 ```sh
-cargo run -- role set 4242 admin --note Julien    # or organizer, rider
+cargo run -- role set julien admin --note "le patron"    # or organizer, rider
 cargo run -- role list
-cargo run -- role remove 4242
+cargo run -- role remove julien
 ```
 
 `serve --db <file>` and `role --db <file>` pick another database. No roles means everyone rides and nobody

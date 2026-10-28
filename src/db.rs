@@ -1,5 +1,5 @@
 //! What the server keeps across restarts, in one SQLite file (`le-mollet.db`, next to where it runs): riders,
-//! events, clubs, leaderboards, roles, sign-in sessions, Strava tokens. Nothing to install or configure, at home
+//! events, clubs, leaderboards, accounts, roles, sign-in sessions. Nothing to install or configure, at home
 //! as on a server. Each kind of record is a collection of JSON documents by id: a change writes its own row, in
 //! a transaction, so a crash never loses the rest. The live state of a ride (where everyone is on the road)
 //! stays in memory. JSON files from older versions are imported on the first start and kept as `.json.bak`.
@@ -21,13 +21,12 @@ fn timed<T>(op: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
 }
 
 /// Older JSON files: collection, file, the field holding the records, the field naming each one (else map keys).
-const IMPORT: [(&str, &str, Option<&str>, Option<&str>); 6] = [
+const IMPORT: [(&str, &str, Option<&str>, Option<&str>); 5] = [
     ("boards", "leaderboards.json", None, None),
     ("clubs", "clubs.json", Some("clubs"), Some("code")),
     ("events", "events.json", Some("events"), Some("id")),
     ("riders", "riders.json", Some("riders"), None),
     ("roles", "roles.json", Some("grants"), None),
-    ("strava_tokens", "strava-tokens.json", None, None),
 ];
 
 impl Db {
@@ -39,7 +38,7 @@ impl Db {
         c.pragma_update(None, "synchronous", "NORMAL")?;
         c.busy_timeout(std::time::Duration::from_secs(5))?;
         c.execute_batch("CREATE TABLE IF NOT EXISTS docs (coll TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (coll, id)) WITHOUT ROWID")?;
-        // Sign-in sessions and Strava tokens live here: for the server's user only.
+        // Password hashes and sign-in sessions live here: for the server's user only.
         #[cfg(unix)]
         std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
         let db = Self(Mutex::new(c));

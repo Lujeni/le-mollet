@@ -36,7 +36,7 @@ pub struct Rider {
     pub created: u64,
     /// Declared FTP, W.
     pub ftp: f32,
-    /// Strava athlete who owns this profile, in cloud mode: no one else may use it.
+    /// Account that owns this profile, in cloud mode: no one else may use it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<u64>,
     /// FTP seen in rides, W, with when: 95 % of a 20 min best, or a race's best effort.
@@ -85,8 +85,8 @@ impl Riders {
     }
 
     /// Whoever asks with this profile id may use it: anyone at home, its owner only in cloud mode.
-    pub fn may_use(&self, pid: &str, athlete: Option<u64>) -> bool {
-        self.riders.get(pid).and_then(|r| r.owner).is_none_or(|o| Some(o) == athlete)
+    pub fn may_use(&self, pid: &str, account: Option<u64>) -> bool {
+        self.riders.get(pid).and_then(|r| r.owner).is_none_or(|o| Some(o) == account)
     }
 
     /// Create or update a rider. The weight moves slowly (see `WEIGHT_STEP`); the FTP is free, it can only

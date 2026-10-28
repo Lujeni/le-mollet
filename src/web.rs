@@ -18,7 +18,7 @@
 //!   GET /power?session=<n>&w=<W>[&cad=&hr=&src=bt]  the rider's power: demo slider, or the browser's own trainer
 //!   GET /segments?id=<id>                      KOM and sprint leaderboards of a course or open world
 //!   GET /whoami                                the caller's identity, role and permissions (docs/rbac.md)
-//!   GET /auth/strava, /auth/strava/callback    sign in with Strava (OAuth 2); /auth/logout signs out
+//!   POST /auth/signup, /auth/login  (name=&password=, form-encoded)   a Le Mollet account; GET /auth/logout signs out
 //!   GET /admin/segments/reset?id=<id>&name=<segment>  wipe a leaderboard (moderate)
 //!
 //!   GET /emote?session=<n>&course=<id>&e=<rideon|wave|fire|laugh|party>[&to=<rider id>]  a bubble over my rider; a Ride On to someone
@@ -40,8 +40,8 @@
 //!   GET /metrics                               Prometheus metrics, usage and performance (docs/metrics.md)
 //!
 //! Access (docs/rbac.md): in `Local` mode, whoever sits at the server's PC is admin without an account and LAN
-//! guests ride as Riders; in `Cloud` mode, everything but the page and the sign-in needs a Strava sign-in.
-//! Signing in sets an `lm_session` cookie; the athlete's role from the database (`le-mollet role`). Endpoints check `Perm`s.
+//! guests ride as Riders; in `Cloud` mode, everything but the page and the sign-in needs an account.
+//! Signing in sets an `lm_session` cookie; the account's role comes from the database (`le-mollet role`). Endpoints check `Perm`s.
 //!
 //! Power, per ride: the browser's own trainer (Web Bluetooth, `src=bt`), else the server's trainer (whose grade the
 //! latest ride drives), else the demo slider. Pace partners ride every course and open world around the clock.
@@ -55,7 +55,7 @@ use le_mollet::Trainer;
 use le_mollet::auth::{Identity, Perm, Role, Roles};
 use le_mollet::club::{self, Clubs};
 use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
-use le_mollet::strava::{self, Strava};
+use le_mollet::account;
 use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
 use le_mollet::metrics;
@@ -245,12 +245,10 @@ pub struct App {
     /// Group rides whose pace leader is out on the road.
     beacons: Mutex<HashSet<String>>,
     mode: Mode,
-    /// The server's Strava app, when configured (LE_MOLLET_STRAVA_CLIENT_ID / _SECRET).
-    strava: Option<Strava>,
     /// Signed-in browsers: session cookie -> who.
     sessions: Mutex<HashMap<String, Session>>,
-    /// OAuth states handed out and not used yet, with when: a callback must bring one back (CSRF).
-    oauth_states: Mutex<HashMap<String, std::time::Instant>>,
+    /// Failed logins by account name, and since when: a few tries, then a pause (no password guessing).
+    login_fails: Mutex<HashMap<String, (u32, std::time::Instant)>>,
     demo_seek: Mutex<HashMap<u64, f32>>,
     paused: Mutex<HashSet<u64>>,
     /// Open city: turn each session asked for at its next junction.
@@ -267,7 +265,7 @@ pub struct App {
     started: std::time::Instant,
 }
 
-/// A ride's owner: the browser's address and, signed in, the athlete.
+/// A ride's owner: the browser's address and, signed in, the account.
 type Owner = (Option<std::net::IpAddr>, Option<u64>);
 
 /// Where the server runs, which sets who must sign in.
@@ -276,7 +274,7 @@ type Owner = (Option<std::net::IpAddr>, Option<u64>);
 pub enum Mode {
     /// One person's PC (maybe open to the LAN): no account, the PC's own browser is admin.
     Local,
-    /// A public server: Strava sign-in required to ride.
+    /// A public server: an account required to ride.
     Cloud,
 }
 
@@ -284,8 +282,6 @@ impl App {
     /// Load every `*.json` course in `dir` (the id is the file stem) and open today's world.
     pub fn new(dir: &str, trainer: Option<Trainer>, difficulty: f32, db: Db, mode: Mode) -> anyhow::Result<Self> {
         Roles::load(&db)?; // broken roles stop the server now, not at the first admin call
-        let strava = Strava::from_env()?;
-        anyhow::ensure!(mode == Mode::Local || strava.is_some(), "cloud mode needs a Strava app: set LE_MOLLET_STRAVA_CLIENT_ID and _SECRET (docs/rbac.md)");
         let mut paths: Vec<_> = std::fs::read_dir(dir)
             .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json") && !p.to_string_lossy().ends_with(".map.json") && !p.ends_with("leaderboards.json") && !p.ends_with("clubs.json") && !p.ends_with("events.json") && !p.ends_with("riders.json")).collect())
             .unwrap_or_default();
@@ -329,10 +325,9 @@ impl App {
             events: Mutex::new(Events::load(&db)?),
             beacons: Mutex::new(HashSet::new()),
             mode,
-            strava,
             // Signed-in browsers stay signed in across a restart.
             sessions: Mutex::new(db.all::<Session>("sessions")?.into_iter().filter(|(_, s)| s.expires > std::time::SystemTime::now()).collect()),
-            oauth_states: Mutex::new(HashMap::new()),
+            login_fails: Mutex::new(HashMap::new()),
             demo_seek: Mutex::new(HashMap::new()),
             paused: Mutex::new(HashSet::new()),
             turns: Mutex::new(HashMap::new()),
@@ -357,27 +352,15 @@ impl App {
     /// Who sent a request, from its session cookie and, in local mode, where from: the server's own PC is admin.
     /// Only signed-in requests read the roles file, so `le-mollet role` takes effect at once without a restart.
     /// Never trusted in cloud mode: behind a reverse proxy every request comes from loopback.
-    /// ponytail: one small file read per signed-in request; cache by mtime if it ever shows up in a profile
+    /// ponytail: one small database read per signed-in request; cache the roles if it ever shows up in a profile
     fn identify(&self, cookie: Option<&str>, peer: Option<std::net::IpAddr>) -> Identity {
         let owner = self.mode == Mode::Local && peer.is_some_and(|ip| ip.is_loopback());
         let mut who = match cookie.and_then(|c| self.sessions.lock().unwrap().get(c).filter(|s| s.expires > std::time::SystemTime::now()).cloned()) {
-            Some(s) => Identity { role: Roles::load(&self.db).map_or(Role::Rider, |r| r.role_of(s.athlete)), name: Some(s.name), athlete: Some(s.athlete) },
+            Some(s) => Identity { role: Roles::load(&self.db).map_or(Role::Rider, |r| r.role_of(s.account)), name: Some(s.name), account: Some(s.account) },
             None => Identity::ANONYMOUS,
         };
         if owner { who.role = Role::Admin }
         who
-    }
-
-    /// A fresh OAuth state; old unused ones are dropped after 10 minutes.
-    fn new_state(&self, state: String) {
-        let mut states = self.oauth_states.lock().unwrap();
-        states.retain(|_, t| t.elapsed().as_secs() < 600);
-        states.insert(state, std::time::Instant::now());
-    }
-
-    /// Strava tokens by athlete, to upload rides on their behalf later.
-    fn save_strava_tokens(&self, athlete: u64, t: strava::Tokens) {
-        if let Err(e) = self.db.put("strava_tokens", &athlete.to_string(), &t) { eprintln!("strava tokens: {e}") }
     }
 
     /// `/metrics`: the registry (src/metrics.rs), plus what is read off the server's state now.
@@ -528,7 +511,14 @@ fn presence(query: &str, sid: u64) -> Presence {
 
 async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let mut buf = [0u8; 16384]; // an imported workout travels in the query
-    let n = sock.read(&mut buf).await?;
+    let mut n = sock.read(&mut buf).await?;
+    // A form (sign-in) may come after the head in a later packet: read up to its Content-Length.
+    while let Some(end) = buf[..n].windows(4).position(|w| w == b"\r\n\r\n") {
+        let head = String::from_utf8_lossy(&buf[..end]);
+        let want = header(&head, "content-length").and_then(|l| l.parse::<usize>().ok()).unwrap_or(0);
+        if n >= (end + 4 + want).min(buf.len()) { break }
+        match sock.read(&mut buf[n..]).await? { 0 => break, k => n += k }
+    }
     let req = String::from_utf8_lossy(&buf[..n]);
     let target = req.split_whitespace().nth(1).unwrap_or("/");
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
@@ -553,12 +543,12 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let open = matches!(path, "/" | "/whoami") || path.starts_with("/auth/") || path.starts_with("/audio/");
     // Another site's page must not drive this one in the visitor's browser (CSRF): every call but a visit is refused
     // when the browser says it comes from elsewhere.
-    if !open && cross_site(&req) {
+    if !(path == "/" || path.starts_with("/audio/")) && cross_site(&req) {
         metrics::inc("le_mollet_rejected_total", &[("reason", "cross_site")]);
         return reply(&mut sock, "403 Forbidden", "text/plain", b"cross-site request").await;
     }
     // A ride is steered only by whoever opened it; the first call claims a fresh session.
-    let owner: Owner = (peer, who.athlete);
+    let owner: Owner = (peer, who.account);
     if matches!(path, "/power" | "/seek" | "/turn" | "/powerup" | "/pause" | "/emote" | "/events")
         && let Some(sid) = session
         && *app.owners.lock().unwrap().entry(sid).or_insert(owner) != owner
@@ -568,12 +558,12 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     }
     // A profile id in the query: in cloud mode, only its owner may use it.
     let pid = param(query, "pid").filter(|p| valid_pid(p));
-    if pid.is_some_and(|p| !app.riders.lock().unwrap().may_use(p, who.athlete)) {
+    if pid.is_some_and(|p| !app.riders.lock().unwrap().may_use(p, who.account)) {
         metrics::inc("le_mollet_rejected_total", &[("reason", "profile_owner")]);
         return reply(&mut sock, "403 Forbidden", "text/plain", b"this profile belongs to another account").await;
     }
-    if app.mode == Mode::Cloud && who.athlete.is_none() && !open {
-        return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in with Strava first").await;
+    if app.mode == Mode::Cloud && who.account.is_none() && !open {
+        return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await;
     }
     // The one gate: a permission per endpoint that is not plain riding.
     let needs = match path {
@@ -593,45 +583,45 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/workouts", _) => reply(&mut sock, "200 OK", "application/json", app.workouts_json.as_bytes()).await,
         ("/courses", _) => reply(&mut sock, "200 OK", "application/json", app.list_json.as_bytes()).await,
         ("/whoami", _) => {
-            let body = json!({ "role": who.role, "name": who.name, "athlete": who.athlete, "perms": who.role.perms(), "strava": app.strava.is_some(), "mode": app.mode }).to_string();
+            let body = json!({ "role": who.role, "name": who.name, "account": who.account, "perms": who.role.perms(), "mode": app.mode }).to_string();
             reply(&mut sock, "200 OK", "application/json", body.as_bytes()).await
         }
-        ("/auth/strava", _) => match &app.strava {
-            Some(s) => {
-                let (url, state) = s.authorize_url();
-                app.new_state(state);
-                redirect(&mut sock, &url, None).await
-            }
-            None => reply(&mut sock, "404 Not Found", "text/plain", b"no Strava app on this server (docs/rbac.md)").await,
-        },
-        ("/auth/strava/callback", _) => {
-            // The state must be one we handed out (and is used once): otherwise this is not our sign-in.
-            let state_ok = param(query, "state").is_some_and(|st| app.oauth_states.lock().unwrap().remove(&decode(st)).is_some_and(|t| t.elapsed().as_secs() < 600));
-            let (Some(s), Some(code), true) = (app.strava.as_ref(), param(query, "code"), state_ok) else {
-                metrics::inc("le_mollet_signins_total", &[("result", "refused")]);
-                return redirect(&mut sock, "/?signin=failed", None).await; // refused on Strava, expired or forged
+        ("/auth/signup" | "/auth/login", _) if req.starts_with("POST ") => {
+            let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
+            let (name, password) = (param(form, "name").map(decode).unwrap_or_default(), param(form, "password").map(decode).unwrap_or_default());
+            let key = name.to_ascii_lowercase();
+            // Five wrong passwords for a name: that name waits 15 minutes.
+            let locked = app.login_fails.lock().unwrap().get(&key).is_some_and(|(n, t)| *n >= 5 && t.elapsed().as_secs() < 900);
+            let res = if locked { Err("too many tries: wait 15 minutes") } else if path == "/auth/signup" {
+                tokio::task::block_in_place(|| account::signup(&app.db, name.trim(), &password, unix_now())) // the hash takes a while, on purpose
+            } else {
+                tokio::task::block_in_place(|| account::login(&app.db, name.trim(), &password))
             };
-            let code = decode(code);
-            match tokio::task::block_in_place(|| s.exchange(&code)) {
-                Ok((athlete, mut tokens)) => {
-                    metrics::inc("le_mollet_signins_total", &[("result", "ok")]);
-                    // Strava tells which scopes were granted on the callback, not in the token response.
-                    tokens.scope = param(query, "scope").map(decode).unwrap_or_default();
+            match res {
+                Ok(a) => {
+                    metrics::inc("le_mollet_signins_total", &[("result", if path == "/auth/signup" { "signup" } else { "ok" })]);
+                    app.login_fails.lock().unwrap().remove(&key);
                     let id = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
-                    let name = athlete.name();
-                    let s = Session { athlete: athlete.id, name: name.clone(), expires: std::time::SystemTime::now() + SESSION_TTL };
+                    let s = Session { account: a.id, name: a.name.clone(), expires: std::time::SystemTime::now() + SESSION_TTL };
                     if let Err(e) = app.db.put("sessions", &id, &s) { eprintln!("sessions: {e}") }
                     app.sessions.lock().unwrap().insert(id.clone(), s);
-                    app.save_strava_tokens(athlete.id, tokens);
-                    eprintln!("signed in: {name} (Strava athlete {})", athlete.id);
                     let secure = if std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("https://")) { "; Secure" } else { "" };
                     let cookie = format!("{SESSION_COOKIE}={id}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}{secure}", SESSION_TTL.as_secs());
-                    redirect(&mut sock, "/?signin=strava", Some(&cookie)).await
+                    let body = json!({ "name": a.name, "account": a.id }).to_string();
+                    let head = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nSet-Cookie: {cookie}\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+                    metrics::inc("le_mollet_http_responses_total", &[("code", "200")]);
+                    sock.write_all(head.as_bytes()).await?;
+                    sock.write_all(body.as_bytes()).await
                 }
                 Err(e) => {
-                    eprintln!("Strava sign-in failed: {e:#}");
-                    metrics::inc("le_mollet_signins_total", &[("result", "error")]);
-                    redirect(&mut sock, "/?signin=failed", None).await
+                    if e == "wrong name or password" {
+                        let mut fails = app.login_fails.lock().unwrap();
+                        let f = fails.entry(key).or_insert((0, std::time::Instant::now()));
+                        if f.1.elapsed().as_secs() >= 900 { *f = (0, std::time::Instant::now()) }
+                        f.0 += 1;
+                    }
+                    metrics::inc("le_mollet_signins_total", &[("result", if locked { "locked" } else { "refused" })]);
+                    reply(&mut sock, if locked { "429 Too Many Requests" } else { "400 Bad Request" }, "text/plain", e.as_bytes()).await
                 }
             }
         }
@@ -660,7 +650,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let (status, body) = {
                 let mut riders = app.riders.lock().unwrap();
                 let res = match (num("weight"), num("ftp")) {
-                    (Some(w), Some(f)) => riders.register(pid, who.athlete, w, f, now).cloned(),
+                    (Some(w), Some(f)) => riders.register(pid, who.account, w, f, now).cloned(),
                     _ => riders.riders.get(pid).cloned().ok_or("no such rider"),
                 };
                 let view = |r: &rider::Rider| json!({ "weight": r.weight, "ftp": r.ftp, "seen_ftp": r.seen_ftp(now), "rank": r.rank(now).to_string(), "wkg": r.wkg(now), "flags": r.flags.len() });
@@ -1421,7 +1411,7 @@ const SESSION_TTL: Duration = Duration::from_secs(30 * 86_400);
 
 #[derive(Clone, Serialize, serde::Deserialize)]
 struct Session {
-    athlete: u64,
+    account: u64,
     name: String,
     expires: std::time::SystemTime,
 }

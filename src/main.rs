@@ -57,19 +57,19 @@ enum Cmd {
         /// The database: riders, events, clubs, leaderboards, roles, sign-ins (one SQLite file, see src/db.rs)
         #[arg(long, default_value = "le-mollet.db")]
         db: String,
-        /// local: no account, this PC's browser is admin. cloud: Strava sign-in required (docs/rbac.md)
+        /// local: no account needed, this PC's browser is admin. cloud: a Le Mollet account required (docs/rbac.md)
         #[arg(long, value_enum, default_value_t = web::Mode::Local)]
         mode: web::Mode,
         /// Local mode: open the server to the local network (listen on 0.0.0.0, same port); guests ride as Riders
         #[arg(long)]
         lan: bool,
     },
-    /// Give roles to Strava athletes: set <athlete id> admin|organizer|rider [--note Julien], remove <id>, list
+    /// Give roles to accounts: set <name> admin|organizer|rider [--note X], remove <name>, list
     Role {
         /// set, remove or list
         action: String,
-        /// Strava athlete id (shown in the page once signed in, and in strava.com/athletes/<id>)
-        athlete: Option<u64>,
+        /// Account name (as signed up in the page)
+        account: Option<String>,
         /// admin, organizer or rider
         role: Option<String>,
         /// A label for the list
@@ -164,24 +164,30 @@ async fn main() -> anyhow::Result<()> {
             let addr = if lan { format!("0.0.0.0:{}", addr.rsplit(':').next().unwrap_or("8080")) } else { addr };
             serve(&addr, trainer, difficulty, &courses, &db, mode).await
         }
-        Cmd::Role { action, athlete, role, note, db } => {
+        Cmd::Role { action, account, role, note, db } => {
             use le_mollet::auth::{Grant, Role, Roles};
             let db = le_mollet::db::Db::open(&db, &[db_dir(&db)])?;
             let mut r = Roles::load(&db)?;
-            match (action.as_str(), athlete, role) {
-                ("set", Some(id), Some(role)) => {
+            let find = |name: &str| le_mollet::account::find(&db, name).with_context(|| format!("no account named {name}"));
+            match (action.as_str(), account, role) {
+                ("set", Some(name), Some(role)) => {
+                    let a = find(&name)?;
                     let role = Role::parse(&role).context("role: admin, organizer or rider")?;
-                    r.grants.insert(id, Grant { role, note });
+                    r.grants.insert(a.id, Grant { role, note });
                     r.save(&db)?;
-                    println!("Strava athlete {id} is now {role:?} on this server (effective at once).");
+                    println!("{} is now {role:?} on this server (effective at once).", a.name);
                 }
-                ("remove", Some(id), _) => {
-                    anyhow::ensure!(r.grants.remove(&id).is_some(), "athlete {id} has no role");
+                ("remove", Some(name), _) => {
+                    let a = find(&name)?;
+                    anyhow::ensure!(r.grants.remove(&a.id).is_some(), "{} has no role", a.name);
                     r.save(&db)?;
-                    println!("Strava athlete {id} is a rider again.");
+                    println!("{} is a rider again.", a.name);
                 }
-                ("list", _, _) => r.grants.iter().for_each(|(id, g)| println!("{id:<12} {:<10} {}", format!("{:?}", g.role), g.note)),
-                _ => anyhow::bail!("usage: le-mollet role set <athlete id> admin|organizer|rider [--note X] | remove <athlete id> | list"),
+                ("list", _, _) => r.grants.iter().for_each(|(id, g)| {
+                    let name = le_mollet::account::by_id(&db, *id).map_or_else(|| format!("#{id}"), |a| a.name);
+                    println!("{name:<24} {:<10} {}", format!("{:?}", g.role), g.note)
+                }),
+                _ => anyhow::bail!("usage: le-mollet role set <account> admin|organizer|rider [--note X] | remove <account> | list"),
             }
             Ok(())
         }
@@ -281,7 +287,7 @@ async fn trainer_console(filter: Option<String>) -> anyhow::Result<()> {
     trainer.disconnect().await
 }
 
-/// Where the database sits: older JSON files (roles.json, strava-tokens.json) are looked for there too.
+/// Where the database sits: an older roles.json is looked for there too.
 fn db_dir(db: &str) -> &str {
     std::path::Path::new(db).parent().and_then(|p| p.to_str()).filter(|p| !p.is_empty()).unwrap_or(".")
 }

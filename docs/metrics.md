@@ -32,7 +32,7 @@ Labels only take values from fixed sets (routes, kinds, reasons) or track ids, n
 | `le_mollet_emotes_total` | counter | `e` |
 | `le_mollet_powerups_total`, `le_mollet_worlds_generated_total` | counter | |
 | `le_mollet_club_actions_total` | counter | `action` (create, join, leave) |
-| `le_mollet_signins_total` | counter | `result` (ok, refused, error) |
+| `le_mollet_signins_total` | counter | `result` (signup, ok, refused, locked) |
 | `le_mollet_riders_registered`, `_riders_flagged`, `_clubs`, `_club_members`, `_signed_in` | gauge | |
 
 ## Performance

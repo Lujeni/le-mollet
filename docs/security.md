@@ -16,7 +16,7 @@ guests and in cloud mode.
 - **It simulates every ride** (`src/ride.rs`): speed, position, time, segments, race order and finish. The page
   only sends inputs: power, cadence, heart rate (`/power`), a turn, an emote, pause, a road bonus.
 - **A ride belongs to whoever opened it.** The first call with a ride's `session` claims it for that browser
-  (its address and, signed in, its Strava athlete); any other browser gets `403 not your ride` on `/power`,
+  (its address and, signed in, its account); any other browser gets `403 not your ride` on `/power`,
   `/pause`, `/turn`, `/seek`, `/powerup`, `/emote` and `/events`.
 - **Weight and rank are the server's** (`src/rider.rs`, kept in the database). The page registers the profile
   with `/rider?pid=&weight=&ftp=`; rides then use the server's weight, never the query's `mass`, and races
@@ -28,7 +28,7 @@ guests and in cloud mode.
     **out of the results** ("above rank"), and moves the rider up.
 - **Profile ids stay secret.** At home a profile id is the only key to a profile, so the server never sends one
   to anybody: events and clubs mark the caller's own entries with `me` instead. In cloud mode a profile belongs
-  to the Strava athlete who registered it, and only they may use its id.
+  to the account that registered it, and only it may use its id.
 
 ## 2. The checks (`rider::Check`)
 
@@ -61,12 +61,13 @@ checks are for.
 
 ## 4. Transport
 
-- **CSRF**: every call but the page itself, the audio and the Strava sign-in is refused when the browser says
+- **CSRF**: every call but the page itself and the audio is refused when the browser says
   it comes from another site (`Sec-Fetch-Site: cross-site|same-site`, or an `Origin` that is not this host).
   A page elsewhere cannot make a visitor's browser cancel an event or leave a club.
+- **Passwords**: Argon2id hashes; five wrong passwords lock a name for 15 minutes (docs/rbac.md).
 - **Cookies**: the sign-in cookie is `HttpOnly; SameSite=Lax`, and `Secure` when `LE_MOLLET_PUBLIC_URL` is https.
 - **Cloud mode** sits behind an https reverse proxy: every request then comes from loopback, so a ride is bound
-  to the signed-in athlete, not to an address.
+  to the signed-in account, not to an address.
 
 ## Next
 

@@ -10,7 +10,6 @@ btleplug = "0.11"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "time", "net", "signal", "sync"] }
 futures = "0.3"
 uuid = { version = "1", features = ["v4"] }
-oauth2 = { version = "5", default-features = false, features = ["ureq"] }
 anyhow = "1"
 # ponytail: vendored libdbus so build works without libdbus-1-dev installed
 dbus = { version = "0.9", features = ["vendored"] }
@@ -23,6 +22,7 @@ png = "0.17"
 ureq = { version = "2", features = ["json"] }
 clap = { version = "4", features = ["derive"] }
 rusqlite = { version = "0.41.0", features = ["bundled"] }
+argon2 = "0.6.0"
 
 [workspace]
 members = ["client"]

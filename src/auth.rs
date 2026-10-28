@@ -1,5 +1,5 @@
 //! Role-based access control. Riding needs no account: anyone not signed in is a `Rider`. Signing in (with
-//! Strava, see strava.rs) gives an identity; roles in the database (`le-mollet role`) raise some identities to `Organizer` or `Admin`.
+//! a Le Mollet account, see account.rs) gives an identity; roles in the database (`le-mollet role`) raise some identities to `Organizer` or `Admin`.
 //! Endpoints check permissions (`Perm`), never roles. See docs/rbac.md.
 
 use anyhow::Result;
@@ -61,19 +61,19 @@ impl Role {
 pub struct Identity {
     pub role: Role,
     pub name: Option<String>,
-    /// Strava athlete id, when signed in.
-    pub athlete: Option<u64>,
+    /// Le Mollet account id, when signed in (src/account.rs).
+    pub account: Option<u64>,
 }
 
 impl Identity {
-    pub const ANONYMOUS: Identity = Identity { role: Role::Rider, name: None, athlete: None };
+    pub const ANONYMOUS: Identity = Identity { role: Role::Rider, name: None, account: None };
 
     pub fn can(&self, p: Perm) -> bool {
         self.role.can(p)
     }
 }
 
-/// Roles above Rider, by Strava athlete id. Everyone else who signs in is a Rider.
+/// Roles above Rider, by account id. Everyone else who signs in is a Rider.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Roles {
     #[serde(default)]
@@ -83,7 +83,7 @@ pub struct Roles {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Grant {
     pub role: Role,
-    /// A label for the list; the identity is the athlete id.
+    /// A label for the list; the identity is the account id.
     #[serde(default)]
     pub note: String,
 }
@@ -99,8 +99,8 @@ impl Roles {
         db.replace("roles", self.grants.iter().map(|(id, g)| (id.to_string(), g)))
     }
 
-    pub fn role_of(&self, athlete: u64) -> Role {
-        self.grants.get(&athlete).map_or(Role::Rider, |g| g.role)
+    pub fn role_of(&self, account: u64) -> Role {
+        self.grants.get(&account).map_or(Role::Rider, |g| g.role)
     }
 }
 
@@ -117,7 +117,7 @@ mod tests {
     }
 
     #[test]
-    fn roles_by_athlete() {
+    fn roles_by_account() {
         let r: Roles = serde_json::from_str(r#"{"grants":{"42":{"role":"admin","note":"Julien"}}}"#).unwrap();
         assert_eq!((r.role_of(42), r.role_of(7)), (Role::Admin, Role::Rider));
         let db = crate::db::Db::memory();
