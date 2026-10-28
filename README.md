@@ -176,11 +176,10 @@ for older KICKRs, plus Bluetooth heart rate straps. Each rider connects their ow
 On Linux, Chrome hides Web Bluetooth behind a setting: enable `chrome://flags/#enable-experimental-web-platform-features`
 and relaunch (the equipment screen says so when it is off). Open the page on `localhost` or over https.
 
-**Virtual gears.** A Zwift Ride controller (firmware up to 1.2: later ones only answer Zwift once locked) connects
-from the same screen: its shifters change between 24 virtual gears like Zwift's (the `+` and `-` keys too), and the
-grade sent to the trainer is the one that asks, at the speed it measures, the power the virtual gear would take at
-the same cadence. Its other buttons ride the game: Z a Ride On, power-up the road bonus, arrows the turns in a city,
-Y the pause. The controller's protocol as [BikeControl](https://github.com/jonasbark/swiftcontrol) documents it.
+**Virtual gears.** 24 virtual gears, shifted with the `+` and `-` keys or a Bluetooth handlebar controller
+connected from the same screen: the grade sent to the trainer is the one that asks, at the speed it measures, the
+power the virtual gear would take at the same cadence. A controller's other buttons ride the game (Ride On, road
+bonus, turns in a city, pause). Another device to support? See [debugging hardware](docs/CONTRIBUTING.md#debugging-hardware).
 
 Tested hardware:
 
@@ -199,7 +198,7 @@ Tested hardware:
 - [Accounts and roles](docs/rbac.md): Le Mollet accounts, roles and permissions.
 - [Fair play and security](docs/security.md): what the server trusts, the power checks, CSRF.
 - [Metrics](docs/metrics.md): Prometheus metrics on usage and performance, `/metrics`.
-- [New hardware](docs/hardware.md): `le-mollet probe`, the Bluetooth capture to send to support a device.
+- [New hardware](docs/hardware.md): `le-mollet probe`, the Bluetooth capture to send to support a device (and [debugging hardware](docs/CONTRIBUTING.md#debugging-hardware)).
 - [Contributing](docs/CONTRIBUTING.md): principles, checks, commits, testing a trainer.
 
 ## Contributing

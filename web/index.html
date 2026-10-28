@@ -4890,8 +4890,8 @@ async function connectPad() {
   const device = await navigator.bluetooth.requestDevice({ filters:[{ manufacturerData:[{ companyIdentifier:0x094a }] }, { services:[ZW.RIDE] }, { namePrefix:'Zwift' }], optionalServices:[ZW.RIDE, ZW.PLAY] });
   const server = await device.gatt.connect();
   const svc = await server.getPrimaryService(ZW.RIDE).catch(() => server.getPrimaryService(ZW.PLAY))
-    .catch(() => { throw new Error('manette verrouillée ou inconnue : seules les Zwift Ride en firmware 1.2 ou avant parlent à d\'autres apps que Zwift.') });
-  const p = { device, name:device.name ?? 'Zwift Ride', held:0, presses:0 };
+    .catch(() => { throw new Error('manette verrouillée ou non reconnue : elle ne répond qu\'à son application d\'origine.') });
+  const p = { device, name:device.name ?? 'Manette', held:0, presses:0 };
   const onData = e => {
     const map = padButtons(new Uint8Array(e.target.value.buffer));
     if (map == null) return;
@@ -4910,7 +4910,7 @@ async function connectPad() {
   bt.pads = [...bt.pads.filter(x => x.device.id !== device.id), p];
   gears.on = true;
   renderSensors();
-  celebrate($('#devPad'), bt.pads.length > 1 ? '🎮 Les deux poignées sont prêtes : à droite ça monte, à gauche ça descend !' : '🎮 Une poignée connectée : clique encore pour l\'autre');
+  celebrate($('#devPad'), bt.pads.length > 1 ? '🎮 Les deux poignées sont prêtes : à droite ça monte, à gauche ça descend !' : '🎮 Manette connectée (deux poignées ? clique encore pour l\'autre)');
 }
 
 // Twice a second: what the sensors say goes to the server (the trainer's watts win over the demo slider).
@@ -4943,9 +4943,9 @@ function renderSensors() {
     hr ? h('span', { class:'live' }, hr.bpm ?? '…', h('small', {}, 'bpm')) : '', h('span', { class:'act' }, hr ? 'Connecté' : 'Cliquer pour chercher une ceinture'));
   const pads = bt.pads.length;
   $('#devPad').classList.toggle('on', pads > 0);
-  $('#devPad').replaceChildren(h('i', {}, '🎮'), h('b', {}, 'Manette Zwift Ride'), chip(pads, pads ? `${pads} poignée${pads > 1 ? 's' : ''} sur 2` : 'non connectée'),
+  $('#devPad').replaceChildren(h('i', {}, '🎮'), h('b', {}, 'Manette'), chip(pads, pads ? `${pads} poignée${pads > 1 ? 's' : ''} connectée${pads > 1 ? 's' : ''}` : 'non connectée'),
     pads ? h('span', { class:'live' }, `⚙ ${gears.i + 1}`, h('small', {}, `/${GEARS.length}`)) : '',
-    h('span', { class:'act' }, pads === 1 ? 'Clique encore pour l\'autre poignée' : pads ? 'Boutons noirs : à droite ça monte, à gauche ça descend' : 'Cliquer pour chercher : vitesses virtuelles et boutons du jeu'));
+    h('span', { class:'act' }, pads === 1 ? 'Deux poignées ? Clique encore pour l\'autre' : pads ? 'Boutons noirs : à droite ça monte, à gauche ça descend' : 'Cliquer pour chercher : vitesses virtuelles et boutons du jeu'));
   for (const id of ['#devTrainer', '#devHr', '#devPad']) $(id).disabled = !ok;
   $('#devGo').textContent = t ? "C'est parti ›" : 'Continuer en mode démo ›';
   $('#homeDevices').replaceChildren(chip(t, t ? `${t.name} · ${Math.round(t.power)} W` : ride.list?.trainer ? `Trainer du serveur : ${ride.list.trainer}` : 'Mode démo (curseur)'), ...(hr ? [chip(true, `${hr.bpm ?? '…'} bpm`)] : []));
@@ -4960,9 +4960,9 @@ function renderDevHelp(ok) {
   if (ok) return el.replaceChildren(
     ride.list?.trainer ? h('p', {}, `Le serveur pilote aussi « ${ride.list.trainer} » : ton trainer à toi passe en priorité.`) : '',
     h('ol', {},
-      h('li', {}, h('b', {}, 'Réveille ton matériel'), ' : pédale un coup, appuie sur un bouton de la manette. Ferme Zwift s\'il est ouvert ailleurs.'),
+      h('li', {}, h('b', {}, 'Réveille ton matériel'), ' : pédale un coup, appuie sur un bouton de la manette. Ferme les autres applis qui l\'utilisent.'),
       h('li', {}, h('b', {}, 'Clique sur une carte'), ' ci-dessous : le navigateur ouvre la liste des appareils Bluetooth autour.'),
-      h('li', {}, h('b', {}, 'Choisis le tien'), ' dans la liste, puis « Associer ». La carte passe au vert. Pour la manette Zwift Ride, une fois par poignée.')));
+      h('li', {}, h('b', {}, 'Choisis le tien'), ' dans la liste, puis « Associer ». La carte passe au vert. Une manette en deux poignées : une fois pour chacune.')));
   el.replaceChildren(h('b', {}, 'Le Bluetooth n\'est pas activé dans ce navigateur.'), h('ol', {},
     ...(!chromium ? [h('li', {}, 'Ouvre cette page dans ', h('b', {}, 'Google Chrome'), ' ou ', h('b', {}, 'Microsoft Edge'), ' : Firefox et Safari n\'ont pas le Bluetooth web.')]
       : /Linux/.test(ua) && !/Android/.test(ua) ? [

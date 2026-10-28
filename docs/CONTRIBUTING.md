@@ -105,6 +105,32 @@ LE_MOLLET_RAW=1 cargo run -- trainer <name>
 4. Add or update the row in the README table (✅ / ⚠️ / ⏳) and open a pull request. If something fails, open a
    bug report with the raw frames instead.
 
+## Debugging hardware
+
+Most hardware bugs come down to "what does the device actually send?". The tools, from the outside in:
+
+1. **`le-mollet probe`** lists the Bluetooth devices around, or maps one: its services and characteristics, the
+   readable values (maker, model, **firmware**), then every notification for a while, timestamped, in hex.
+   `--write <characteristic>=<hex|text:…>` sends a handshake first, for devices that stay silent until spoken
+   to. Full guide and the devices mapped so far: [hardware.md](hardware.md).
+2. **Map buttons three presses at a time**: press each button three times quickly, then wait 5 s before the next,
+   and write down the order. Three identical messages in a row, then silence, cannot be mistaken; compare each
+   group with the released frame to find the bit.
+3. **`LE_MOLLET_RAW=1`** prints every raw frame of the trainer the server drives (`trainer` and `serve
+   --trainer`).
+4. **In the browser**: `chrome://bluetooth-internals` (Devices, Start scan) shows what Chrome itself sees. If a
+   device shows in `probe` but not there, the problem is between Chrome and the system, not in the page. On
+   Linux, Web Bluetooth needs `chrome://flags/#enable-experimental-web-platform-features`.
+5. **A device that does not show up** is often still connected to something: close the other apps, and on Linux
+   `bluetoothctl devices Connected` then `bluetoothctl disconnect <address>`. BlueZ also drops the first
+   connection attempt now and then: `probe` retries three times.
+
+Where the code lives: the page reads trainers (`connectTrainer`, `parseBikeData`, `parseCps`) and controllers
+(`connectPad`, the `PAD` button table, `PAD_ACTIONS`) in `web/index.html`; virtual gears are `virtualGrade`
+there too. The server's own trainer is `Trainer` in `src/lib.rs` and `src/protocol.rs`; the probe is
+`src/probe.rs`. When you add a device, put what you measured in [hardware.md](hardware.md) ("Known devices"):
+the next person starts from there.
+
 ## Licensing and data
 
 - Code contributions are released under the project license, **MIT OR Apache-2.0**, at your choice, like the
