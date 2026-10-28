@@ -55,6 +55,7 @@ use le_mollet::Trainer;
 use le_mollet::auth::{Identity, Perm, Role, Roles};
 use le_mollet::club::{self, Clubs};
 use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
+use le_mollet::peloton::{self, View};
 use le_mollet::account;
 use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
@@ -295,6 +296,10 @@ pub struct App {
     events: Mutex<Events>,
     /// Group rides whose pace leader is out on the road.
     beacons: Mutex<HashSet<String>>,
+    /// Races whose peloton is on the road (src/peloton.rs).
+    pelotons: Mutex<HashSet<String>>,
+    /// The race radio's last line per event, and when it was said.
+    radio: Mutex<HashMap<String, (String, u64)>>,
     mode: Mode,
     /// Signed-in browsers: session cookie -> who.
     sessions: Mutex<HashMap<String, Session>>,
@@ -392,6 +397,8 @@ impl App {
             clubs: Mutex::new(Clubs::load(&db)?),
             events: Mutex::new(Events::load(&db)?),
             beacons: Mutex::new(HashSet::new()),
+            pelotons: Mutex::new(HashSet::new()),
+            radio: Mutex::new(HashMap::new()),
             mode,
             // Signed-in browsers stay signed in across a restart.
             sessions: Mutex::new(db.all::<Session>("sessions")?.into_iter().filter(|(_, s)| s.expires > std::time::SystemTime::now()).collect()),
@@ -973,7 +980,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 // in turn (loops, climbs up to 15 km).
                 let short: Vec<_> = app.tracks.read().unwrap().iter().filter(|t| t.city.is_none() && t.relief.is_none() && (t.course.looped || t.course.length() <= 15_000.0))
                     .map(|t| (t.id.clone(), t.course.name.clone(), t.course.length(), t.course.looped)).collect();
-                if events.schedule(now, &short) && let Err(e) = events.save(&app.db) { eprintln!("events: {e}") }
+                if events.schedule(now, &short) {
+                    for e in events.events.iter_mut() { peloton::enroll(e, peloton::FIELD) }
+                    if let Err(e) = events.save(&app.db) { eprintln!("events: {e}") }
+                }
                 let changed = match p {
                     "/event/list" => return Ok(json!({ "now": now, "events": events_for(&events.current(now), pid.as_deref()) })),
                     "/event/create" => {
@@ -1002,6 +1012,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                             entrants: vec![],
                             results: vec![],
                         });
+                        if let Some(e) = events.events.last_mut() { peloton::enroll(e, peloton::FIELD) }
                         true
                     }
                     "/event/join" => {
@@ -1253,6 +1264,9 @@ struct EventLive {
     /// Crossed the line but out of the results: "demo", "flagged" or "above rank".
     #[serde(skip_serializing_if = "Option::is_none")]
     unranked: Option<&'static str>,
+    /// The race radio's latest line (src/peloton.rs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    radio: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1265,18 +1279,19 @@ struct BoardRow {
 
 /// The event as this rider sees it now, from the riders on its course.
 fn event_live(e: &Event, riders: &HashMap<u64, Presence>, sid: u64, ride: &Ride, phase: Option<Phase>, finish: Option<(usize, usize, f32)>, course: &Course) -> EventLive {
-    let mut field: Vec<&Presence> = riders.values().filter(|p| !p.bot && p.event.as_deref() == Some(&e.id)).collect();
+    // The field: people, and the server's racers (not a group ride's leader).
+    let mut field: Vec<&Presence> = riders.values().filter(|p| (!p.bot || p.pid.starts_with("bot:")) && p.event.as_deref() == Some(&e.id)).collect();
     field.sort_by(|a, b| b.ridden.total_cmp(&a.ridden));
     let rank = field.iter().position(|p| p.sid == sid).map_or(field.len() + 1, |i| i + 1);
     let cat = |p: &Presence| e.entrants.iter().find(|x| x.pid == p.pid).map_or('-', |x| x.cat);
     let board = field.iter().enumerate().filter(|&(i, p)| i < 5 || p.sid == sid)
         .map(|(_, p)| BoardRow { name: p.name.clone(), cat: cat(p), gap: p.ridden - ride.ridden, me: p.sid == sid }).collect();
-    let leader = riders.values().find(|p| p.bot && p.event.as_deref() == Some(&e.id)).map(|p| p.ridden);
+    let leader = riders.values().find(|p| p.bot && p.pid.is_empty() && p.event.as_deref() == Some(&e.id)).map(|p| p.ridden);
     let bunch = leader.map_or(0, |l| field.iter().filter(|p| (-25.0..200.0).contains(&(l - p.ridden))).count());
     EventLive {
         id: e.id.clone(), kind: e.kind, name: e.name.clone(), phase: phase.unwrap_or(Phase::Upcoming),
         starts_in: (e.start as f64 - now_f()) as f32, laps: e.laps, race_m: e.distance(course.length(), course.looped), done_m: ride.ridden,
-        leader_gap: leader.map(|l| l - ride.ridden), bunch, rank, of: field.len(), board, finish, unranked: None,
+        leader_gap: leader.map(|l| l - ride.ridden), bunch, rank, of: field.len(), board, finish, unranked: None, radio: None,
     }
 }
 
@@ -1303,6 +1318,65 @@ async fn beacon(t: Arc<Track>, e: Event) {
         }
     }
     t.riders.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
+}
+
+/// The server's riders in a race (src/peloton.rs): they wait in the pen, go at the gun, draft like everyone, and
+/// their finishes count in the results. The race radio's lines go to `App::radio` for the riders' frames.
+async fn peloton_task(t: Arc<Track>, e: Event, app: Arc<App>) {
+    let base = 800_000 + e.id.bytes().fold(0u64, |h, b| (h * 31 + b as u64) % 90_000) * 32;
+    let course = &t.course;
+    let race_m = e.distance(course.length(), course.looped);
+    let mut race = peloton::Race::new(&e, race_m);
+    let mut rides: Vec<Ride> = race.bots.iter().map(|b| Ride::new(b.mass + rider::BIKE_KG)).collect();
+    let lap = course.looped.then(|| course.length());
+    let mut tick = tokio::time::interval(Duration::from_secs_f32(DT));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut n = 0u32;
+    loop {
+        tick.tick().await;
+        let phase = e.phase(unix_now());
+        if phase == Phase::Over || (race.all_done() && n > 600) { break }
+        n += 1;
+        if phase == Phase::Live {
+            let t_race = (now_f() - e.start as f64) as f32;
+            let views: Vec<View> = rides.iter().map(|r| View { ridden: r.ridden, race_m, grade: r.grade }).collect();
+            let human_lead = {
+                let riders = t.riders.lock().unwrap_or_else(|x| x.into_inner());
+                let human = riders.values().filter(|p| !p.bot && p.event.as_deref() == Some(&e.id)).map(|p| p.ridden).fold(0.0, f32::max);
+                human - views.iter().map(|v| v.ridden).fold(0.0, f32::max)
+            };
+            let powers = race.step(&views, human_lead, DT);
+            for (i, r) in rides.iter_mut().enumerate() {
+                r.power = powers[i];
+                r.tick(course, DT);
+                if r.ridden >= race_m && race.bots[i].finished.is_none() {
+                    race.finish(i, t_race);
+                    let mut events = app.events.lock().unwrap_or_else(|x| x.into_inner());
+                    events.finish(&e.id, &race.bots[i].pid, &race.bots[i].name, t_race);
+                    if let Err(err) = events.save(&app.db) { eprintln!("events: {err}") }
+                }
+            }
+        }
+        if n.is_multiple_of(3) {
+            let mut riders = t.riders.lock().unwrap_or_else(|x| x.into_inner());
+            for (i, b) in race.bots.iter().enumerate() {
+                let id = base + i as u64;
+                let r = &mut rides[i];
+                r.draft = draft_behind(riders.values().filter(|p| p.sid != id), r.distance, None, lap);
+                let p = riders.entry(id).or_insert_with(|| Presence {
+                    id, sid: id, emote: None, emote_at: None, name: b.name.clone(), color: b.color().into(), frame: "road", country: Some(b.country.into()),
+                    distance: 0.0, speed_kmh: 0.0, power: 0.0, wkg: 0.0, pos: None, bot: true, pid: b.pid.clone(), ridden: 0.0, event: Some(e.id.clone()),
+                });
+                (p.distance, p.speed_kmh, p.power, p.wkg, p.ridden) = (r.distance, r.speed_kmh, r.power, r.power / b.mass, r.ridden);
+            }
+            drop(riders);
+            if let Some(line) = race.radio.drain(..).next_back() { app.radio.lock().unwrap_or_else(|x| x.into_inner()).insert(e.id.clone(), (line, unix_now())); }
+        }
+    }
+    let mut riders = t.riders.lock().unwrap_or_else(|x| x.into_inner());
+    for i in 0..race.bots.len() { riders.remove(&(base + i as u64)); }
+    app.radio.lock().unwrap_or_else(|x| x.into_inner()).remove(&e.id);
+    app.pelotons.lock().unwrap_or_else(|x| x.into_inner()).remove(&e.id);
 }
 
 fn now_f() -> f64 {
@@ -1420,7 +1494,7 @@ struct Junction {
 
 async fn ride_session(
     sock: &mut TcpStream,
-    app: &App,
+    app: &Arc<App>,
     track: Option<&Track>,
     plan: Option<(&Workout, f32)>,
     mut game: Option<Game>,
@@ -1480,6 +1554,12 @@ async fn ride_session(
             && let Some(t) = app.track(&e.track)
         {
             tokio::spawn(beacon(t, e.clone()));
+        }
+        // A race: the server's riders line up in the pen with the first person who shows up.
+        if let (Some(e), Some(Phase::Pen | Phase::Live)) = (&event, phase) && e.kind == EventKind::Race && !beacon_spawned && { beacon_spawned = true; e.entrants.iter().any(|x| x.bot) && app.pelotons.lock().unwrap_or_else(|x| x.into_inner()).insert(e.id.clone()) }
+            && let Some(t) = app.track(&e.track)
+        {
+            tokio::spawn(peloton_task(t, e.clone(), app.clone()));
         }
         // Every second of power is checked, warm-up in the pen included: the slider or no profile makes a demo ride.
         if !paused && !caught { check.tick(ride.power, ride.cadence, sensors.live || app.trainer.is_some(), DT) }
@@ -1551,7 +1631,7 @@ async fn ride_session(
                 let lap = t.course.looped.then(|| t.course.length());
                 // Drafting: the rider just ahead cuts the wind for the next ticks.
                 ride.draft = draft_behind(riders.values().filter(|p| p.sid != sid), ride.distance, me.map(|a| (a, course.latlon_at(ride.distance + 5.0))), lap);
-                live = event.as_ref().map(|e| EventLive { unranked, ..event_live(e, &riders, sid, ride, phase, finish, base) });
+                live = event.as_ref().map(|e| EventLive { unranked, radio: app.radio.lock().unwrap_or_else(|x| x.into_inner()).get(&e.id).filter(|r| unix_now() < r.1 + 25).map(|r| r.0.clone()), ..event_live(e, &riders, sid, ride, phase, finish, base) });
                 // Group ride: anyone up to 200 m behind the leader rides on the bunch's wheel; ahead of it, alone.
                 if let Some(gap) = live.as_ref().and_then(|l| l.leader_gap) {
                     if gap > 0.0 && gap < 200.0 { ride.draft = ride.draft.max(0.3) } else if gap < -25.0 { ride.draft = 0.0 }

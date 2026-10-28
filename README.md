@@ -103,6 +103,10 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
   and loops in turn, so one always starts soon; organizers can also restrict their own races to some ranks. Riders may race up
   a rank, never down. Signed up, you wait in a waiting room: the countdown, who is in at each rank, a warm-up
   hint, and into the start pen on your own when it opens, 10 min before the gun.
+- **A peloton with a plan.** Every race has fifteen riders of the server's own at the race's level, each with a
+  profile (climber, sprinter, rouleur, puncheur), a reserve of energy and a role: a break goes early, the bunch
+  lets it dangle then chases (you too, if you go), the puncheurs attack in the last kilometres, the sprinters
+  open up at 600 m. They draft, tire and finish like everyone, and the race radio tells you what they do.
 - **Fair play.** The server simulates every ride and keeps each rider's weight and rank itself; it checks every
   second of power (flat typed numbers, spikes, watts without pedalling, efforts beyond human). Only rides with a
   trainer and nothing odd reach the leaderboards and race results ([fair play and security](docs/security.md)).

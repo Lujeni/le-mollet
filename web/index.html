@@ -257,6 +257,7 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .event-box .row { display:grid; grid-template-columns:22px 1fr auto auto; gap:6px; align-items:center; font-size:13px; padding:2px 0 }
 .event-box .row.me { color:#f2cd37; font-weight:700 }
 .event-box .big { font:700 20px var(--font) }
+.event-box .radio { display:block; margin:4px 0 6px; color:#f2cd37; font-weight:600 }
 .event-box .bar { height:6px; border-radius:3px; background:rgba(255,255,255,.2); margin:6px 0 } .event-box .bar i { display:block; height:100%; border-radius:3px; background:#f2cd37 }
 .club-forms { display:grid; grid-template-columns:1fr 1fr; gap:16px }
 .club-forms form { display:grid; gap:10px; align-content:start; padding:16px; border-radius:14px; background:var(--glass-hi2) }
@@ -876,7 +877,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <div><p class="kicker">Rouler ensemble</p><h1>Événements</h1></div>
         <button class="btn" id="eventsBack">‹ Rouler</button>
       </div>
-      <p class="muted">Un départ toutes les 15 minutes : courses par rang, de Bronze à Légende, aux heures et demies ; sorties de groupe derrière un meneur (balade 1,5, tempo 2,5, costaud 3,5 W/kg) aux quarts. Inscris-toi, attends en salle d'attente : le sas ouvre 10 min avant le départ et tout le monde part en même temps.</p>
+      <p class="muted">Un départ toutes les 15 minutes : courses par rang, de Bronze à Légende, aux heures et demies, contre quinze coureurs du serveur qui ont un plan (échappée, chasse, attaques, sprint) ; sorties de groupe derrière un meneur (balade 1,5, tempo 2,5, costaud 3,5 W/kg) aux quarts. Inscris-toi, attends en salle d'attente : le sas ouvre 10 min avant le départ et tout le monde part en même temps.</p>
       <div class="seg event-filter" id="eventFilter"></div>
       <div id="eventList" class="event-list"></div>
       <details class="event-create" id="eventCreate" hidden>
@@ -5800,7 +5801,7 @@ function renderEvents() {
     const d = new Date(e.start * 1000);
     return h('div', { class:'event-card' },
       h('span', { class:'when', style:`--c:${color}` }, h('small', {}, d.toLocaleDateString('fr-FR', { weekday:'short', day:'numeric' })), h('b', {}, d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }))),
-      h('span', { class:'what' }, h('b', {}, `${icon} ${e.name}`), h('small', {}, `${kind}${e.cats ? ` ${catNames(e.cats)}` : ''} · ${evLine(e)}`),
+      h('span', { class:'what' }, h('b', {}, `${icon} ${e.name}`), h('small', {}, `${kind}${e.cats ? ` ${catNames(e.cats)}` : ''} · ${evLine(e)}${e.entrants.some(x => x.bot) ? ` · ${e.entrants.filter(x => x.bot).length} coureurs du serveur` : ''}`),
         h('small', {}, phase === 'live' ? h('span', { class:'live' }, '● En cours') : whenText(e), ` · ${e.entrants.length} inscrit${e.entrants.length > 1 ? 's' : ''}`, h('span', { class:'cats' }, ...cats.map(([c, n]) => catChip(c, ` ${n}`))), ` · par ${e.by_name || '?'}`)),
       h('span', { class:'acts' }, ...acts),
       e.results.length ? h('div', { class:'results' }, 'Arrivée : ', ...e.results.slice(0, 5).map((r, i) => h('span', {}, `${i ? ' · ' : ''}${i + 1}. ${r.name} `, catChip(r.cat), ` ${hms(r.time)}`))) : '');
@@ -5837,7 +5838,7 @@ function renderLobby() {
   const by = c => e.entrants.filter(x => x.cat === c);
   $('#lobbyCats').replaceChildren(...TIERS.map(([c]) => h('div', { class:openTo(e, c) ? '' : 'off' },
     h('h3', {}, catChip(c), h('small', {}, TIER[c].range)),
-    ...(by(c).length ? by(c).map(x => h('p', { class:x.me ? 'me' : '' }, `${x.me ? '★ ' : ''}${x.name} · ${x.wkg.toFixed(1).replace('.', ',')}`)) : [h('p', { class:'muted' }, openTo(e, c) ? 'Personne encore' : 'Pas ce rang')]))));
+    ...(by(c).length ? by(c).map(x => h('p', { class:x.me ? 'me' : '' }, `${x.me ? '★ ' : x.bot ? '🤖 ' : ''}${x.name} · ${x.wkg.toFixed(1).replace('.', ',')}`)) : [h('p', { class:'muted' }, openTo(e, c) ? 'Personne encore' : 'Pas ce rang')]))));
 }
 $('#lobbyBack').addEventListener('click', showEvents);
 $('#goEvents').addEventListener('click', showEvents);
@@ -5871,9 +5872,10 @@ function renderEvent() {
   ride.lastEvent = e;
   const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`, [icon] = EV_KIND[e.kind];
   const head = h('b', {}, `${icon} ${e.name}`);
+  if (e.radio && e.radio !== ride.radio) { ride.radio = e.radio; toast(`📻 ${e.radio}`) } // the race radio, in the pen too
   if (e.phase === 'upcoming' || e.phase === 'pen') {
     return box.replaceChildren(head, h('div', { class:'countdown' }, mmss(Math.max(0, e.starts_in))),
-      h('small', {}, e.phase === 'pen' ? `Dans le sas · ${e.of} au départ. Tout le monde part ensemble.` : 'Le sas ouvre 10 min avant le départ.'));
+      h('small', {}, e.phase === 'pen' ? `Dans le sas · ${e.of} au départ. Tout le monde part ensemble.` : 'Le sas ouvre 10 min avant le départ.'), e.radio ? h('small', { class:'radio' }, `📻 ${e.radio}`) : '');
   }
   if (e.kind === 'group') {
     const g = e.leader_gap;
@@ -5892,13 +5894,14 @@ function renderEvent() {
     e.finish ? h('div', { class:'big' }, `🏁 ${e.finish[0]}e · ${hms(e.finish[2])}`) : h('div', { class:'big' }, `${e.rank}e / ${e.of}`),
     h('small', {}, e.finish ? `${e.finish[1]}e de ta catégorie. Bravo !` : `${e.laps > 1 ? `Tour ${Math.min(e.laps, Math.floor(done / lap) + 1)}/${e.laps} · ` : ''}encore ${((e.race_m - done) / 1000).toFixed(2)} km`),
     h('div', { class:'bar' }, h('i', { style:`width:${(done / e.race_m * 100).toFixed(1)}%` })),
+    e.radio ? h('small', { class:'radio' }, `📻 ${e.radio}`) : '',
     ...e.board.map((r, i) => h('div', { class:'row' + (r.me ? ' me' : '') }, h('span', {}, `${r.me ? e.rank : i + 1}.`), h('span', {}, r.name), catChip(r.cat),
       h('span', {}, r.me ? '' : `${r.gap > 0 ? '+' : ''}${Math.round(r.gap)} m`))));
 }
 
 // ---------- clubs: a name and a tag before members' names, kilometres of the week (kept by the server) ----------
 // The profile keeps its club's tag to show it on the road; the server is the reference (see src/club.rs).
-const clubName = () => current.club ? `[${current.club.tag}] ${current.name}` : current.name;
+const clubName = () => current.club?.tag ? `[${current.club.tag}] ${current.name}` : current.name;
 const clubApi = (path, args = {}) => fetch(`/club${path}?${new URLSearchParams({ pid:current.id, me:current.name, ...args })}`)
   .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.json() });
 function keepClub(c) {

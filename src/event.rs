@@ -70,6 +70,9 @@ pub struct Entrant {
     pub name: String,
     pub wkg: f32,
     pub cat: char,
+    /// One of the server's riders (src/peloton.rs), not a person.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub bot: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,7 +176,7 @@ impl Events {
         if e.kind == Kind::Race && e.phase(now) != Phase::Upcoming && e.phase(now) != Phase::Pen { return Err("the race has started") }
         if !e.open_to(category(wkg)) { return Err("not your category") }
         e.entrants.retain(|x| x.pid != pid);
-        e.entrants.push(Entrant { pid: pid.into(), name: name.into(), wkg, cat: category(wkg) });
+        e.entrants.push(Entrant { pid: pid.into(), name: name.into(), wkg, cat: category(wkg), bot: false });
         Ok(e)
     }
 
