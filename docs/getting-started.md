@@ -157,7 +157,7 @@ Layout:
 | `src/city.rs`, `docs/city.md` | open city: street graph, turns, growing route |
 | `src/auth.rs`, `src/strava.rs`, `docs/rbac.md` | roles and permissions, sign in with Strava |
 | `src/decor.rs` | decor from the real place: aerial photo mosaic and trees, OSM pieces (`le-mollet decor`) |
-| `src/event.rs` | group rides and races: pen, phases, categories, results (`courses/events.json`) |
+| `src/event.rs` | group rides and races: pen, phases, ranks (Bronze to Légende), races every half hour, results (`courses/events.json`) |
 | `src/club.rs` | clubs: members by profile, kilometres of the week (`courses/clubs.json`) |
 | `src/island.rs`, `docs/island.md` | hand-made Lego island: map file to roads, terrain and decor |
 

@@ -55,7 +55,7 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 <td><img src="docs/screenshots/form.jpg" alt="Form chart: fitness, fatigue and daily stress over 90 days, power records"><br><sub><b>Form.</b> Fitness, fatigue, freshness, power records and an FTP estimate.</sub></td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/events.jpg" alt="Events: a group ride and a race with entrants by category, the form to schedule one"><br><sub><b>Events.</b> Group rides and races, sign up, categories A to D.</sub></td>
+<td><img src="docs/screenshots/lobby.jpg" alt="Waiting room: countdown to a Platine race, riders by rank from Légende to Bronze"><br><sub><b>Races by rank.</b> One every half hour per rank, Bronze to Légende; wait in the waiting room.</sub></td>
 <td><img src="docs/screenshots/pen.jpg" alt="In the start pen at Longchamp: the countdown before the group ride"><br><sub><b>Start pen.</b> Everyone waits on the line, then goes at once.</sub></td>
 </tr>
 <tr>
@@ -93,8 +93,13 @@ A multiplayer, online indoor cycling training program. Open source, core in Rust
 - **Group rides and races.** Schedule an event on any course or loop (organizers, or a club's founder for a club
   ride), riders sign up and wait in the start pen with a countdown, then everyone goes at once. A group ride
   follows a yellow pace leader at a set W/kg, and anyone up to 200 m behind rides on the bunch's wheel. A race
-  ranks riders live with their category (A to D by W/kg), counts the laps and records the finish, overall and
-  per category.
+  shows the live order with each rider's rank, counts the laps and records the finish, overall and
+  per rank.
+- **Races by rank.** Riders get a rank from their W/kg, like a game ladder: Bronze, Argent, Or, Platine, Diamant,
+  Maître and, from 5 W/kg, Légende. The server schedules a race per rank on every half hour, on the short courses in
+  turn, so one always starts soon; organizers can also restrict their own races to some ranks. Riders may race up
+  a rank, never down. Signed up, you wait in a waiting room: the countdown, who is in at each rank, a warm-up
+  hint, and into the start pen on your own when it opens, 10 min before the gun.
 - **Ride together.** Everyone on the same server and the same road sees each other in 3D, with name, flag and
   bike. Self-host it and invite your club on your LAN (`serve --lan`).
 - **A living world.** The sky follows your clock: golden dawn, day, sunset, then night with stars, lit windows

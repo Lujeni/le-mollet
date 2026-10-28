@@ -26,7 +26,7 @@
 //!   GET /pause?session=<n>&on=<0|1>            freeze or resume a ride (menu open)
 //!   GET /powerup?session=<n>                   use the road bonus the rider holds
 //!   GET /event/list                            scheduled group rides and races, {now, events}
-//!   GET /event/create?pid=&me=&kind=<group|race>&name=&track=&start=<unix>&laps=&pace=<W/kg>[&club=1]
+//!   GET /event/create?pid=&me=&kind=<group|race>&name=&track=&start=<unix>&laps=&pace=<W/kg>[&cats=PO][&club=1] (ranks, see event::TIERS)
 //!                                              schedule one (manage_events, or the founder of one's club for a club ride)
 //!   GET /event/join?id=&pid=&me=&wkg=;  /event/leave?id=&pid=;  /event/delete?id=&pid=
 //!   GET /events?course=<id>&event=<id>&...    ride an event: held in the pen until the start, then a pace
@@ -45,7 +45,7 @@
 use le_mollet::Trainer;
 use le_mollet::auth::{Identity, Perm, Role, Roles};
 use le_mollet::club::{self, Clubs};
-use le_mollet::event::{Event, Events, Kind as EventKind, Phase};
+use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
 use le_mollet::strava::{self, Strava};
 use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
@@ -665,6 +665,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let pid = param(query, "pid").filter(|p| valid_pid(p)).map(str::to_owned);
             let res: Result<serde_json::Value, &str> = (|| {
                 let mut events = app.events.lock().unwrap();
+                // Races by level on every half hour, on the short courses in turn (loops, climbs up to 15 km).
+                let short: Vec<_> = app.tracks.read().unwrap().iter().filter(|t| t.city.is_none() && t.relief.is_none() && (t.course.looped || t.course.length() <= 15_000.0))
+                    .map(|t| (t.id.clone(), t.course.name.clone(), t.course.length(), t.course.looped)).collect();
+                if events.schedule(now, &short) && let Err(e) = events.save(&app.events_path) { eprintln!("events: {e}") }
                 let changed = match p {
                     "/event/list" => return Ok(json!({ "now": now, "events": events.current(now) })),
                     "/event/create" => {
@@ -684,6 +688,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                             start,
                             laps: if track.course.looped { param(query, "laps").and_then(|l| l.parse().ok()).unwrap_or(3u32).clamp(1, 50) } else { 1 },
                             pace: param(query, "pace").and_then(|p| p.parse().ok()).unwrap_or(2.5f32).clamp(1.0, 5.0),
+                            cats: { let mut c: Vec<char> = text("cats").chars().filter(|c| TIERS.iter().any(|t| t.0 == *c)).collect(); c.sort(); c.dedup(); c.into_iter().collect() },
                             club,
                             by: pid,
                             by_name: text("me"),
