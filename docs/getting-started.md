@@ -158,6 +158,7 @@ Layout:
 | `src/auth.rs`, `src/strava.rs`, `docs/rbac.md` | roles and permissions, sign in with Strava |
 | `src/decor.rs` | decor from the real place: aerial photo mosaic and trees, OSM pieces (`le-mollet decor`) |
 | `src/event.rs` | group rides and races: pen, phases, ranks (Bronze to Légende), races every half hour, results |
+| `src/metrics.rs` | Prometheus metrics: a tiny registry rendered at `/metrics` (docs/metrics.md) |
 | `src/db.rs` | the database: one SQLite file (`le-mollet.db`) of JSON documents, older JSON files imported |
 | `src/rider.rs` | fair play: the server's record of each rider (weight, FTP seen, rank) and the checks on each second of power (docs/security.md) |
 | `src/club.rs` | clubs: members by profile, kilometres of the week |

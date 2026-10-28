@@ -37,6 +37,7 @@
 //!   GET /rider?pid=[&weight=<kg>&ftp=<W>]      the profile as the server knows it (weight, FTP seen, rank); with
 //!                                              weight and ftp, register or update it (docs/security.md)
 //!   GET /admin/flags                           rides the fair-play checks flagged (moderate)
+//!   GET /metrics                               Prometheus metrics, usage and performance (docs/metrics.md)
 //!
 //! Access (docs/rbac.md): in `Local` mode, whoever sits at the server's PC is admin without an account and LAN
 //! guests ride as Riders; in `Cloud` mode, everything but the page and the sign-in needs a Strava sign-in.
@@ -57,6 +58,7 @@ use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
 use le_mollet::strava::{self, Strava};
 use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
+use le_mollet::metrics;
 use le_mollet::db::Db;
 use le_mollet::physics;
 use le_mollet::ride::Ride;
@@ -262,6 +264,7 @@ pub struct App {
     riders: Mutex<Riders>,
     /// Who opened each ride: only they may steer it (power, pause, turns...).
     owners: Mutex<HashMap<u64, Owner>>,
+    started: std::time::Instant,
 }
 
 /// A ride's owner: the browser's address and, signed in, the athlete.
@@ -338,6 +341,7 @@ impl App {
             driver: AtomicU64::new(0),
             riders: Mutex::new(Riders::load(&db)?),
             owners: Mutex::new(HashMap::new()),
+            started: std::time::Instant::now(),
             db,
         })
     }
@@ -374,6 +378,46 @@ impl App {
     /// Strava tokens by athlete, to upload rides on their behalf later.
     fn save_strava_tokens(&self, athlete: u64, t: strava::Tokens) {
         if let Err(e) = self.db.put("strava_tokens", &athlete.to_string(), &t) { eprintln!("strava tokens: {e}") }
+    }
+
+    /// `/metrics`: the registry (src/metrics.rs), plus what is read off the server's state now.
+    fn metrics(&self) -> String {
+        let now = unix_now();
+        let mut g: Vec<metrics::Gauge> = vec![];
+        let mut types: std::collections::BTreeMap<&str, f64> = Default::default();
+        for t in self.tracks.read().unwrap().iter() {
+            let riders = t.riders.lock().unwrap().values().filter(|p| !p.bot).count();
+            g.push(("le_mollet_riders_online", vec![("track", t.id.clone())], riders as f64));
+            *types.entry(if t.city.is_some() { "city" } else if t.relief.is_some() { "world" } else if t.course.looped { "loop" } else { "climb" }).or_default() += 1.0;
+        }
+        g.extend(types.into_iter().map(|(k, n)| ("le_mollet_tracks", vec![("type", k.to_owned())], n)));
+        {
+            let events = self.events.lock().unwrap();
+            for (kind, k) in [(EventKind::Race, "race"), (EventKind::Group, "group")] {
+                let live: Vec<_> = events.events.iter().filter(|e| e.kind == kind && e.phase(now) != Phase::Over).collect();
+                g.push(("le_mollet_events_upcoming", vec![("kind", k.into())], live.len() as f64));
+                g.push(("le_mollet_event_entrants", vec![("kind", k.into())], live.iter().map(|e| e.entrants.len()).sum::<usize>() as f64));
+            }
+        }
+        {
+            let riders = self.riders.lock().unwrap();
+            g.push(("le_mollet_riders_registered", vec![], riders.riders.len() as f64));
+            g.push(("le_mollet_riders_flagged", vec![], riders.riders.values().filter(|r| !r.flags.is_empty()).count() as f64));
+        }
+        {
+            let clubs = self.clubs.lock().unwrap();
+            g.push(("le_mollet_clubs", vec![], clubs.clubs.len() as f64));
+            g.push(("le_mollet_club_members", vec![], clubs.clubs.iter().map(|c| c.members.len()).sum::<usize>() as f64));
+        }
+        let signed_in = self.sessions.lock().unwrap().values().filter(|s| s.expires > std::time::SystemTime::now()).count();
+        g.push(("le_mollet_signed_in", vec![], signed_in as f64));
+        g.push(("le_mollet_trainer_connected", vec![], self.trainer.is_some() as u8 as f64));
+        g.push(("le_mollet_uptime_seconds", vec![], self.started.elapsed().as_secs_f64()));
+        // Linux: resident pages in /proc/self/statm (4 KiB pages).
+        if let Some(pages) = std::fs::read_to_string("/proc/self/statm").ok().and_then(|s| s.split_whitespace().nth(1)?.parse::<f64>().ok()) {
+            g.push(("le_mollet_resident_memory_bytes", vec![], pages * 4096.0));
+        }
+        metrics::render(&g)
     }
 
     /// Free rides: real loops first, then the generated worlds.
@@ -488,6 +532,19 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let req = String::from_utf8_lossy(&buf[..n]);
     let target = req.split_whitespace().nth(1).unwrap_or("/");
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    let route = route_label(path);
+    metrics::inc("le_mollet_http_requests_total", &[("route", route)]);
+    let _timed = (route != "/events").then(|| Timed(route, std::time::Instant::now()));
+    if path == "/metrics" {
+        // Open at home; on a public server only with LE_MOLLET_METRICS_TOKEN as a bearer token.
+        let token = std::env::var("LE_MOLLET_METRICS_TOKEN").ok().filter(|t| !t.is_empty());
+        let ok = match &token {
+            Some(t) => header(&req, "authorization").is_some_and(|h| h.strip_prefix("Bearer ").is_some_and(|b| b == t)),
+            None => app.mode == Mode::Local,
+        };
+        if !ok { return reply(&mut sock, "404 Not Found", "text/plain", b"not found").await }
+        return reply(&mut sock, "200 OK", "text/plain; version=0.0.4", app.metrics().as_bytes()).await;
+    }
     let track = param(query, "id").or(param(query, "course")).and_then(|id| app.track(id));
     let session: Option<u64> = param(query, "session").and_then(|s| s.parse().ok());
     let peer = sock.peer_addr().ok().map(|a| a.ip());
@@ -497,6 +554,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     // Another site's page must not drive this one in the visitor's browser (CSRF): every call but a visit is refused
     // when the browser says it comes from elsewhere.
     if !open && cross_site(&req) {
+        metrics::inc("le_mollet_rejected_total", &[("reason", "cross_site")]);
         return reply(&mut sock, "403 Forbidden", "text/plain", b"cross-site request").await;
     }
     // A ride is steered only by whoever opened it; the first call claims a fresh session.
@@ -505,11 +563,13 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         && let Some(sid) = session
         && *app.owners.lock().unwrap().entry(sid).or_insert(owner) != owner
     {
+        metrics::inc("le_mollet_rejected_total", &[("reason", "not_your_ride")]);
         return reply(&mut sock, "403 Forbidden", "text/plain", b"not your ride").await;
     }
     // A profile id in the query: in cloud mode, only its owner may use it.
     let pid = param(query, "pid").filter(|p| valid_pid(p));
     if pid.is_some_and(|p| !app.riders.lock().unwrap().may_use(p, who.athlete)) {
+        metrics::inc("le_mollet_rejected_total", &[("reason", "profile_owner")]);
         return reply(&mut sock, "403 Forbidden", "text/plain", b"this profile belongs to another account").await;
     }
     if app.mode == Mode::Cloud && who.athlete.is_none() && !open {
@@ -548,11 +608,13 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             // The state must be one we handed out (and is used once): otherwise this is not our sign-in.
             let state_ok = param(query, "state").is_some_and(|st| app.oauth_states.lock().unwrap().remove(&decode(st)).is_some_and(|t| t.elapsed().as_secs() < 600));
             let (Some(s), Some(code), true) = (app.strava.as_ref(), param(query, "code"), state_ok) else {
+                metrics::inc("le_mollet_signins_total", &[("result", "refused")]);
                 return redirect(&mut sock, "/?signin=failed", None).await; // refused on Strava, expired or forged
             };
             let code = decode(code);
             match tokio::task::block_in_place(|| s.exchange(&code)) {
                 Ok((athlete, mut tokens)) => {
+                    metrics::inc("le_mollet_signins_total", &[("result", "ok")]);
                     // Strava tells which scopes were granted on the callback, not in the token response.
                     tokens.scope = param(query, "scope").map(decode).unwrap_or_default();
                     let id = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
@@ -568,6 +630,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 }
                 Err(e) => {
                     eprintln!("Strava sign-in failed: {e:#}");
+                    metrics::inc("le_mollet_signins_total", &[("result", "error")]);
                     redirect(&mut sock, "/?signin=failed", None).await
                 }
             }
@@ -629,6 +692,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 let now = std::time::Instant::now();
                 let Some(me) = riders.get_mut(&sid) else { return false };
                 (me.emote, me.emote_at) = (Some(e), Some(now));
+                metrics::inc("le_mollet_emotes_total", &[("e", e)]);
                 let from = me.name.clone();
                 if e == "rideon" && let Some(o) = to.and_then(|to| riders.values_mut().find(|p| p.id == to)) {
                     if o.bot { (o.emote, o.emote_at) = (Some("wave"), Some(now)) } // pace partners wave back
@@ -664,6 +728,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             match tokio::task::spawn_blocking(move || world_track(seed, length, relief, name)).await {
                 Ok(Ok(t)) => {
                     let id = app.add_world(t);
+                    metrics::inc("le_mollet_worlds_generated_total", &[]);
                     reply(&mut sock, "200 OK", "application/json", json!({ "id": id }).to_string().as_bytes()).await
                 }
                 _ => reply(&mut sock, "500 Internal Server Error", "text/plain", b"world generation failed").await,
@@ -718,6 +783,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/powerup", _) => match session {
             Some(s) => {
                 app.powerup.lock().unwrap().insert(s);
+                metrics::inc("le_mollet_powerups_total", &[]);
                 reply(&mut sock, "204 No Content", "text/plain", b"").await
             }
             None => reply(&mut sock, "400 Bad Request", "text/plain", b"need session").await,
@@ -743,6 +809,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                         let track = app.track(param(query, "track").unwrap_or("")).filter(|t| t.city.is_none()).ok_or("no such course")?;
                         let start = param(query, "start").and_then(|s| s.parse::<u64>().ok()).filter(|&s| s + 60 >= now && s < now + 60 * 86_400).ok_or("start: a time in the next 60 days")?;
                         let name = text("name");
+                        metrics::inc("le_mollet_events_created_total", &[("kind", if kind == EventKind::Race { "race" } else { "group" }), ("by", if club.is_some() { "club" } else { "organizer" })]);
                         events.events.push(Event {
                             id: uuid::Uuid::new_v4().simple().to_string()[..8].into(),
                             kind,
@@ -763,7 +830,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     "/event/join" => {
                         // The rank the server knows, never the page's word.
                         let wkg = app.riders.lock().unwrap().riders.get(pid.as_deref().unwrap_or("")).map(|r| r.wkg(now)).ok_or("unknown rider")?;
-                        events.join(param(query, "id").unwrap_or(""), pid.as_deref().ok_or("need pid")?, &text("me"), wkg, now)?;
+                        let e = events.join(param(query, "id").unwrap_or(""), pid.as_deref().ok_or("need pid")?, &text("me"), wkg, now)?;
+                        metrics::inc("le_mollet_event_signups_total", &[("kind", if e.kind == EventKind::Race { "race" } else { "group" })]);
                         true
                     }
                     "/event/leave" => { events.leave(param(query, "id").unwrap_or(""), pid.as_deref().ok_or("need pid")?); true }
@@ -803,7 +871,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     "/club/leave" => { clubs.leave(pid); Ok(None) }
                     _ => Err("not found"),
                 };
-                if res.is_ok() && p != "/club" && let Err(e) = clubs.save(&app.db) { eprintln!("clubs: {e}") }
+                if res.is_ok() && p != "/club" {
+                    metrics::inc("le_mollet_club_actions_total", &[("action", p.trim_start_matches("/club/"))]);
+                    if let Err(e) = clubs.save(&app.db) { eprintln!("clubs: {e}") }
+                }
                 res
             };
             match res {
@@ -858,9 +929,28 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 t.riders.lock().unwrap().insert(sid, Presence { event: event.as_ref().map(|e| e.id.clone()), ..presence(query, sid) });
             }
             let start = param(query, "start").and_then(|s| s.parse::<usize>().ok());
+            let kind = match (&plan, &game, &event, &track) {
+                (Some(_), ..) => "workout",
+                (_, Some(_), ..) => "zombie",
+                (_, _, Some(e), _) => if e.kind == EventKind::Race { "race" } else { "group" },
+                (.., Some(t)) if t.city.is_some() => "city",
+                (.., Some(t)) if t.relief.is_some() => "world",
+                (.., Some(t)) if t.course.looped => "loop",
+                _ => "climb",
+            };
+            metrics::add("le_mollet_streams_open", &[], 1.0);
             // Road bonuses on courses and open worlds, not in workouts nor against the zombies.
             let mut ride = Ride { powerups: plan.is_none() && game.is_none() && event.as_ref().is_none_or(|e| e.kind == EventKind::Race), ..Ride::new(mass.unwrap_or(83.0)) };
             let res = ride_session(&mut sock, &app, track.as_deref(), plan, game, (sid, start, event), (&mut ride, &mut check)).await;
+            metrics::add("le_mollet_streams_open", &[], -1.0);
+            if ride.elapsed > 0.0 {
+                let trust = match check.trust() { Trust::Demo => "demo", Trust::Flagged => "flagged", Trust::Device => "device" };
+                metrics::inc("le_mollet_rides_total", &[("kind", kind), ("trust", trust)]);
+                metrics::add("le_mollet_ride_seconds_total", &[("kind", kind)], ride.elapsed as f64);
+                metrics::add("le_mollet_ride_km_total", &[("kind", kind)], ride.ridden as f64 / 1000.0);
+                metrics::add("le_mollet_ride_kj_total", &[("kind", kind)], ride.energy_kj as f64);
+                if check.trust() == Trust::Flagged { for w in check.why() { metrics::inc("le_mollet_fair_flags_total", &[("why", rider::FLAGS.iter().find(|f| **f == w).copied().unwrap_or("other"))]) } }
+            }
             if let (Some(r), Some(t)) = (&known, &track) && ride.ridden >= 100.0 {
                 let now = unix_now();
                 let seen = [check.seen_ftp(), check.race_ftp].into_iter().flatten().reduce(f32::max);
@@ -1170,6 +1260,7 @@ async fn ride_session(
     let (mut n, mut sent) = (0u32, None::<f32>);
     loop {
         tick.tick().await;
+        let t0 = std::time::Instant::now();
         let seek = app.demo_seek.lock().unwrap().remove(&sid).filter(|_| event.is_none()); // no shortcuts in an event
         if let (Some(c), Some(r)) = (city, route.as_mut()) {
             if let Some(t) = app.turns.lock().unwrap().remove(&sid) {
@@ -1224,6 +1315,7 @@ async fn ride_session(
                     Trust::Device if above => Some("above rank"),
                     Trust::Device => None,
                 };
+                metrics::inc("le_mollet_race_finishes_total", &[("result", unranked.unwrap_or("ranked"))]);
                 if unranked.is_none() {
                     let mut events = app.events.lock().unwrap();
                     finish = events.finish(&e.id, &me.pid, &me.name, time).map(|(o, c)| (o, c, time));
@@ -1253,6 +1345,7 @@ async fn ride_session(
             let mut boards = app.boards.lock().unwrap();
             let rank = boards.record(&key(w), Entry { who, name: me.name, color: me.color, time, date: unix_now() });
             if let Err(e) = boards.save(&app.db, &key(w)) { eprintln!("leaderboards: {e}") }
+            metrics::inc("le_mollet_segment_efforts_total", &[("kind", if w.kind == Kind::Kom { "kom" } else { "sprint" })]);
             result = Some(SegResult { name: w.name.clone(), kind: w.kind, time, rank });
         }
         // Workout clock = riding time, so it starts with the first pedal stroke.
@@ -1293,8 +1386,10 @@ async fn ride_session(
             sent_windows = windows.len();
             let frame = Frame { fair: Fair { trust: check.trust(), why: check.why() }, event: live, ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take(), inbox: app.inbox.lock().unwrap().remove(&sid).unwrap_or_default() };
             let json = serde_json::to_string(&frame).expect("frame serializes");
+            metrics::add("le_mollet_frame_bytes_total", &[], json.len() as f64 + 8.0);
             sock.write_all(format!("data: {json}\n\n").as_bytes()).await?;
         }
+        metrics::observe("le_mollet_ride_tick_seconds", &[], t0.elapsed().as_secs_f64());
         // Workout: ERG holds the target watts. Course: grade scaled by difficulty.
         // ponytail: 1 W / 0.2 % deadbands at 1 Hz keep BLE writes low, tune if it feels steppy
         if let Some(t) = &app.trainer
@@ -1366,12 +1461,31 @@ fn cookie<'a>(req: &'a str, name: &str) -> Option<&'a str> {
 }
 
 async fn redirect(sock: &mut TcpStream, to: &str, set_cookie: Option<&str>) -> std::io::Result<()> {
+    metrics::inc("le_mollet_http_responses_total", &[("code", "302")]);
     let cookie = set_cookie.map(|c| format!("Set-Cookie: {c}\r\n")).unwrap_or_default();
     let head = format!("HTTP/1.1 302 Found\r\nLocation: {to}\r\n{cookie}Cache-Control: no-store\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
     sock.write_all(head.as_bytes()).await
 }
 
+/// A request's route for the metrics: the known paths, everything else as "other" (no unbounded labels).
+fn route_label(path: &str) -> &'static str {
+    const ROUTES: [&str; 31] = ["/", "/courses", "/worlds", "/worlds/new", "/course", "/terrain", "/buildings", "/district", "/ortho", "/workouts", "/turn", "/events",
+        "/power", "/segments", "/whoami", "/emote", "/seek", "/pause", "/powerup", "/rider", "/metrics", "/club", "/club/create", "/club/join", "/club/leave",
+        "/event/list", "/event/create", "/event/join", "/event/leave", "/event/delete", "/admin/flags"];
+    ROUTES.iter().find(|r| **r == path).copied().unwrap_or(if path.starts_with("/audio/") { "/audio" } else if path.starts_with("/auth/") { "/auth" } else if path.starts_with("/admin/") { "/admin" } else { "other" })
+}
+
+/// Times a request into the metrics when it is answered (dropped).
+struct Timed(&'static str, std::time::Instant);
+
+impl Drop for Timed {
+    fn drop(&mut self) {
+        metrics::observe("le_mollet_http_request_duration_seconds", &[("route", self.0)], self.1.elapsed().as_secs_f64());
+    }
+}
+
 async fn reply(sock: &mut TcpStream, status: &str, ctype: &str, body: &[u8]) -> std::io::Result<()> {
+    metrics::inc("le_mollet_http_responses_total", &[("code", status.get(..3).unwrap_or("?"))]);
     let head = format!("HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
     sock.write_all(head.as_bytes()).await?;
     sock.write_all(body).await

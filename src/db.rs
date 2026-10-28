@@ -13,6 +13,13 @@ use std::sync::Mutex;
 
 pub struct Db(Mutex<Connection>);
 
+/// A database call, timed and counted (src/metrics.rs).
+fn timed<T>(op: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
+    let r = crate::metrics::time("le_mollet_db_seconds", &[("op", op)], f);
+    if r.is_err() { crate::metrics::inc("le_mollet_db_errors_total", &[("op", op)]) }
+    r
+}
+
 /// Older JSON files: collection, file, the field holding the records, the field naming each one (else map keys).
 const IMPORT: [(&str, &str, Option<&str>, Option<&str>); 6] = [
     ("boards", "leaderboards.json", None, None),
@@ -73,6 +80,10 @@ impl Db {
 
     /// Every record of a collection, by id. A record that no longer reads is skipped, with a word in the log.
     pub fn all<T: DeserializeOwned>(&self, coll: &str) -> Result<Vec<(String, T)>> {
+        timed("all", || self.all_(coll))
+    }
+
+    fn all_<T: DeserializeOwned>(&self, coll: &str) -> Result<Vec<(String, T)>> {
         let c = self.0.lock().unwrap();
         let mut q = c.prepare("SELECT id, data FROM docs WHERE coll = ?1")?;
         let rows = q.query_map([coll], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
@@ -88,24 +99,34 @@ impl Db {
     }
 
     pub fn get<T: DeserializeOwned>(&self, coll: &str, id: &str) -> Result<Option<T>> {
-        let c = self.0.lock().unwrap();
-        let data: Option<String> = c.query_row("SELECT data FROM docs WHERE coll = ?1 AND id = ?2", [coll, id], |r| r.get(0)).optional()?;
-        Ok(data.map(|d| serde_json::from_str(&d)).transpose()?)
+        timed("get", || {
+            let c = self.0.lock().unwrap();
+            let data: Option<String> = c.query_row("SELECT data FROM docs WHERE coll = ?1 AND id = ?2", [coll, id], |r| r.get(0)).optional()?;
+            Ok(data.map(|d| serde_json::from_str(&d)).transpose()?)
+        })
     }
 
     pub fn put<T: Serialize + ?Sized>(&self, coll: &str, id: &str, v: &T) -> Result<()> {
-        let c = self.0.lock().unwrap();
-        c.execute("INSERT OR REPLACE INTO docs (coll, id, data) VALUES (?1, ?2, ?3)", params![coll, id, serde_json::to_string(v)?])?;
-        Ok(())
+        timed("put", || {
+            let c = self.0.lock().unwrap();
+            c.execute("INSERT OR REPLACE INTO docs (coll, id, data) VALUES (?1, ?2, ?3)", params![coll, id, serde_json::to_string(v)?])?;
+            Ok(())
+        })
     }
 
     pub fn delete(&self, coll: &str, id: &str) -> Result<()> {
-        self.0.lock().unwrap().execute("DELETE FROM docs WHERE coll = ?1 AND id = ?2", [coll, id])?;
-        Ok(())
+        timed("delete", || {
+            self.0.lock().unwrap().execute("DELETE FROM docs WHERE coll = ?1 AND id = ?2", [coll, id])?;
+            Ok(())
+        })
     }
 
     /// A whole small collection at once (events, clubs, roles), in one transaction.
     pub fn replace<'a, T: Serialize + 'a>(&self, coll: &str, rows: impl IntoIterator<Item = (String, &'a T)>) -> Result<()> {
+        timed("replace", || self.replace_(coll, rows))
+    }
+
+    fn replace_<'a, T: Serialize + 'a>(&self, coll: &str, rows: impl IntoIterator<Item = (String, &'a T)>) -> Result<()> {
         let mut c = self.0.lock().unwrap();
         let tx = c.transaction()?;
         tx.execute("DELETE FROM docs WHERE coll = ?1", [coll])?;

@@ -190,6 +190,7 @@ Tested hardware:
 - [How courses are built](docs/courses.md): data sources, smoothing, validation, recipes.
 - [Accounts and roles](docs/rbac.md): sign in with Strava, roles and permissions.
 - [Fair play and security](docs/security.md): what the server trusts, the power checks, CSRF.
+- [Metrics](docs/metrics.md): Prometheus metrics on usage and performance, `/metrics`.
 - [Contributing](docs/CONTRIBUTING.md): principles, checks, commits, testing a trainer.
 
 ## Contributing

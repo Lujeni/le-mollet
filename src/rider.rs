@@ -16,6 +16,8 @@ const WEIGHT_STEP: f32 = 2.0;
 const SEEN_DAYS: u64 = 60;
 /// Anaerobic capacity for the W′ check, J. A generous one: only the impossible is flagged.
 const W_PRIME: f32 = 25_000.0;
+/// Every reason a ride can be kept out of the rankings (`Check::why`), for the metrics.
+pub const FLAGS: [&str; 8] = ["demo", "flat", "spike", "no cadence", "1 s over 25 W/kg", "beyond W′", "20 min over 6.5 W/kg", "5 min over 8 W/kg"];
 /// A bike, kg.
 pub const BIKE_KG: f32 = 8.0;
 
