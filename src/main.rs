@@ -10,7 +10,7 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[derive(Parser)]
-#[command(about = "le-mollet: open-source indoor cycling")]
+#[command(about = "le-mollet: open-source indoor cycling", version)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,

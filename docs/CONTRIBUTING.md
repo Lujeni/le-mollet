@@ -68,8 +68,10 @@ A tag `v*` on `main` makes the release: the workflow in `.github/workflows/relea
 Linux (x86_64, ARM), macOS (Apple Silicon, Intel) and Windows, packs each with the courses and the docs, writes
 `SHA256SUMS`, and publishes a GitHub release with generated notes.
 
-1. Bump `version` in `Cargo.toml` (semver: breaking → major, feature → minor, fix → patch) and commit it.
-2. `git tag v0.2.0 && git push origin v0.2.0`.
+1. `cz bump` ([commitizen](https://commitizen-tools.github.io/commitizen/), config in `.cz.toml`): it reads the commits since
+   the last tag, picks the version (feat → minor, fix → patch; major stays 0), bumps `[workspace.package].version`
+   in `Cargo.toml`, updates `CHANGELOG.md`, commits and tags `vX.Y.Z`.
+2. `git push && git push --tags`.
 3. Watch the Actions tab; the release appears under Releases when the five builds are done.
 
 Every push and pull request runs `.github/workflows/ci.yml`: `cargo clippy --all-targets -- -D warnings` and

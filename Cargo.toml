@@ -1,6 +1,6 @@
 [package]
 name = "le-mollet"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "Open-source indoor cycling engine: smart trainer control over BLE"
 license = "MIT OR Apache-2.0"
@@ -27,6 +27,10 @@ argon2 = "0.6.0"
 
 [workspace]
 members = ["client"]
+
+# The version commitizen bumps (`cz bump`, see docs/CONTRIBUTING.md "Releasing"); the package inherits it.
+[workspace.package]
+version = "0.1.0"
 
 # Bevy is unusable unoptimized: optimize dependencies even in dev builds.
 [profile.dev.package."*"]
