@@ -139,6 +139,15 @@ Most hardware bugs come down to "what does the device actually send?". The tools
    `bluetoothctl devices Connected` then `bluetoothctl disconnect <address>`. BlueZ also drops the first
    connection attempt now and then: `probe` retries three times.
 
+## Debugging performance
+
+In a ride, `window.lemolletDebug()` in the browser console gives the frame time, the JavaScript time per frame, the
+draw calls and triangles, the chunks loaded (and how many at the far level of detail), the other riders drawn, the
+pixel ratio and whether shadows are in their plain mode. Quality is automatic: when frames run past ~22 ms the
+render drops pixels (down to 0.75 of the screen's ratio) then plainer shadows; when they run under ~13 ms it
+grows back. Terrain past the rider's chunk and its neighbours is built at a quarter of the triangles without
+decor or shadows (`chunkMesh(T, i, j, step)` in `web/index.html`); `CHUNK_RADIUS` sets how far it goes.
+
 Where the code lives: the page reads trainers (`connectTrainer`, `parseBikeData`, `parseCps`) and controllers
 (`connectPad`, the `PAD` button table, `PAD_ACTIONS`) in `web/index.html`; virtual gears are `virtualGrade`
 there too. The server's own trainer is `Trainer` in `src/lib.rs` and `src/protocol.rs`; the probe is

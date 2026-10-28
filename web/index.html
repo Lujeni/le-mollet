@@ -28,6 +28,9 @@ try { document.documentElement.dataset.theme = localStorage.getItem('lemollet.th
 [hidden] { display:none !important }
 html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:15px/1.45 Inter, system-ui, sans-serif; overflow:hidden }
 #scene { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none }
+#scene.off { display:none }
+.video { position:absolute; inset:0; background:#000; pointer-events:auto } .video iframe { width:100%; height:100%; border:0; display:block }
+#ride.video-on .hud.map, #ride.video-on .seg-banner { display:none }
 .ui { position:fixed; inset:0; pointer-events:none; display:flex; flex-direction:column }
 header { padding:18px 22px; display:flex; align-items:center; justify-content:space-between }
 .logo { display:flex; align-items:center; gap:10px; font-family:Silkscreen, monospace; font-size:22px; letter-spacing:1px; color:#fff; text-shadow:2px 2px 0 rgba(0,0,0,.45) }
@@ -174,7 +177,12 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 
 /* Ride menu: destination cards with a thumbnail */
 #rideMenu .panel { width:min(980px, 100%); max-height:100%; overflow:auto; padding:28px }
-.dests { display:grid; grid-template-columns:repeat(4, 1fr); gap:24px 16px; margin-bottom:24px }
+.dests { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:24px 16px; margin-bottom:24px }
+.cinema-thumb { display:grid; place-items:center; font-size:64px; background:linear-gradient(135deg, #1b2a34, #5a1a6e) }
+.cinema-recent { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:12px; margin-top:16px }
+.cinema-recent button { display:flex; flex-direction:column; gap:6px; padding:0; overflow:hidden; border-radius:14px; border:1px solid var(--edge); background:var(--glass-hi); color:var(--ink); font:inherit; text-align:left; cursor:pointer }
+.cinema-recent button:hover { background:var(--glass-hi2) } .cinema-recent img { width:100%; aspect-ratio:16 / 9; object-fit:cover; display:block; background:#000 }
+.cinema-recent small { padding:0 10px 10px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .dest { padding:0; overflow:visible; min-height:280px; justify-content:flex-start }
 .dest .thumb { width:100%; height:150px; display:block; border-radius:18px 18px 10px 10px; background:#0b1220 }
 .dest .dest-body { display:flex; flex-direction:column; gap:6px; padding:14px 16px 18px }
@@ -770,6 +778,10 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
           <canvas class="thumb" id="thumbFree" aria-hidden="true"></canvas>
           <span class="dest-body"><b>Free</b><small id="goFreeSub">Boucles ouvertes à tous</small><span class="tags"><i>Multijoueur</i><i>Boucle du jour</i></span></span>
         </button>
+        <button class="dest" id="goCinema">
+          <span class="thumb cinema-thumb" aria-hidden="true">🎬</span>
+          <span class="dest-body"><b>Cinéma</b><small id="goCinemaSub">Une vidéo YouTube en grand, tes chiffres par-dessus</small><span class="tags"><i>Vidéo</i><i>Route plate</i></span></span>
+        </button>
       </div>
       <p class="muted" id="modeHint"></p>
     </div>
@@ -839,6 +851,21 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     </div>
   </main>
 
+  <main id="cinema" hidden>
+    <div class="block panel">
+      <div class="ride-head">
+        <div><p class="kicker">Rouler devant une vidéo</p><h1>Cinéma</h1></div>
+        <button class="btn" id="cinemaBack">‹ Rouler</button>
+      </div>
+      <p class="muted">La vidéo prend tout l'écran, tes watts, ta zone, ton braquet et ta puissance des dernières minutes restent par-dessus. 📺 ou V pour revenir à la vidéo ou la couper en roulant.</p>
+      <form id="cinemaForm" class="new">
+        <label class="full">Lien YouTube<input name="url" type="url" placeholder="https://www.youtube.com/watch?v=…" required></label>
+        <label class="full">Pendant la vidéo<select name="what" id="cinemaWhat"></select></label>
+        <div class="form-actions"><button class="btn primary">Lancer ›</button><span class="club-error" id="cinemaError" role="alert"></span></div>
+      </form>
+      <div class="cinema-recent" id="cinemaRecent"></div>
+    </div>
+  </main>
   <main id="training" hidden>
     <div class="block panel">
       <div class="ride-head">
@@ -907,6 +934,8 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   </main>
 
   <main id="ride" hidden>
+    <!-- Video mode: a YouTube video fills the screen instead of the 3D, the HUD floats over it -->
+    <div class="video" id="video" hidden><iframe id="videoFrame" title="Vidéo" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
     <!-- HUD widgets: each one placed by the rider (⚙), see placeHud -->
     <div class="block panel stats hud" id="stats" data-w="stats"></div>
     <div class="block panel hud zones" id="zones" data-w="zones"></div>
@@ -921,6 +950,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
           <span class="chip fair" id="fairChip" hidden></span>
           <span class="chip" id="weatherChip" hidden></span>
           <button class="btn" id="night" aria-label="Moment de la journée : suit l'heure, ou fixé" hidden></button>
+          <button class="btn" id="videoBtn" aria-label="Regarder une vidéo YouTube en roulant" title="Regarder une vidéo YouTube en roulant (touche V)">📺</button>
           <button class="btn" id="mute" aria-label="Couper ou remettre le son"></button>
           <button class="btn" id="leave">‹ Circuits</button>
         </span>
@@ -1512,8 +1542,38 @@ addEventListener('resize', resize);
 // Bike and ground tilt with the road; slope doubled so 8 % reads on screen.
 let tilt = 0;
 const clock = new THREE.Clock();
+// Frame timing and draw calls for anyone tuning the render: window.lemolletDebug() in the console.
+const perf = { ms:0, js:0 };
+// Quality follows the machine: when frames run long the render shrinks a notch (fewer pixels, then plainer
+// shadows), when they run short it grows back, so a laptop stays smooth and a desktop stays sharp.
+const quality = { cap:Math.min(devicePixelRatio, 2), ratio:Math.min(devicePixelRatio, 2), low:false, since:performance.now(), auto:true };
+function setQuality(ratio, low) {
+  ratio = Math.max(0.75, Math.min(quality.cap, ratio));
+  if (ratio !== quality.ratio) { quality.ratio = ratio; renderer.setPixelRatio(ratio) }
+  if (low !== quality.low) {
+    quality.low = low;
+    sun.shadow.mapSize.set(low ? 1024 : 2048, low ? 1024 : 2048);
+    renderer.shadowMap.type = low ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    sun.shadow.map?.dispose(); sun.shadow.map = null;
+    scene.traverse(o => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true });
+  }
+  quality.since = performance.now();
+}
+function autoQuality() {
+  if (!quality.auto || !w3.group || document.hidden) return;
+  const age = performance.now() - quality.since;
+  if (perf.ms > 22 && age > 3000) setQuality(quality.ratio <= 1 ? quality.ratio - 0.2 : quality.ratio - 0.25, quality.ratio <= 1.01);
+  else if (perf.ms < 13 && age > 8000 && (quality.ratio < quality.cap || quality.low)) setQuality(quality.low ? quality.ratio : quality.ratio + 0.25, quality.low && quality.ratio < 1 ? true : false);
+}
+setInterval(autoQuality, 1000);
+window.lemolletDebug = () => ({ frameMs:+perf.ms.toFixed(2), jsMs:+perf.js.toFixed(2), fps:+(1000 / Math.max(1, perf.ms)).toFixed(1), ...renderer.info.render, geometries:renderer.info.memory.geometries, textures:renderer.info.memory.textures,
+  chunks:w3.chunks.size, far:[...w3.chunks.values()].filter(m => m.userData.lod === 2).length, others:w3.others.size, pixelRatio:renderer.getPixelRatio(), lowShadows:quality.low });
+let lastFrame = performance.now();
 renderer.setAnimationLoop(() => {
+  const t0 = performance.now();
+  perf.ms = perf.ms * 0.9 + (t0 - lastFrame) * 0.1; lastFrame = t0;
   const dt = Math.min(clock.getDelta(), 0.1);
+  if (video.on) return; // the video has the screen: nothing to draw, the ride goes on through its stream
   if (w3.group) update3d(dt);
   else {
     animateMenu(dt);
@@ -1525,6 +1585,7 @@ renderer.setAnimationLoop(() => {
   }
   renderer.render(scene, camera);
   if (w3.mirror) renderMirror();
+  perf.js = perf.js * 0.9 + (performance.now() - t0) * 0.1;
 });
 
 // ---------- UI ----------
@@ -1541,12 +1602,13 @@ function h(tag, props = {}, ...kids) {
 }
 
 // One screen at a time. Leaving the ride stops its stream, sound and 3D world.
-const SCREENS = ['#profileNew', '#lobby', '#eventsScreen', '#clubScreen', '#devicesScreen', '#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
+const SCREENS = ['#profileNew', '#cinema', '#lobby', '#eventsScreen', '#clubScreen', '#devicesScreen', '#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
 function show(id) {
   if (id !== '#ride') {
     $('#ride').classList.remove('editing', 'bare');
     $('#hudEdit').hidden = true;
     exit3d();
+    stopVideo();
     ride.events?.close();
     stopAmbience();
   }
@@ -2053,6 +2115,7 @@ function drawSteps(cv, steps, t, pad = { l:0, r:0, t:2, b:0 }) {
 
 function openWorkout(w) {
   ride.ended = false;
+  ride.cinema = false;
   ride.samples = []; ride.powerTrace = [];
   ride.energy = null; // full reserve at the start
   ride.full = []; // one sample a second, for the FIT export
@@ -2351,8 +2414,9 @@ function renderStats() {
     const total = ride.workout.steps.reduce((a, st) => a + st.secs, 0);
     $('#stats').replaceChildren(
       ride.workout.steps[w.step ?? 0]?.from < 0 ? stat('target', 'Cible', ride.workout.id === 'test-ftp' ? 'À fond !' : 'Libre', '') : stat('target', 'Cible', Math.round(w.target), 'W'),
-      stat('interval', 'Intervalle', mmss(w.step_left), ''),
-      stat('session', 'Séance', mmss(Math.min(s.elapsed, total)), `/ ${mmss(total)}`),
+      // the cinema's free ride is one 10 h step: only the time ridden matters
+      ride.cinema ? stat('time', 'Temps', mmss(s.elapsed), '') : stat('interval', 'Intervalle', mmss(w.step_left), ''),
+      ride.cinema ? '' : stat('session', 'Séance', mmss(Math.min(s.elapsed, total)), `/ ${mmss(total)}`),
       stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
       stat('distance', 'Distance', (s.distance / 1000).toFixed(2), 'km'),
       ...(w.done ? [h('div', { class:'finish' }, 'Séance terminée, bravo !')] : s.elapsed === 0 ? [h('div', { class:'finish' }, 'Pédale pour lancer la séance')] : []),
@@ -2480,7 +2544,74 @@ $('#ride').addEventListener('pointermove', e => {
 });
 addEventListener('pointerup', () => { hudDrag = null });
 // H: hide or show the whole HUD while riding.
+// ---------- video mode: ride while watching a YouTube video, the HUD over it ----------
+// The video takes the 3D's place (the render loop sleeps, which also spares the GPU); the ride itself runs on the
+// server as ever, so watts, gears, events and the riders board keep going. The last link is kept per profile.
+const video = { on:false };
+const youtubeId = url => { const m = String(url).trim().match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/) ?? String(url).trim().match(/^([\w-]{11})$/); return m?.[1] ?? null };
+function playVideo(url) {
+  const id = youtubeId(url);
+  if (!id) return alert('Colle un lien YouTube (youtube.com/watch?v=… ou youtu.be/…).');
+  const t = (String(url).match(/[?&]t=(\d+)/) ?? [])[1];
+  $('#videoFrame').src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1${t ? `&start=${t}` : ''}`;
+  $('#video').hidden = false;
+  $('#scene').classList.add('off');
+  $('#ride').classList.add('video-on');
+  video.on = true;
+  if (current) {
+    current.video = String(url).trim();
+    current.videos = [{ url:current.video, id }, ...(current.videos ?? []).filter(v => v.id !== id)].slice(0, 6);
+    persist();
+  }
+  $('#videoBtn').textContent = '📺 ✕';
+  stopAmbience?.();
+  placeHud();
+}
+function stopVideo() {
+  if (!video.on) return;
+  $('#videoFrame').src = '';
+  $('#video').hidden = true;
+  $('#scene').classList.remove('off');
+  $('#ride').classList.remove('video-on');
+  video.on = false;
+  $('#videoBtn').textContent = '📺';
+  clock.getDelta(); // the loop slept: no catch-up jump
+  if (w3.group) { w3.snap = true; startAmbience?.().catch(() => {}) }
+  placeHud();
+}
+function toggleVideo() {
+  if (video.on) return stopVideo();
+  const url = prompt('Lien de la vidéo YouTube à regarder en roulant :', current?.video ?? '');
+  if (url) playVideo(url);
+}
+$('#videoBtn').addEventListener('click', toggleVideo);
+
+// The cinema: a video picked first, then a ride on a flat road (free, with the virtual gears) or one of the
+// workouts, the video over the 3D from the start.
+function showCinema() {
+  show('#cinema');
+  const f = $('#cinemaForm');
+  if (!f.url.value) f.url.value = current?.video ?? '';
+  $('#cinemaWhat').replaceChildren(h('option', { value:'free' }, 'Route plate, libre (vitesses virtuelles)'),
+    ...(ride.workouts ?? []).map(({ w, duration }) => h('option', { value:w.id }, `Séance · ${w.name} (${Math.round(duration / 60)} min)`)));
+  $('#cinemaRecent').replaceChildren(...(current?.videos ?? []).map(v => h('button', { type:'button', title:v.url, onclick: () => { f.url.value = v.url; f.requestSubmit() } },
+    h('img', { src:`https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`, alt:'', loading:'lazy' }), h('small', {}, v.url))));
+}
+$('#cinemaForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.target, url = f.url.value.trim();
+  if (!youtubeId(url)) { $('#cinemaError').textContent = 'Ce lien n\'est pas une vidéo YouTube.'; return }
+  $('#cinemaError').textContent = '';
+  const what = f.what.value;
+  openWorkout(what === 'free' ? { id:'custom', name:'Cinéma', imported:true, steps:[{ secs:36000, from:-1, to:-1 }] } : workoutById(what).w);
+  ride.cinema = what === 'free'; // a free flat road: the virtual gears shift the resistance
+  if (ride.cinema) { gears.on = true; renderGear() }
+  playVideo(url);
+});
+$('#goCinema').addEventListener('click', showCinema);
+$('#cinemaBack').addEventListener('click', showRideMenu);
 addEventListener('keydown', e => {
+  if (e.key.toLowerCase() === 'v' && !$('#ride').hidden && $('#menu').hidden && !e.target.matches?.('input, textarea')) return toggleVideo();
   if (e.key.toLowerCase() !== 'h' || $('#ride').hidden || !$('#menu').hidden || e.target.matches?.('input, textarea')) return;
   $('#ride').classList.toggle('bare');
 });
@@ -3463,8 +3594,9 @@ function animalAt(T, c, r) {
   return null;
 }
 
-// Material groups of a chunk: 0 studded tops, 1 brick sides, 2 water, 3 lava.
-function chunkMesh(T, ci, cj) {
+// Material groups of a chunk: 0 studded tops, 1 brick sides, 2 water, 3 lava. `step` > 1 builds a far chunk from
+// every step-th cell (a quarter of the triangles at 2), without trees or animals: the level of detail past 320 m.
+function chunkMesh(T, ci, cj, step = 1) {
   const G = [0, 1, 2, 3].map(() => ({ pos:[], col:[], uv:[] }));
   // Tops: one cell = one UV unit, so studs line up across cells. Sides: u along the wall, v = two brick courses.
   // On the island, true minifig scale whatever the cell: 0.4 m studs, 1.6 m bricks, 0.48 m courses.
@@ -3484,16 +3616,17 @@ function chunkMesh(T, ci, cj) {
   };
   const top = (c, r) => c < 0 || r < 0 || c >= T.w || r >= T.h ? -Infinity : T.top(c, r);
   const animals = [];
-  for (let r = cj * CHUNK; r < Math.min((cj + 1) * CHUNK, T.h); r++) {
-    for (let c = ci * CHUNK; c < Math.min((ci + 1) * CHUNK, T.w); c++) {
+  for (let r = cj * CHUNK; r < Math.min((cj + 1) * CHUNK, T.h); r += step) {
+    for (let c = ci * CHUNK; c < Math.min((ci + 1) * CHUNK, T.w); c += step) {
       const i = r * T.w + c, cov = T.cover[i], e = T.ele(i), y = top(c, r);
-      const x0 = T.ox + c * T.cx, x1 = x0 + T.cx, z0 = T.oz + r * T.cz, z1 = z0 + T.cz;
+      const x0 = T.ox + c * T.cx, x1 = x0 + T.cx * step, z0 = T.oz + r * T.cz, z1 = z0 + T.cz * step;
       quad(cov === COVER.WATER ? 2 : cov === COVER.LAVA ? 3 : 0, [[x0, y, z0], [x0, y, z1], [x1, y, z1], [x1, y, z0]], shade(topColor(cov, e, c, r), c, r));
       const sc = shade(sideColor(cov, e), c, r);
-      for (const [dc, dr, [ax, az], [bx, bz]] of [[1, 0, [x1, z0], [x1, z1]], [-1, 0, [x0, z0], [x0, z1]], [0, 1, [x0, z1], [x1, z1]], [0, -1, [x0, z0], [x1, z0]]]) {
+      for (const [dc, dr, [ax, az], [bx, bz]] of [[step, 0, [x1, z0], [x1, z1]], [-step, 0, [x0, z0], [x0, z1]], [0, step, [x0, z1], [x1, z1]], [0, -step, [x0, z0], [x1, z0]]]) {
         const n = Math.max(top(c + dc, r + dr), y - 40);
         if (n < y) quad(1, [[ax, y, az], [ax, n, az], [bx, n, bz], [bx, y, bz]], sc);
       }
+      if (step > 1) continue; // far: the ground only
       const kind = animalAt(T, c, r);
       if (kind) animals.push([kind, (x0 + x1) / 2, y, (z0 + z1) / 2, hash(c, r, 5) * Math.PI * 2]);
       if (cov === COVER.FOREST && e < 2000 && !T.island && !ride.props?.length && hash(c, r, 1) < 0.3) { // the island has its own trees, piece by piece // Lego pine: round trunk, two stacked studded layers
@@ -4384,7 +4517,8 @@ function updateHorde(dt) {
 
 // Mirror viewport over the #mirror frame, drawn after the main view.
 function renderMirror() {
-  const r = $('#mirror').getBoundingClientRect(), [x, y, w, h] = [r.left + 3, innerHeight - r.bottom + 3, r.width - 6, r.height - 6];
+  if (!w3.mirrorRect || performance.now() - w3.mirrorRect.at > 1000) w3.mirrorRect = { r:$('#mirror').getBoundingClientRect(), at:performance.now() }; // a layout read once a second, not per frame
+  const r = w3.mirrorRect.r, [x, y, w, h] = [r.left + 3, innerHeight - r.bottom + 3, r.width - 6, r.height - 6];
   w3.mirror.aspect = w / h;
   w3.mirror.updateProjectionMatrix();
   renderer.setScissorTest(true);
@@ -4439,21 +4573,30 @@ function update3d(dt) {
   const [ci, cj] = [Math.floor((p.x - T.ox) / T.cx / CHUNK), Math.floor((p.z - T.oz) / T.cz / CHUNK)];
   const here = `${ci},${cj}`;
   if (w3.chunksSettled === here) return; // same chunk as last frame and nothing left to build
+  // Level of detail: the rider's chunk and its neighbours in full; past that, a quarter of the triangles, no
+  // decor, no shadows. A chunk whose level changed is rebuilt, nearest first, one per frame.
   const wanted = [];
   const R = T.island ? CHUNK_RADIUS + 1 : CHUNK_RADIUS; // island chunks are 160 m: see a bit further
   for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) {
-    const [i, j] = [ci + di, cj + dj];
-    if (i >= 0 && j >= 0 && i * CHUNK < T.w && j * CHUNK < T.h && !w3.chunks.has(`${i},${j}`)) wanted.push([di * di + dj * dj, i, j]);
+    const [i, j] = [ci + di, cj + dj], lod = Math.max(Math.abs(di), Math.abs(dj)) <= 1 || T.island ? 1 : 2;
+    if (i >= 0 && j >= 0 && i * CHUNK < T.w && j * CHUNK < T.h && w3.chunks.get(`${i},${j}`)?.userData.lod !== lod) wanted.push([di * di + dj * dj, i, j, lod]);
   }
   wanted.sort((a, b) => a[0] - b[0]);
   w3.chunksSettled = wanted.length ? null : here;
-  for (const [, i, j] of wanted.slice(0, w3.chunks.size ? 1 : 9)) {
-    const m = chunkMesh(T, i, j), bld = w3.bld?.get(`${i},${j}`);
+  for (const [, i, j, lod] of wanted.slice(0, w3.chunks.size ? 1 : 9)) {
+    const key = `${i},${j}`, old = w3.chunks.get(key);
+    if (old) { w3.group.remove(old); old.traverse(o => { if (!o.geometry?.userData.shared) o.geometry?.dispose() }) }
+    const m = chunkMesh(T, i, j, lod), bld = w3.bld?.get(key);
+    m.userData.lod = lod;
     if (bld) m.add(buildingMesh(bld));
-    const props = w3.propCells && [...(w3.propCells.get(`${i},${j}`) ?? []), ...(T.island ? islandFill(T, i, j) : [])];
-    if (props?.length) m.add(Object.assign(chunkProps(props), { userData:{ props:true } }));
+    if (lod === 1) {
+      const props = w3.propCells && [...(w3.propCells.get(key) ?? []), ...(T.island ? islandFill(T, i, j) : [])];
+      if (props?.length) m.add(Object.assign(chunkProps(props), { userData:{ props:true } }));
+    } else {
+      m.traverse(o => { o.castShadow = o.receiveShadow = false });
+    }
     w3.group.add(m);
-    w3.chunks.set(`${i},${j}`, m);
+    w3.chunks.set(key, m);
   }
   for (const [key, m] of w3.chunks) {
     const [i, j] = key.split(',').map(Number);
@@ -4860,7 +5003,7 @@ function virtualGrade(road, t, i, kg) {
   return Math.max(-10, Math.min(25, grade * 100));
 }
 function shift(d) {
-  if ($('#ride').hidden || ride.mode === 'workout') return;
+  if ($('#ride').hidden || (ride.mode === 'workout' && !ride.cinema)) return;
   gears.on = true;
   gears.i = Math.max(0, Math.min(GEARS.length - 1, gears.i + d));
   bt.sent = null; // the next drive sends the new grade
@@ -4891,7 +5034,7 @@ function renderZones() {
   if (!el || $('#ride').hidden) return;
   ride.pow3 = (ride.pow3 ?? 0) * 0.8 + (s?.power ?? 0) * 0.2;
   const pct = ride.pow3 / (current.ftp || 200), [, zone, name, color] = FTP_ZONES.find(z => pct < z[0]);
-  const showGear = gears.on && ride.mode !== 'workout';
+  const showGear = gears.on && (ride.mode !== 'workout' || ride.cinema);
   el.style.setProperty('--z', color);
   el.classList.toggle('hot', pct >= 1.2);
   el.classList.toggle('inferno', pct >= 1.5);
