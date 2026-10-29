@@ -72,6 +72,54 @@ pub fn delete(db: &Db, name: &str, password: &str) -> Result<Account, &'static s
     Ok(a)
 }
 
+/// Sign-up proof of work, a captcha nobody sees: the page asks for a challenge, finds a counter whose SHA-256
+/// with it starts with `POW_BITS` zero bits (a second or so of a browser), and sends both with the form. A bot
+/// pays the same second per account, and thousands of accounts become hours of CPU. No third party, no tracking.
+/// Challenges carry a signature (a key drawn at start) and a time: nothing to store until one is used (src/web.rs).
+pub const POW_BITS: u32 = 16;
+const POW_SECS: u64 = 600;
+static POW_KEY: std::sync::LazyLock<[u8; 32]> = std::sync::LazyLock::new(|| {
+    let (a, b) = (uuid::Uuid::new_v4().into_bytes(), uuid::Uuid::new_v4().into_bytes());
+    let mut k = [0u8; 32];
+    k[..16].copy_from_slice(&a);
+    k[16..].copy_from_slice(&b);
+    k
+});
+
+fn sha(parts: &[&[u8]]) -> [u8; 32] {
+    use sha2::Digest;
+    let mut h = sha2::Sha256::new();
+    for p in parts { h.update(p) }
+    h.finalize().into()
+}
+
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+fn pow_sig(body: &str) -> String {
+    hex(&sha(&[&POW_KEY[..], body.as_bytes()]))[..32].to_owned()
+}
+
+/// A fresh challenge: `<time>.<random>.<signature>`.
+pub fn pow_challenge(now: u64) -> String {
+    let body = format!("{now}.{}", uuid::Uuid::new_v4().simple());
+    format!("{body}.{}", pow_sig(&body))
+}
+
+/// Check an answer, `<challenge>:<counter>`; Ok with the challenge, for the server to refuse it a second time.
+pub fn pow_check(answer: &str, now: u64) -> Result<String, &'static str> {
+    let (token, _) = answer.rsplit_once(':').ok_or("pow: missing")?;
+    let (body, sig) = token.rsplit_once('.').ok_or("pow: malformed")?;
+    if pow_sig(body) != sig { return Err("pow: bad signature") }
+    let at: u64 = body.split('.').next().and_then(|t| t.parse().ok()).ok_or("pow: malformed")?;
+    if now.saturating_sub(at) > POW_SECS || at > now + 60 { return Err("pow: expired") }
+    let d = sha(&[answer.as_bytes()]);
+    let zeros = d.iter().map(|b| b.leading_zeros()).scan(true, |go, z| { if !*go { return None } *go = z == 8; Some(z) }).sum::<u32>();
+    if zeros < POW_BITS { return Err("pow: wrong") }
+    Ok(token.to_owned())
+}
+
 /// A hash to check an unknown name against, so a wrong name takes as long as a wrong password.
 static DUMMY: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| Argon2::default().hash_password(b"nobody").map(|h| h.to_string()).unwrap_or_default());
 
@@ -109,5 +157,20 @@ mod tests {
         assert_eq!(delete(&db, "julien", "pédale-douce").unwrap_err(), "wrong name or password");
         assert_eq!(delete(&db, "julien", "nouveau-mdp").unwrap().id, a.id);
         assert!(find(&db, "julien").is_none());
+    }
+
+    #[test]
+    fn proof_of_work() {
+        let now = 1_700_000_000;
+        let c = pow_challenge(now);
+        let answer = (0u64..).map(|n| format!("{c}:{n}")).find(|a| pow_check(a, now).is_ok()).unwrap();
+        assert_eq!(pow_check(&answer, now).unwrap(), c);
+        assert_eq!(pow_check(&answer, now + POW_SECS + 1).unwrap_err(), "pow: expired");
+        let wrong = (0u64..).map(|n| format!("{c}:{n}")).find(|a| pow_check(a, now).is_err()).unwrap();
+        assert_eq!(pow_check(&wrong, now).unwrap_err(), "pow: wrong");
+        let mut forged = c.clone();
+        forged.replace_range(..1, if c.starts_with('1') { "2" } else { "1" });
+        assert_eq!(pow_check(&format!("{forged}:1"), now).unwrap_err(), "pow: bad signature");
+        assert_eq!(pow_check("nothing", now).unwrap_err(), "pow: missing");
     }
 }

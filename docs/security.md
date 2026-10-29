@@ -68,7 +68,11 @@ checks are for.
   (events, clubs, friends, a profile, a world, signing out, a reset) is POST only: a link, a prefetch or a browser
   without `Sec-Fetch-Site` cannot do it by accident.
 - **Passwords**: Argon2id hashes; five wrong passwords from one client lock that name for that client for 15
-  minutes (another client cannot lock you out), and sign-ups and sign-ins are limited to 10 an hour per client.
+  minutes (another client cannot lock you out), and sign-ins are limited to 10 an hour per client.
+- **Sign-ups, against bots**: 3 an hour and 5 a day per client, 100 an hour for the whole server; and each one
+  carries a proof of work (`/auth/challenge`, `account::pow_check`): the browser spends about a second of
+  SHA-256 on a signed, dated challenge, used once. A human never sees it; a farm of accounts costs a farm of CPU.
+  No captcha service, nothing loaded from a third party.
 - **Names**: in cloud mode the name shown to others is the account's (with the club tag the server knows), never
   the page's word; at home it is free text, as there is no account.
 - **Budgets**, per client address (behind the reverse proxy of cloud mode, the last address of `X-Forwarded-For`,

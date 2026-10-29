@@ -341,6 +341,8 @@ pub struct App {
     roles: Mutex<(Roles, std::time::Instant)>,
     /// Last Ride On sent by each session: one every few seconds, so nobody floods an inbox.
     rideons: Mutex<HashMap<u64, std::time::Instant>>,
+    /// Sign-up challenges already turned into an account, and when (account::pow_check): one account each.
+    pow_used: Mutex<HashMap<String, std::time::Instant>>,
 }
 
 /// Connections at once: in all, and per client address.
@@ -432,6 +434,7 @@ impl App {
             conns: Mutex::new(HashMap::new()),
             roles: Mutex::new((Roles::load(&db)?, std::time::Instant::now())),
             rideons: Mutex::new(HashMap::new()),
+            pow_used: Mutex::new(HashMap::new()),
             db,
         })
     }
@@ -747,7 +750,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let client = client_ip(&req, peer, app.mode);
     // What costs the server something (a password hash, a world, a row that stays) is counted per client.
     let budget = match path {
-        "/auth/signup" | "/auth/password" | "/auth/delete" => Some(("auth", 10, 3600)),
+        "/auth/password" | "/auth/delete" => Some(("auth", 10, 3600)),
+        // Accounts: 3 an hour and 5 a day from one address, 100 an hour from everywhere (a flood stops at the door).
+        "/auth/signup" if req.starts_with("POST ") => Some(("signup", 3, 3600)),
         "/auth/login" => Some(("auth", 10, 3600)),
         "/worlds/new" => Some(("world", 3, 600)),
         "/club/create" | "/event/create" => Some(("create", 10, 3600)),
@@ -756,7 +761,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         "/rider" if param(query, "weight").is_some() => Some(("rider", 30, 3600)),
         _ => None,
     };
-    if let Some((what, max, secs)) = budget && !app.allow(what, &client, max, Duration::from_secs(secs)) {
+    let over = budget.is_some_and(|(what, max, secs)| !app.allow(what, &client, max, Duration::from_secs(secs)))
+        || path == "/auth/signup" && req.starts_with("POST ") && !(app.allow("signup-day", &client, 5, Duration::from_secs(86_400)) && app.allow("signup-all", "*", 100, Duration::from_secs(3600)));
+    if over {
         metrics::inc("le_mollet_rejected_total", &[("reason", "rate_limit")]);
         return reply(&mut sock, "429 Too Many Requests", "text/plain", b"too many requests: try again later").await;
     }
@@ -821,10 +828,23 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let body = json!({ "role": who.role, "name": who.name, "account": who.account, "perms": who.role.perms(), "mode": app.mode, "devices": devices }).to_string();
             reply(&mut sock, "200 OK", "application/json", body.as_bytes()).await
         }
+        ("/auth/challenge", _) => reply(&mut sock, "200 OK", "application/json", json!({ "token": account::pow_challenge(unix_now()), "bits": account::POW_BITS }).to_string().as_bytes()).await,
         ("/auth/signup" | "/auth/login", _) if req.starts_with("POST ") => {
             let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
             let (name, password) = (param(form, "name").map(decode).unwrap_or_default(), param(form, "password").map(decode).unwrap_or_default());
             let name = name.trim().to_owned();
+            // A sign-up carries its proof of work (account::pow_check), each challenge good for one account.
+            if path == "/auth/signup" {
+                let checked = account::pow_check(&param(form, "pow").map(decode).unwrap_or_default(), unix_now()).and_then(|token| {
+                    let mut used = app.pow_used.lock().unwrap_or_else(|e| e.into_inner());
+                    used.retain(|_, t| t.elapsed().as_secs() < 600);
+                    if used.insert(token, std::time::Instant::now()).is_some() { Err("pow: already used") } else { Ok(()) }
+                });
+                if let Err(e) = checked {
+                    metrics::inc("le_mollet_rejected_total", &[("reason", "pow")]);
+                    return reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await;
+                }
+            }
             // Five wrong passwords for a name from one client: that client waits 15 minutes for that name (the
             // per-client budget above slows the rest).
             let key = format!("{client}:{}", name.to_ascii_lowercase());

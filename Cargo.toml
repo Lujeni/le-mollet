@@ -24,6 +24,8 @@ ureq = { version = "2", features = ["json"] }
 clap = { version = "4", features = ["derive"] }
 rusqlite = { version = "0.41.0", features = ["bundled"] }
 argon2 = "0.6.0"
+# the sign-up proof of work (src/account.rs)
+sha2 = "0.10"
 
 [workspace]
 members = ["client"]

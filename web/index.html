@@ -6323,18 +6323,40 @@ const can = p => auth.me.perms.includes(p);
 const authed = (path, opts = {}) => fetch(path, { credentials:'same-origin', ...opts });
 const ROLE_NAMES = { rider:'Cycliste', organizer:'Organisateur', admin:'Admin' };
 const ACCOUNT_ERRORS = { 'wrong name or password':'Nom ou mot de passe incorrect.', 'name taken':'Ce nom est déjà pris.', 'too many tries: wait 15 minutes':'Trop d\'essais : attends 15 minutes.',
-  'name: 3 to 24 letters, digits, - or _':'Nom : 3 à 24 lettres, chiffres, - ou _.', 'password: 8 characters at least':'Mot de passe : 8 caractères au moins.', 'password: 128 characters at most':'Mot de passe : 128 caractères au plus.' };
+  'name: 3 to 24 letters, digits, - or _':'Nom : 3 à 24 lettres, chiffres, - ou _.', 'password: 8 characters at least':'Mot de passe : 8 caractères au moins.', 'password: 128 characters at most':'Mot de passe : 128 caractères au plus.',
+  'too many requests: try again later':'Trop de demandes depuis ici : réessaie plus tard.' };
+// Sign-up proof of work, the captcha nobody sees (src/account.rs): a challenge from the server, a counter whose
+// SHA-256 with it starts with enough zero bits. A second or so, started as soon as the form is touched.
+async function solvePow() {
+  const { token, bits } = await authed('/auth/challenge').then(r => r.json());
+  const enc = new TextEncoder();
+  for (let n = 0; ; n++) {
+    const d = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(`${token}:${n}`)));
+    let z = 0;
+    for (const b of d) { if (b) { z += Math.clz32(b) - 24; break } z += 8 }
+    if (z >= bits) return `${token}:${n}`;
+  }
+}
 // Sign in, or sign up with the same two fields; `done` runs once the server knows who this is.
 function accountForm(done) {
   const err = h('p', { class:'club-error', role:'alert' });
-  const f = h('form', { class:'account-form' },
+  let pow = null;
+  const f = h('form', { class:'account-form', onfocusin: () => { pow ??= solvePow().catch(() => null) } },
     h('label', {}, 'Nom', h('input', { name:'name', required:'', minlength:3, maxlength:24, pattern:'[A-Za-z0-9_\\-]{3,24}', autocomplete:'username' })),
     h('label', {}, 'Mot de passe', h('input', { name:'password', type:'password', required:'', minlength:8, maxlength:128, autocomplete:'current-password' })),
     h('div', { class:'form-actions' }, h('button', { class:'btn primary', value:'login' }, 'Se connecter'), h('button', { class:'btn', value:'signup' }, 'Créer un compte')), err);
   f.addEventListener('submit', async e => {
     e.preventDefault();
-    const r = await authed(`/auth/${e.submitter?.value ?? 'login'}`, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:new URLSearchParams(new FormData(f)) }).catch(() => null);
-    if (!r?.ok) { const t = await r?.text().catch(() => ''); err.textContent = ACCOUNT_ERRORS[t] ?? (t || 'Serveur injoignable.'); return }
+    const action = e.submitter?.value ?? 'login', body = new URLSearchParams(new FormData(f));
+    if (action === 'signup') {
+      err.textContent = 'Vérification anti-robots…';
+      const p = await (pow ??= solvePow().catch(() => null));
+      pow = null; // one account per challenge
+      if (!p) { err.textContent = 'Vérification anti-robots impossible : recharge la page.'; return }
+      body.set('pow', p);
+    }
+    const r = await authed(`/auth/${action}`, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body }).catch(() => null);
+    if (!r?.ok) { const t = await r?.text().catch(() => ''); err.textContent = ACCOUNT_ERRORS[t] ?? (t.startsWith('pow') ? 'Vérification anti-robots échouée : réessaie.' : t || 'Serveur injoignable.'); return }
     f.reset(); err.textContent = '';
     await whoami();
     done?.();
