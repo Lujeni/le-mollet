@@ -6384,6 +6384,17 @@ function accountForm(done, cloud) {
   f.addEventListener('submit', async e => {
     e.preventDefault();
     const action = e.submitter?.value ?? 'login', body = new URLSearchParams(new FormData(f));
+    const post = (path, body) => authed(path, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body });
+    const show = async r => { const t = await r?.text().catch(() => ''); err.textContent = ACCOUNT_ERRORS[t] ?? (t.startsWith('pow') ? 'Vérification anti-robots échouée : réessaie.' : t || 'Serveur injoignable.') };
+    if (action === 'link') {
+      if (!f.email.value) { err.textContent = 'Indique ton e-mail.'; f.email.focus(); return }
+      const r = await post('/auth/link', new URLSearchParams({ email:f.email.value })).catch(() => null);
+      if (!r?.ok) return show(r);
+      err.textContent = 'Si cet e-mail a un compte, un lien de connexion vient d\'y partir : il vaut 15 minutes.';
+      return;
+    }
+    if (action === 'login' && !f.password.value) { err.textContent = 'Ton mot de passe, ou « Recevoir un lien par e-mail ».'; f.password.focus(); return }
+    if (action === 'signup' && cloud && !f.email.value) { err.textContent = 'Indique ton e-mail : c\'est lui qui te reconnecte.'; f.email.focus(); return }
     if (action === 'signup') {
       err.textContent = 'Vérification anti-robots…';
       const p = await (pow ??= solvePow().catch(() => null));
@@ -6396,17 +6407,6 @@ function accountForm(done, cloud) {
     f.reset();
     if (r.status === 202) { err.textContent = 'Compte créé : un lien de connexion est parti dans ta boîte mail, il vaut 15 minutes.'; return }
     err.textContent = '';
-    const post = (path, body) => authed(path, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body });
-    const show = async r => { const t = await r?.text().catch(() => ''); err.textContent = ACCOUNT_ERRORS[t] ?? (t.startsWith('pow') ? 'Vérification anti-robots échouée : réessaie.' : t || 'Serveur injoignable.') };
-    if (action === 'link') {
-      if (!f.email.value) { err.textContent = 'Indique ton e-mail.'; f.email.focus(); return }
-      const r = await post('/auth/link', new URLSearchParams({ email:f.email.value })).catch(() => null);
-      if (!r?.ok) return show(r);
-      err.textContent = 'Si cet e-mail a un compte, un lien de connexion vient d\'y partir : il vaut 15 minutes.';
-      return;
-    }
-    if (action === 'login' && !f.password.value) { err.textContent = 'Ton mot de passe, ou « Recevoir un lien par e-mail ».'; f.password.focus(); return }
-    if (action === 'signup' && cloud && !f.email.value) { err.textContent = 'Indique ton e-mail : c\'est lui qui te reconnecte.'; f.email.focus(); return }
     await whoami();
     done?.();
   });
@@ -6442,16 +6442,6 @@ function accountSettings() {
     if (!r?.ok) return fail(delErr, r);
     location.reload();
   });
-  const everywhere = h('button', { class:'btn', type:'button', onclick: async () => { await authed('/auth/logout?all=1', { method:'POST' }).catch(() => {}); location.reload() } }, 'Se déconnecter partout');
-  return h('div', { class:'account-settings' }, h('p', { class:'muted', id:'accountDevices' }), everywhere, em, pw, del);
-}
-$('#accountSettings').append(accountSettings());
-// The account in the header, on every screen: a brick with the name, a menu with the role, the devices, the
-// settings and the way out.
-const signOut = async () => { await authed('/auth/logout', { method:'POST' }).catch(() => {}); location.reload() };
-const openAccount = () => { closeAcct(); $('#accountModal').hidden = false; $('#accountClose').focus() };
-const closeAcct = () => { $('#acctMenu').hidden = true; $('#acctBtn').setAttribute('aria-expanded', 'false') };
-function renderAcct() {
   const emErr = h('p', { class:'club-error', role:'alert' });
   const em = h('form', { class:'account-form' }, h('h3', {}, 'E-mail'), h('p', { class:'muted', id:'accountEmail' }),
     h('label', {}, 'Nouvel e-mail', h('input', { name:'email', type:'email', required:'', maxlength:254, autocomplete:'email' })),
@@ -6464,6 +6454,16 @@ function renderAcct() {
     em.reset(); emErr.textContent = 'E-mail changé.';
     whoami();
   });
+  const everywhere = h('button', { class:'btn', type:'button', onclick: async () => { await authed('/auth/logout?all=1', { method:'POST' }).catch(() => {}); location.reload() } }, 'Se déconnecter partout');
+  return h('div', { class:'account-settings' }, h('p', { class:'muted', id:'accountDevices' }), everywhere, em, pw, del);
+}
+$('#accountSettings').append(accountSettings());
+// The account in the header, on every screen: a brick with the name, a menu with the role, the devices, the
+// settings and the way out.
+const signOut = async () => { await authed('/auth/logout', { method:'POST' }).catch(() => {}); location.reload() };
+const openAccount = () => { closeAcct(); $('#accountModal').hidden = false; $('#accountClose').focus() };
+const closeAcct = () => { $('#acctMenu').hidden = true; $('#acctBtn').setAttribute('aria-expanded', 'false') };
+function renderAcct() {
   const { me } = auth, signed = !!me.account, btn = $('#acctBtn');
   btn.hidden = !signed;
   if (!signed) return closeAcct();
@@ -6493,6 +6493,7 @@ async function whoami() {
   $('#accountIn').hidden = signed || owner;
 
   if (signed) $('#accountDevices').textContent = me.devices === 1 ? 'Connecté sur cet appareil seulement.' : `Connecté sur ${me.devices} appareils.`;
+  if (signed) $('#accountEmail').textContent = me.email ? `Actuel : ${me.email}` : 'Aucun e-mail : ajoutes-en un pour pouvoir te connecter par lien.';
   $('#accountOpen').hidden = !signed;
   renderAcct();
   $('#homeRole').replaceChildren(...(me.role !== 'rider' ? [h('span', { class:'role-chip' }, ROLE_NAMES[me.role])] : []));
@@ -6511,7 +6512,6 @@ if (linkToken) {
 // XP like Zwift: 20 per km ridden, 12 per minute of workout, 50 per segment finished, plus each badge's bonus.
 const XP = { km:20, workoutMin:12, segment:50 };
 // Each level asks a little more than the last: 500 XP to level 2, then +250 each time.
-  if (signed) $('#accountEmail').textContent = me.email ? `Actuel : ${me.email}` : 'Aucun e-mail : ajoutes-en un pour pouvoir te connecter par lien.';
 function levelOf(xp) {
   let [level, at, need] = [1, 0, 500];
   while (xp >= at + need && level < 99) { at += need; level++; need = 500 + 250 * (level - 1) }
