@@ -4,6 +4,7 @@
 //! File format (little-endian): u32 width, u32 height, f64 west, south, east, north,
 //! then width*height u16 elevations in decimeters, then width*height u8 cover codes.
 //! Rows go north to south, columns west to east.
+//! On the wire (`GET /terrain`) the heights are row differences instead (`delta_rows`): gzip then halves them.
 
 use crate::course::{Course, UA, overpass, request_json};
 use anyhow::{Result, bail};
@@ -26,6 +27,26 @@ pub const ROCK: u8 = 4;
 pub const ROAD: u8 = 5;
 /// City ground between streets and buildings: sidewalks, squares, courtyards.
 pub const PAVE: u8 = 6;
+
+/// The wire form of a terrain file: each height as the wrapping u16 difference from the one west of it, the first
+/// of a row from 0. Same header and cover; neighbours differ by a few decimeters, so gzip packs it twice as small
+/// (Ventoux 8.0 -> 4.4 MB). `parseTerrain` in the page undoes it with a running sum per row. Anything that is not
+/// a terrain file comes back as it was.
+pub fn delta_rows(mut b: Vec<u8>) -> Vec<u8> {
+    let u = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
+    if b.len() < 40 { return b }
+    let (w, h) = (u(0), u(4));
+    if b.len() != 40 + w * h * 3 { return b }
+    for row in b[40..40 + w * h * 2].chunks_exact_mut(w * 2) {
+        let mut prev = 0u16;
+        for c in row.chunks_exact_mut(2) {
+            let v = u16::from_le_bytes([c[0], c[1]]);
+            c.copy_from_slice(&v.wrapping_sub(prev).to_le_bytes());
+            prev = v;
+        }
+    }
+    b
+}
 
 /// Polygon ring in fractional grid coordinates (column, row).
 pub(crate) type Ring = Vec<(f64, f64)>;
@@ -228,6 +249,18 @@ pub(crate) fn fill_even_odd(rings: &[Ring], w: usize, h: usize, mut set: impl Fn
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn delta_rows_differences_per_row() {
+        let t = Terrain { w: 3, h: 2, west: 0.0, south: 0.0, east: 1.0, north: 1.0, heights: vec![100.0, 100.5, 99.0, 0.0, 6553.5, 0.0], cover: vec![GRASS, ROAD, WATER, ROCK, FOREST, PAVE] };
+        let raw = t.to_bytes();
+        let wire = delta_rows(raw.clone());
+        assert_eq!(wire[..40], raw[..40]); // header
+        assert_eq!(wire[40 + 12..], raw[40 + 12..]); // cover
+        let d: Vec<u16> = wire[40..52].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        assert_eq!(d, [1000, 5, 15u16.wrapping_neg(), 0, 65535, 1]); // +1000 dm, +0.5 m, -1.5 m; 0, 6553.5 m, back to 0 wraps
+        assert_eq!(delta_rows(b"short".to_vec()), b"short"); // not a terrain: untouched
+    }
 
     #[test]
     fn even_odd_fill_with_hole() {

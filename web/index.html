@@ -3702,6 +3702,7 @@ function parseTerrain(buf, course) {
   const w = dv.getUint32(0, true), h = dv.getUint32(4, true);
   const [west, south, east, north] = [8, 16, 24, 32].map(o => dv.getFloat64(o, true));
   const heights = new Uint16Array(buf, 40, w * h);
+  for (let r = 0; r < h; r++) { let acc = 0; for (let i = r * w, end = i + w; i < end; i++) heights[i] = acc = (acc + heights[i]) & 0xffff } // the server sends row differences (terrain::delta_rows)
   const cover = new Uint8Array(buf, 40 + w * h * 2, w * h);
   const p0 = course.points[0];
   const kx = Math.cos(p0.lat * Math.PI / 180) * 111320, kz = 110540;

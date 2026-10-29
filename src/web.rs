@@ -4,7 +4,7 @@
 //!   GET /worlds                                [summary + relief + riders]   (open worlds)
 //!   POST /worlds/new?length=<5|10|20>&relief=<flat|hills|mountains>   generate an open world, {id}
 //!   GET /course?id=<id>                        full course JSON (climb or world)
-//!   GET /terrain?id=<id>                       binary voxel terrain (see le_mollet::terrain)
+//!   GET /terrain?id=<id>                       binary voxel terrain, heights as row differences (terrain::delta_rows)
 //!   GET /buildings?id=<id>                     open city: binary real buildings (see le_mollet::buildings)
 //!   GET /district?id=<id>&f=<file>             open city: realistic district files (see le_mollet::district)
 //!   GET /ortho?id=<id>&f=<file>                aerial photo tiles for the realistic render (see le_mollet::ortho)
@@ -119,9 +119,11 @@ impl Fnv {
     fn hex(&self) -> String { format!("{:016x}", self.0) }
 }
 
-fn gzip(raw: &[u8]) -> Vec<u8> {
+fn gzip(raw: &[u8]) -> Vec<u8> { gzip_level(raw, flate2::Compression::fast()) }
+
+fn gzip_level(raw: &[u8], level: flate2::Compression) -> Vec<u8> {
     use std::io::Write;
-    let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast()); // as small as best on terrain, 4x faster
+    let mut e = flate2::write::GzEncoder::new(Vec::new(), level);
     e.write_all(raw).expect("gzip into memory");
     e.finish().expect("gzip into memory")
 }
@@ -189,6 +191,7 @@ struct Track {
 impl Track {
     fn new(id: String, course: Course, terrain: Option<Vec<u8>>, relief: Option<Relief>) -> anyhow::Result<Self> {
         let json = serde_json::to_string(&course)?;
+        let terrain = terrain.map(le_mollet::terrain::delta_rows); // kept in its wire form: the header and cover read the same
         Ok(Self { id, course, json, terrain, relief, city: None, buildings: None, district: HashMap::new(), ortho: HashMap::new(), riders: Mutex::new(HashMap::new()), tag: Default::default(), gz: Default::default() })
     }
 
@@ -208,7 +211,8 @@ impl Track {
     /// One of its files gzipped, once (`course`, `terrain`, `buildings`).
     fn gz(&self, key: &'static str, raw: &[u8]) -> Arc<Vec<u8>> {
         if let Some(z) = self.gz.lock().unwrap_or_else(|e| e.into_inner()).get(key) { return z.clone() }
-        let z = Arc::new(tokio::task::block_in_place(|| gzip(raw))); // outside the lock, off the async threads: a big terrain takes a moment
+        // Default level, not fast: on row-difference terrain it is a quarter smaller (Ventoux 5.6 -> 4.0 MB), once per file.
+        let z = Arc::new(tokio::task::block_in_place(|| gzip_level(raw, flate2::Compression::default()))); // outside the lock, off the async threads: a big terrain takes a moment
         self.gz.lock().unwrap_or_else(|e| e.into_inner()).insert(key, z.clone());
         z
     }
