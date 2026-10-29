@@ -817,7 +817,9 @@ fn public_id(sid: u64) -> u64 {
 
 /// Calls that change something: POST only (`/rider` with a weight too). Steering one's own ride stays GET: it
 /// needs the ride's session, which only its page knows.
-const POST_ONLY: [&str; 21] = [
+const POST_ONLY: [&str; 23] = [
+    "/auth/signup",
+    "/auth/login",
     "/worlds/new",
     "/event/create",
     "/event/join",

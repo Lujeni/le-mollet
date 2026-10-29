@@ -45,6 +45,10 @@ cargo test -p le-mollet   # and runs
 cargo clippy -p le-mollet # advice, worth a look, not a gate
 ```
 
+The unit tests sit next to the code; `tests/http.rs` starts the real binary on a free port, in cloud mode then at
+home, and drives it over HTTP as a browser would (sign-up, mailed links, settings, friends, quotas, passwords).
+Add a scenario there whenever a route changes: it is what catches a form that no longer talks to the server.
+
 - **Tests.** New logic comes with a unit test next to it (`#[cfg(test)] mod tests` in the same file). Pure code
   (protocol parsing, physics, courses, workouts) is easy to test: keep BLE and network calls at the edges.
 - **UI changes.** Try them in a browser, in demo mode at least, and add a screenshot or a short clip to the
