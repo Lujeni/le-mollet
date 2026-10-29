@@ -1634,7 +1634,20 @@ let courseCountry = 'all';
 const countryOptions = [h('option', { value:'' }, '—'), ...COUNTRY_CODES
   .map(code => [code, countryName.of(code)]).sort((a, b) => a[1].localeCompare(b[1], 'fr'))
   .map(([code, name]) => h('option', { value:code }, `${flag(code)} ${name}`))];
-for (const sel of document.querySelectorAll('.countries')) sel.replaceChildren(...countryOptions.map(o => o.cloneNode(true)));
+// A search box above each list: it hides the countries that don't match and picks the first that does.
+const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+for (const sel of document.querySelectorAll('.countries')) {
+  sel.replaceChildren(...countryOptions.map(o => o.cloneNode(true)));
+  const search = h('input', { type:'search', placeholder:'Chercher un pays…', autocomplete:'off', 'aria-label':'Chercher un pays',
+    onkeydown: e => { if (e.key === 'Enter') e.preventDefault() },
+    oninput: () => {
+      const q = fold(search.value.trim());
+      const opts = [...sel.options].slice(1);
+      for (const o of opts) o.hidden = !!q && !fold(o.text).includes(q);
+      if (q) sel.value = opts.find(o => !o.hidden)?.value ?? '';
+    } });
+  sel.before(search);
+}
 
 function showProfileEdit() {
   show('#profileEdit');
@@ -2466,10 +2479,10 @@ const HUD_PRESETS = {
 };
 const HUD_WIDGETS = { zones:'Cockpit (watts, zones, vitesses)', stats:'Route (vitesse, pente, distance…)', ahead:'Les prochains km', board:'Coureurs autour', strip:'Puissance des dernières minutes', controls:'Commandes', power:'Puissance (démo)', map:'Profil / carte', mirror:'Rétro (zombies)' };
 const STAT_KEYS = {
-  workout:['energy', 'target', 'hr', 'cadence', 'interval', 'session', 'speed', 'distance'], zombie:['speed', 'gap', 'wave', 'time', 'sprints'],
-  ride:['energy', 'hr', 'cadence', 'avg', 'kj', 'speed', 'grade', 'draft', 'distance', 'ele', 'time', 'ghost'],
+  workout:['energy', 'target', 'hr', 'cadence', 'realgear', 'interval', 'session', 'speed', 'distance'], zombie:['speed', 'gap', 'wave', 'time', 'sprints'],
+  ride:['energy', 'hr', 'cadence', 'realgear', 'avg', 'kj', 'speed', 'grade', 'draft', 'distance', 'ele', 'time', 'ghost'],
 };
-const STAT_NAMES = { avg:'Moyenne', kj:'Énergie (kJ)', power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints', ghost:'Fantôme', hr:'Cardio', cadence:'Cadence', draft:'Aspiration', energy:'Réserve' };
+const STAT_NAMES = { avg:'Moyenne', kj:'Énergie (kJ)', power:'Puissance', speed:'Vitesse', grade:'Pente', distance:'Distance', ele:'Altitude', time:'Temps', target:'Cible', interval:'Intervalle', session:'Séance', gap:'Horde', wave:'Vague', sprints:'Sprints', ghost:'Fantôme', hr:'Cardio', cadence:'Cadence', realgear:'Braquet estimé', draft:'Aspiration', energy:'Réserve' };
 const defaultHud = () => structuredClone(HUD_PRESETS[innerWidth <= 700 ? 'phone' : 'cockpit']);
 // Layouts saved before the cockpit (v2) start over from the default.
 const hud = () => (current?.hud?.v === 3 ? current.hud : null) ?? defaultHud();
@@ -4905,8 +4918,25 @@ const bt = { trainer:null, hr:null, pads:[], q:Promise.resolve(), sent:null };
 // Writes queued one after the other: a GATT write while another is in flight fails.
 const btWrite = bytes => { const t = bt.trainer; if (t?.ctrl) bt.q = bt.q.then(() => t.ctrl.writeValue(new Uint8Array(bytes))).catch(() => {}) };
 
-async function connectTrainer() {
-  const device = await navigator.bluetooth.requestDevice({ filters:[{ services:[BT.FTMS] }, { services:[BT.CPS] }], optionalServices:[BT.FTMS, BT.CPS] });
+// A device that drops mid-ride (sleep, out of range) is reconnected on its own: the page keeps the device, so
+// no picker is needed; every 1, 2, 4… up to 30 s until it answers. A page reload still needs a click.
+const btKept = new WeakSet();
+function btKeep(device, connect, drop, label) {
+  if (btKept.has(device)) return;
+  btKept.add(device);
+  device.addEventListener('gattserverdisconnected', async () => {
+    drop(); renderSensors(); toast(`${label} perdu, reconnexion…`);
+    for (let wait = 1; !device.gatt.connected; wait = Math.min(wait * 2, 30)) {
+      await new Promise(r => setTimeout(r, wait * 1000));
+      if (device.gatt.connected) return; // reconnected by hand meanwhile
+      try { await connect(device); toast(`${label} reconnecté`); return }
+      catch { if (device.gatt.connected) { device.gatt.disconnect(); return } } // half set up: drop it, the event starts over
+    }
+  });
+}
+
+async function connectTrainer(again) {
+  const device = again ?? await navigator.bluetooth.requestDevice({ filters:[{ services:[BT.FTMS] }, { services:[BT.CPS] }], optionalServices:[BT.FTMS, BT.CPS] });
   const server = await device.gatt.connect();
   const t = { device, name:device.name ?? 'Home trainer', power:0, cadence:null, kind:null, ctrl:null, crank:null };
   try { // FTMS first: newer trainers, KICKR CORE
@@ -4929,22 +4959,22 @@ async function connectTrainer() {
     bt.trainer = t;
     if (t.ctrl) { btWrite([0x20, 0xee, 0xfc]); btWrite(wahooSim(current?.weightKg + 8 || 83)) } // unlock, then rider weight for grades
   }
-  device.addEventListener('gattserverdisconnected', () => { if (bt.trainer === t) bt.trainer = null; renderSensors() });
-  bt.sent = null;
+  btKeep(device, connectTrainer, () => { if (bt.trainer?.device === device) bt.trainer = null }, t.name);
+  bt.sent = null; // the next drive sends the grade or the ERG target again
   renderSensors();
-  celebrate($('#devTrainer'), `🎉 ${t.name} connecté : pédale !`);
+  if (!again) celebrate($('#devTrainer'), `🎉 ${t.name} connecté : pédale !`);
 }
 
-async function connectHr() {
-  const device = await navigator.bluetooth.requestDevice({ filters:[{ services:[BT.HRS] }] });
+async function connectHr(again) {
+  const device = again ?? await navigator.bluetooth.requestDevice({ filters:[{ services:[BT.HRS] }] });
   const ch = await (await (await device.gatt.connect()).getPrimaryService(BT.HRS)).getCharacteristic(BT.HR_MEAS);
   const h = { device, name:device.name ?? 'Cardio', bpm:null };
   ch.addEventListener('characteristicvaluechanged', e => { const v = e.target.value; h.bpm = v.getUint8(0) & 1 ? v.getUint16(1, true) : v.getUint8(1) });
   await ch.startNotifications();
-  device.addEventListener('gattserverdisconnected', () => { if (bt.hr === h) bt.hr = null; renderSensors() });
+  btKeep(device, connectHr, () => { if (bt.hr?.device === device) bt.hr = null }, h.name);
   bt.hr = h;
   renderSensors();
-  celebrate($('#devHr'), `❤️ ${h.name} connecté`);
+  if (!again) celebrate($('#devHr'), `❤️ ${h.name} connecté`);
 }
 
 // FTMS Indoor Bike Data: flags, then optional fields in order (bit 0 inverted: speed present when clear).
@@ -5017,6 +5047,14 @@ function renderGear() {
 const FTP_ZONES = [[0.55, 'Z1', 'Récup', '#8a8f98'], [0.75, 'Z2', 'Endurance', '#2f6fd6'], [0.90, 'Z3', 'Tempo', '#2d8a48'], [1.05, 'Z4', 'Seuil', '#e9c21a'],
   [1.20, 'Z5', 'PMA', '#e9781a'], [1.50, 'Z6', 'Anaérobie', '#d0230f'], [Infinity, 'Z7', 'Sprint', '#8a3fb0']];
 // The small figures under the watts: reserve (W′), heart rate, cadence, draft; each can be hidden (⚙).
+// The real gear, guessed from the trainer's wheel speed and the cadence: the closest of a compact 50/34 and an
+// 11-32 cassette (ponytail: assumes that setup; a 53/39 or a 1x reads as its nearest compact twin).
+const REAL_COGS = [11, 12, 13, 14, 15, 16, 17, 19, 21, 24, 27, 30, 32];
+function realGear(t) {
+  if (!(t?.kmh > 5) || !(t.cadence > 30)) return null;
+  const ratio = t.kmh / 3.6 / (t.cadence / 60 * WHEEL_M);
+  return [50, 34].flatMap(ring => REAL_COGS.map(cog => [ring, cog])).reduce((a, b) => Math.abs(b[0] / b[1] - ratio) < Math.abs(a[0] / a[1] - ratio) ? b : a);
+}
 function cockpitChips(s) {
   const L = hud(), chip = (key, label, value, unit, extra = {}) => L.hide.includes(key) ? '' : h('span', { class:'cchip', 'data-key':key, ...extra }, h('small', {}, label), h('b', {}, value), unit ? h('i', {}, unit) : '');
   const e = ride.energy, pct = e ? Math.round(e.bal / e.w * 100) : null;
@@ -5024,6 +5062,7 @@ function cockpitChips(s) {
     e ? chip('energy', 'Réserve', pct, '%', { style:`--e:${pct > 60 ? '#5bd36a' : pct > 25 ? '#f2cd37' : '#ff5a4a'};--pct:${pct}%`, title:`Réserve au-dessus de ta FTP : ${(e.bal / 1000).toFixed(1)} / ${(e.w / 1000).toFixed(1)} kJ · ${Math.round(e.bal / (0.2 * current.ftp))} s à 120 %` }) : '',
     s?.hr ? chip('hr', '❤', Math.round(s.hr), 'bpm') : '',
     s?.cadence != null ? chip('cadence', '⟳', Math.round(s.cadence), 'rpm') : '',
+    !gears.on && realGear(bt.trainer) ? chip('realgear', '⚙', realGear(bt.trainer).join('×'), '', { title:'Braquet estimé avec la vitesse du home trainer et ta cadence (50/34, 11-32)' }) : '',
     ride.mode !== 'workout' ? chip('draft', 'Aspi', Math.round((s?.draft ?? 0) * 100), '%') : '',
     s?.elapsed > 30 ? chip('avg', 'Moy', Math.round(s.energy_kj * 1000 / s.elapsed), 'W') : '',
     s?.energy_kj >= 1 ? chip('kj', '🔥', Math.round(s.energy_kj), 'kJ') : '',
@@ -5172,8 +5211,8 @@ function padButtons(bytes) {
   for (let i = 2; i < bytes.length && i < 8; i++) { map += (bytes[i] & 0x7f) * mul; mul *= 128; if (!(bytes[i] & 0x80)) break }
   return map;
 }
-async function connectPad() {
-  const device = await navigator.bluetooth.requestDevice({ filters:[{ manufacturerData:[{ companyIdentifier:0x094a }] }, { services:[ZW.RIDE] }, { namePrefix:'Zwift' }], optionalServices:[ZW.RIDE, ZW.PLAY] });
+async function connectPad(again) {
+  const device = again ?? await navigator.bluetooth.requestDevice({ filters:[{ manufacturerData:[{ companyIdentifier:0x094a }] }, { services:[ZW.RIDE] }, { namePrefix:'Zwift' }], optionalServices:[ZW.RIDE, ZW.PLAY] });
   const server = await device.gatt.connect();
   const svc = await server.getPrimaryService(ZW.RIDE).catch(() => server.getPrimaryService(ZW.PLAY))
     .catch(() => { throw new Error('manette verrouillée ou non reconnue : elle ne répond qu\'à son application d\'origine.') });
@@ -5192,11 +5231,11 @@ async function connectPad() {
     await ch.startNotifications();
   }
   await (await svc.getCharacteristic(ZW.RX)).writeValueWithoutResponse(new TextEncoder().encode('RideOn'));
-  device.addEventListener('gattserverdisconnected', () => { bt.pads = bt.pads.filter(x => x !== p); renderSensors() });
+  btKeep(device, connectPad, () => { bt.pads = bt.pads.filter(x => x.device !== device) }, p.name);
   bt.pads = [...bt.pads.filter(x => x.device.id !== device.id), p];
   gears.on = true;
   renderSensors();
-  celebrate($('#devPad'), bt.pads.length > 1 ? '🎮 Les deux poignées sont prêtes : à droite ça monte, à gauche ça descend !' : '🎮 Manette connectée (deux poignées ? clique encore pour l\'autre)');
+  if (!again) celebrate($('#devPad'), bt.pads.length > 1 ? '🎮 Les deux poignées sont prêtes : à droite ça monte, à gauche ça descend !' : '🎮 Manette connectée (deux poignées ? clique encore pour l\'autre)');
 }
 
 // Twice a second: what the sensors say goes to the server (the trainer's watts win over the demo slider).
