@@ -506,9 +506,9 @@ impl App {
     fn mail_link(&self, u: &User, token: &str, req: &str) {
         let (to, name) = (u.email.clone(), u.name.clone().unwrap_or_default());
         let base = std::env::var("LE_MOLLET_PUBLIC_URL").unwrap_or_else(|_| format!("http://{}", header(req, "host").unwrap_or("localhost:8080")));
-        let (subject, body) = account::link_mail(&name, &format!("{}/?link={token}", base.trim_end_matches('/')));
+        let (subject, text, html) = account::link_mail(&name, &format!("{}/?link={token}", base.trim_end_matches('/')));
         tokio::task::spawn_blocking(move || {
-            match le_mollet::mail::send(&to, &subject, &body) {
+            match le_mollet::mail::send(&to, &subject, &text, Some(&html)) {
                 Ok(()) => { metrics::inc("le_mollet_mails_total", &[("result", "sent")]); audit("mail.sent", &[("to", &to), ("name", &name)]) }
                 Err(e) => { metrics::inc("le_mollet_mails_total", &[("result", "failed")]); audit("mail.failed", &[("to", &to), ("name", &name), ("error", &format!("{e:#}"))]) }
             }

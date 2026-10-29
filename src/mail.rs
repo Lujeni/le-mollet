@@ -2,16 +2,22 @@
 //! server (`smtps://user:pass@host:465`, or `smtp://user:pass@host:587?tls=required` for STARTTLS) and `LE_MOLLET_MAIL_FROM`
 //! the sender; without the URL the mail is printed on stderr, which is how a test or a LAN server reads its links.
 
-use lettre::{Message, SmtpTransport, Transport, message::header::ContentType};
+use lettre::message::{MultiPart, SinglePart, header::ContentType};
+use lettre::{Message, SmtpTransport, Transport};
 
+/// Text and, when given, HTML of the same mail (what mail readers and spam filters expect of a real sender).
 /// Slow (a TLS handshake and a round trip): call it off the async threads, and do not wait for it.
-pub fn send(to: &str, subject: &str, body: &str) -> anyhow::Result<()> {
+pub fn send(to: &str, subject: &str, text: &str, html: Option<&str>) -> anyhow::Result<()> {
     let Ok(url) = std::env::var("LE_MOLLET_SMTP_URL") else {
-        eprintln!("mail (no LE_MOLLET_SMTP_URL) to {to}: {subject}\n{body}");
+        eprintln!("mail (no LE_MOLLET_SMTP_URL) to {to}: {subject}\n{text}");
         return Ok(());
     };
     let from = std::env::var("LE_MOLLET_MAIL_FROM").unwrap_or_else(|_| "Le Mollet <no-reply@le-mollet.fr>".into());
-    let m = Message::builder().from(from.parse()?).to(to.parse()?).subject(subject).header(ContentType::TEXT_PLAIN).body(body.to_owned())?;
+    let m = Message::builder().from(from.parse()?).to(to.parse()?).subject(subject);
+    let m = match html {
+        Some(html) => m.multipart(MultiPart::alternative().singlepart(SinglePart::builder().header(ContentType::TEXT_PLAIN).body(text.to_owned())).singlepart(SinglePart::builder().header(ContentType::TEXT_HTML).body(html.to_owned())))?,
+        None => m.header(ContentType::TEXT_PLAIN).body(text.to_owned())?,
+    };
     SmtpTransport::from_url(&url)?.build().send(&m)?;
     Ok(())
 }

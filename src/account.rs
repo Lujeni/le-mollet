@@ -359,9 +359,25 @@ pub fn pow_check(answer: &str, now: u64) -> Result<String, &'static str> {
     Ok(token.to_owned())
 }
 
-/// A sign-in link's mail, for src/mail.rs; the token is torii's (one use, a quarter of an hour).
-pub fn link_mail(name: &str, url: &str) -> (String, String) {
-    ("Ta connexion à Le Mollet".into(), format!("Salut {name},\n\nVoici ton lien pour te connecter, valable 15 minutes et une seule fois :\n\n{url}\n\nSi tu n'as rien demandé, ignore ce message.\n\nLe Mollet"))
+/// A sign-in link's mail, for src/mail.rs: subject, text, HTML. The token is torii's (one use, a quarter of an hour).
+/// Written to look like what it is to a spam filter: who sent it, why, where it goes, in text and in HTML.
+pub fn link_mail(name: &str, url: &str) -> (String, String, String) {
+    let site = url.split("/?").next().unwrap_or(url);
+    let subject = "Ton lien pour rouler sur Le Mollet".to_owned();
+    let text = format!("Salut {name},\n\nQuelqu'un (toi, sans doute) a demandé à se connecter à ton compte Le Mollet sur {site}.\nVoici ton lien de connexion, valable 15 minutes et une seule fois :\n\n{url}\n\nSi ce n'est pas toi, ignore ce message : rien ne se passe sans ce lien.\n\nLe Mollet, le home trainer libre et gratuit\n{site}\n");
+    let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+    let (n, u, s) = (esc(name), esc(url), esc(site));
+    let html = format!(concat!(
+        "<!doctype html><html lang=\"fr\"><body style=\"font-family:Inter,Arial,sans-serif;color:#16161d;background:#fff8e7;padding:24px\">",
+        "<div style=\"max-width:520px;margin:0 auto;background:#fff;border:3px solid #16161d;border-radius:16px;padding:24px\">",
+        "<p style=\"font-size:22px;font-weight:700;margin:0 0 16px\">Salut {n},</p>",
+        "<p>Quelqu'un (toi, sans doute) a demandé à se connecter à ton compte Le Mollet sur <a href=\"{s}\" style=\"color:#16161d\">{s}</a>.</p>",
+        "<p style=\"margin:24px 0\"><a href=\"{u}\" style=\"display:inline-block;background:#ffcf1a;color:#16161d;font-weight:700;text-decoration:none;padding:12px 20px;border:3px solid #16161d;border-radius:12px\">Me connecter</a></p>",
+        "<p style=\"font-size:13px;color:#55556a\">Le lien vaut 15 minutes et une seule fois. Si le bouton ne marche pas, copie cette adresse :<br><span style=\"word-break:break-all\">{u}</span></p>",
+        "<p style=\"font-size:13px;color:#55556a\">Si ce n'est pas toi, ignore ce message : rien ne se passe sans ce lien.</p>",
+        "<p style=\"font-size:13px;color:#55556a;margin:24px 0 0\">Le Mollet, le home trainer libre et gratuit · <a href=\"{s}\" style=\"color:#55556a\">{s}</a></p>",
+        "</div></body></html>"), n = n, u = u, s = s);
+    (subject, text, html)
 }
 
 #[cfg(test)]
@@ -431,7 +447,8 @@ mod tests {
         assert_eq!(name_from("a.very.long.local.part.for.sure.really@x.y"), "a-very-long-local-part-f");
         assert!(name_from("ab@x.y").starts_with("rider-") && valid_name(&name_from("ab@x.y")) && valid_name(&name_from("...@x.y")));
         assert!(!valid_email("a@b") && !valid_email("a b@c.d") && !valid_email("@c.d") && !valid_email("a@.d") && valid_email("a@b.c"));
-        assert!(link_mail("Marie", "https://x/?link=1").1.contains("https://x/?link=1"));
+        let (_, text, html) = link_mail("Marie", "https://x/?link=1");
+        assert!(text.contains("https://x/?link=1") && html.contains("href=\"https://x/?link=1\"") && html.contains("https://x</a>"));
     }
 
     #[test]
