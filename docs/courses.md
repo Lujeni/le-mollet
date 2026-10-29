@@ -197,6 +197,32 @@ the east side up to the Moulin de Longchamp. Reference: 3.5 to 3.6 km, flat with
 Terrain 1848x2199 cells of 2 m. Decor: 13,014 pieces (6,465 broadleaf trees, 5,888 of them from the photo,
 20 pines, 4,589 rail sections, 1,871 hedge sections, 28 benches, 27 lamps, the mill); 11,459 IGN buildings.
 
+### Anneau cyclable Raymond Poulidor (Polygone de Vincennes, Paris)
+
+```sh
+cargo run --release -- course "Anneau Raymond Poulidor" -o courses/vincennes.json --relation 163266 --cell 2 48.833804,2.444863
+```
+
+Relation 163266, "Anneau cyclable Raymond Poulidor" (alt name Le Polygone, `bicycle:type=road_cycling`, `roundtrip=yes`),
+9 ways. Start at the corner of the Route Royale de Beauté and the Route de Bourbon (north-east). Ridden counterclockwise,
+the way its one-way cycleways go: south on the Route de Bourbon, west across the south end, north on the Route Dauphine.
+Result: 3.14 km a lap, 48 to 60 m, +12 m a lap, max 1.3 % over 100 m, the climb of the lap +10.7 m over 1.26 km up the
+Route de Bourbon. Reference: 3.1 km (paris.fr), 3.13 km, +12 m (VeloViewer segment "Polygone Vincennes").
+Per-km: 0.8 / -0.5 / -0.4 %.
+
+### Tour du lac de l'Abbaye (Haut-Jura)
+
+```sh
+cargo run --release -- course "Tour du lac de l'Abbaye" -o courses/lac-abbaye.json --relation 17997946 46.540990,5.913053
+```
+
+Relation 17997946, "Boucle 19 : Tour du lac de l'Abbaye" (`roundtrip=yes`), 30 ways, all asphalt public roads. Start on
+the D 146 at the Grande-Rivière-Château mairie, the official start. The D 146 down the west shore, the C 5 round the
+south end, a lane up the east shore, back on the D 437 and the D 146.
+Result: 6.74 km a lap, 889 m start and finish, +40 m a lap, max 4.0 % / min -5.5 % over 100 m.
+Reference: 6.77-6.8 km, +63 m (jura-outdoor, montagnes-du-jura: GPS gains, which run high on rolling roads), lake at
+879 m, shore roads 874-897 m. Per-km: 0.2 / 0.5 / -1.4 / -0.6 / 0.8 / -0.5 %.
+
 ### Col de la Madeleine (from La Chambre, D213)
 
 ```sh
@@ -247,6 +273,36 @@ Per-km: 4.3 / 5.0 / 4.8 / 5.4 / 6.3 / 6.6 / 5.7 / 8.5 / 9.0 / 6.3 / 9.0 / 9.3 / 
 Eaux-Bonnes, then steeper through the avalanche galleries to Gourette, ~8-9 % to the top. The 16 % before the cap sits
 right after a `bridge=yes` on the D918 (42.9634,-0.3423): IGN reads the valley floor under the bridge, not the deck.
 
+### Col de Joux Plane (from Samoëns, D354)
+
+```sh
+cargo run --release -- course "Col de Joux Plane (Samoëns)" -o courses/joux-plane-samoens.json \
+  46.084285,6.723875 46.095941,6.708568 46.100327,6.704746 46.129622,6.712907
+```
+
+Start = Place des 7 Monts in Samoëns: the climb goes up the Route de la Piaz (no `ref` in OSM, so no `--road`) and joins
+the D354. Vias = the D354 on the Route de Vigny and the Route de Cessonnex: without them the shortest path cuts up a
+side road (11.17 km), and with `--road "D 354"` it takes the long eastern loop through Moulins (12.92 km). Finish = OSM
+"Col de Joux Plane" node (1691 m, by the sign), not the 1712 m saddle further on towards Morzine.
+Result: 11.58 km, 700 m to 1687 m, +986 m (gain = net), avg 8.5 %, max 13.8 % over 100 m. No cap needed.
+Reference: Tour de France 2023 stage 14 (ASO): 11.6 km at 8.5 %, 704 m to 1691 m, per km 9.8 / 7.5 / 8.8 / 6.8 / 7.2 /
+6.8 / 9.7 / 9.2 / 9.3 / 10.5 / 9.1 / 8. Ours: 9.5 / 7.9 / 8.7 / 6.8 / 7.1 / 7.4 / 9.7 / 9.4 / 9.6 / 9.2 / 9.1 %.
+
+### Hautacam (from Ayros-Arbouix, D100)
+
+```sh
+cargo run --release -- course "Hautacam" -o courses/hautacam-ayros.json --road "D 100" \
+  43.002564,-0.069057 42.974043,-0.009363
+```
+
+Start = the D100 at the D13 junction in Ayros. Finish = the D100 level with the station (the Tour's finish car park,
+1520 m); the road goes on to the Col de Tramassel (1615 m).
+Result: 13.54 km, 461 m to 1522 m, +1061 m (gain +1069 m), avg 7.8 %, max 16.9 % / min -4.7 % over 100 m. The dip is
+real (IGN 1 m data): a short drop through Artalens at km 5.4, then the steepest pitch above it.
+Reference: Tour de France 2022 stage 18 (ASO): 13.6 km at 7.8 %, 456 m to 1520 m, per km 6.2 / 8.6 / 6.7 / 6.8 / 6.3 /
+5.8 / 8.2 / 10.3 / 11.3 / 6.8 / 10.4 / 7.2 / 6.5 / 7.9. Ours: 7.3 / 7.9 / 8.0 / 6.7 / 5.8 / 7.3 / 8.0 / 11.1 / 9.4 / 6.7
+/ 9.8 / 8.1 / 7.4 %.
+
 ### Alto de l'Angliru (from La Vega de Riosa)
 
 ```sh
@@ -286,6 +342,39 @@ Huesera 3 km above 10 % with ramps of 14-17.5 %. Per-km: 6.8 / 9.8 / 10.2 / 6.5 
 8.6 / -3.3 %: about 10 % through the forest, La Huesera ~11-12 % at km 5-7, easier after, a short descent near km 9,
 the top, then down to Lago Enol and up to Ercina.
 
+### Sa Calobra (Coll dels Reis, from the port, Ma-2141)
+
+```sh
+cargo run --release -- course "Sa Calobra (Coll dels Reis)" -o courses/sa-calobra.json --road "Ma-2141" \
+  39.850600,2.800100 39.827539,2.817986
+cargo run --release -- cap courses/sa-calobra.json 11.7
+```
+
+Mallorca, Spain: elevation from the Terrain Tiles, smoothed over 100 m. Start = Port de Sa Calobra, by the Es Port
+restaurant at the end of the Ma-2141. Finish = OSM Coll dels Reis node, at the Ma-10 junction. No via.
+Result: 10.01 km, 34 m to 711 m, +709 m (net +677 m), avg 6.8 %, max 11.7 % over 100 m (20.9 % before the cap).
+Reference: 9.9-10.3 km from the port (climbfinder 10 km, +701 m, 7 %, steepest 100 m 11.1 %; cols-cyclisme max 11.7 %).
+The summit is 682 m on the sign, 723-731 m on the DEM-based climb sites. Per-km: 5.8 / 9.0 / 2.1 / 9.9 / 4.3 / 9.4 / 7.4
+/ 5.1 / 7.0 / 7.8 %. The 2.1 % km is the data: at the gorge hairpin (km 2.5-2.9, 39.8454,2.7998, between a tunnel and a
+bridge) the ~30 m tiles read the ravine floor 40 m below the road; the cap spreads the climb out, the dip stays. Around
+the knot at the top (9.0-9.5 km, where the road crosses itself) the levels mix too: flat, then ~12 %.
+
+### Alto de Velefique (from below Velefique, AL-3102)
+
+```sh
+cargo run --release -- course "Alto de Velefique" -o courses/velefique.json --road "AL-3102" \
+  37.185860,-2.404360 37.225733,-2.411365
+cargo run --release -- cap courses/velefique.json 14.7
+```
+
+Almería, Spain: elevation from the Terrain Tiles. Start on the AL-3102 ~900 m south of the village, "just below the town"
+(PJAMM). A start in the village snaps to a hairpin inside it, 1.3 km short.
+Result: 13.17 km, 846 m to 1791 m, +945 m (gain +952 m), avg 7.2 %, max 14.7 % over 100 m (19.1 % before the cap: the
+stacked hairpins inside the village, mixed by the ~30 m data).
+Reference: Vuelta 2017/2021: 13.2 km at 7.3 %, the first 5 km at ~9 %, then ~6 %; PJAMM 12.8 km, +942 m, 7.4 %; max
+14.7 % (Shimano). The 1820 m on the pass sign is above the road: the DEM reads the saddle at 1785-1795 m. Per-km: 7.0 /
+9.4 / 8.1 / 9.8 / 9.8 / 5.4 / 6.9 / 6.5 / 7.0 / 7.1 / 5.4 / 6.4 / 5.1 %.
+
 ### Passo dello Stelvio (from Prato allo Stelvio, SS38)
 
 ```sh
@@ -321,6 +410,38 @@ Result: 12.43 km, 555 m to 1857 m, +1302 m (gain = net), avg 10.5 %, max 18.7 % 
 Reference: 12.3-12.4 km, 552 m to 1852 m, +1300 m, 10.5-10.6 %, steepest km 15 %, max 18-20 % (cyclingup,
 valtellinamobile, bormio.eu). Per-km: 3.3 / 10.4 / 11.5 / 10.9 / 15.5 / 14.1 / 11.2 / 12.2 / 11.3 / 9.1 / 9.9 / 7.8 %:
 the hardest kilometres around the Pantani monument (km 5-8), easier near the top.
+
+### Monte Zoncolan (from Ovaro)
+
+```sh
+cargo run --release -- course "Monte Zoncolan (Ovaro)" -o courses/zoncolan-ovaro.json \
+  46.484378,12.865130 46.501830,12.926844
+```
+
+Italy: elevation from the Terrain Tiles, smoothed over 100 m. The Ovaro road ("Strada Liariis Monte Zoncolan") has no
+`ref`, so no `--road`; the shortest path follows the race road (Via delle Scuole, Via Liariis, Via Zoncolan di
+Liariis, then the three tunnels). Start = the SR355 in Ovaro at Via Don Pietro Cortiula. Finish = end of the road at the
+summit (raw elevation 1729 m, smoothed 1723 m).
+Result: 9.91 km, 532 m to 1723 m, +1191 m (gain = net), avg 12.0 %, max 23.3 % over 100 m (km 3.1, the first wall
+above Liariis). No cap needed.
+Reference: 9.7-10.5 km, 530-549 m to 1730-1737 m, +1182-1210 m, 11.9-12.3 %, steepest 100 m 23.3 % (climbfinder).
+Per-km: 9.4 / 6.0 / 13.3 / 16.7 / 16.3 / 14.6 / 15.1 / 12.6 / 7.4 %.
+
+### Passo Giau (from Selva di Cadore, SP638)
+
+```sh
+cargo run --release -- course "Passo Giau (Selva di Cadore)" -o courses/giau-selva.json --road "SP638" \
+  46.456270,12.031590 46.482520,12.053670
+cargo run --release -- cap courses/giau-selva.json 14.7
+```
+
+Italy: elevation from the Terrain Tiles, smoothed over 100 m. Start = SP251 / SP638 junction in Selva di Cadore, where
+the signed climb begins. Finish = OSM pass node (2236 m); the tiles read only 2225 m there and the smoothed top is
+2216 m, which takes ~0.3 % off the average.
+Result: 9.76 km, 1334 m to 2216 m, +882 m (gain +885 m), avg 9.0 %, max 14.7 % over 100 m (22.0 % before the cap: at
+1.4-1.9 km the road hairpins across the Codalonga and the ~30 m data reads the stream bed under the bridge).
+Reference: 9.6-9.9 km, 1314-1328 m to 2229-2238 m, +892-923 m, 9.3 % (Giro: 9.9 km, 922 m, max 14 %, 29 hairpins),
+steepest 100 m 14.7 % (climbfinder). Per-km: 10.8 / 8.6 / 8.3 / 9.7 / 8.6 / 9.2 / 10.0 / 7.5 / 10.1 %.
 
 ## Climb records (duel)
 
