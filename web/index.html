@@ -1089,6 +1089,11 @@ const KEY = 'lemollet.profiles.v1';
 let current = null; // the profile riding; before persist(), which a profile migration may call at load
 let profiles = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || [] } catch { return [] } })();
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(profiles)) } catch {} syncRider() };
+// A public server: a profile belongs to the account that registered it (docs/security.md). This browser may hold
+// the profiles of several accounts (a shared PC, a second account): only the signed-in account's, and those not
+// registered yet, are listed; one the server refuses (another account's) is hidden for this session.
+const foreign = new Set();
+const mine = () => auth.me.mode !== 'cloud' ? profiles : profiles.filter(p => !foreign.has(p.id) && (!p.account || p.account === auth.me.account));
 // Fair play (docs/security.md): the server keeps each profile's weight and rank, races and leaderboards go by
 // them. The page sends weight and FTP when they change and shows the rank the server answers.
 let riderSynced = '';
@@ -1097,6 +1102,12 @@ async function syncRider(p = current) {
   if (!p || key === riderSynced) return;
   riderSynced = key;
   const r = await fetch(`/rider?${new URLSearchParams({ pid:p.id, weight:p.weightKg, ftp:p.ftp })}`, { method:'POST' }).catch(() => null);
+  if (r?.status === 403) { // another account's profile, in this browser
+    foreign.add(p.id);
+    if (current === p) { alert(`Le profil ${p.name} appartient à un autre compte : il est caché tant que tu es connecté avec ${auth.me.name}.`); showProfiles() }
+    return;
+  }
+  if (r?.ok && auth.me.account && p.account !== auth.me.account) { p.account = auth.me.account; persist() } // claimed: the server knows it as this account's now
   const body = await r?.json().catch(() => null);
   if (r?.status === 409 && body?.rider && body.rider.weight !== p.weightKg) {
     alert(`Poids refusé : il bouge de 2 kg par semaine au plus, pour des courses justes. On garde ${body.rider.weight} kg.`);
@@ -1723,7 +1734,7 @@ $('#goHistory').addEventListener('click', () => showHistory());
 function showProfiles() {
   current = null;
   show('#profiles');
-  draw(profiles.at(-1));
+  draw(mine().at(-1));
   renderList();
   resize();
 }
@@ -1759,9 +1770,10 @@ function showHome(p = current) {
 // Who rides: a card per profile (hover shows that rider in 3D), and one to add a rider. No profile yet: a welcome.
 const ago = iso => { const d = Math.floor((Date.now() - Date.parse(iso)) / 864e5); return d <= 0 ? 'aujourd\'hui' : d === 1 ? 'hier' : d < 30 ? `il y a ${d} j` : new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }) };
 function renderList() {
-  $('#empty').hidden = profiles.length > 0;
-  $('#whoPick').hidden = !profiles.length;
-  const recent = [...profiles].sort((a, b) => (b.history?.[0]?.date ?? b.createdAt).localeCompare(a.history?.[0]?.date ?? a.createdAt)); // the last one out first
+  const list = mine();
+  $('#empty').hidden = list.length > 0;
+  $('#whoPick').hidden = !list.length;
+  const recent = [...list].sort((a, b) => (b.history?.[0]?.date ?? b.createdAt).localeCompare(a.history?.[0]?.date ?? a.createdAt)); // the last one out first
   $('#list').replaceChildren(...recent.map(p => {
     const wkg = p.ftp / p.weightKg, km = (p.history ?? []).reduce((a, r) => a + r.distance, 0) / 1000, last = p.history?.[0];
     return h('div', {
@@ -1833,6 +1845,7 @@ $('#new').addEventListener('submit', e => {
     createdAt: new Date().toISOString(),
     name, weightKg: +f.get('weight'), ftp: +f.get('ftp'),
     ...(COUNTRY_CODES.includes(f.get('country')) && { country: f.get('country') }),
+    ...(auth.me.account && { account: auth.me.account }), // a public server: this account's
     bike: { ...DEFAULT_BIKE, frame: draftColor ?? colors[profiles.length % colors.length] },
     rider: { ...DEFAULT_RIDER, jersey: draftColor ?? colors[profiles.length % colors.length] },
   };
