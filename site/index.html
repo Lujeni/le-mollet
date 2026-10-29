@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le Mollet · le home trainer sans abonnement</title>
+<meta name="description" content="Le Mollet : le jeu de vélo en briques, libre et gratuit. Ton vélo t'a coûté assez cher.">
+<meta property="og:title" content="Le Mollet · le home trainer sans abonnement">
+<meta property="og:description" content="Ton vélo t'a coûté un rein, ton home trainer l'autre. Les watts en polygones, eux, sont gratuits.">
+<meta property="og:image" content="img/alpe.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='10' width='28' height='18' rx='3' fill='%23ffcf1a'/%3E%3Crect x='6' y='5' width='8' height='7' rx='2' fill='%23ffcf1a'/%3E%3Crect x='18' y='5' width='8' height='7' rx='2' fill='%23ffcf1a'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#e3242b; --yellow:#ffcf1a; --blue:#1e5bd8; --green:#1f9d55; --orange:#ff7a1a; --purple:#8a3fd1; --pink:#ff4fa3; --sky:#4fc3f7;
+  --ink:#16161d; --paper:#fff8e7; --card:#ffffff; --muted:#55556a;
+  --shadow:0 6px 0 rgba(0,0,0,.18);
+}
+* { box-sizing:border-box }
+html { scroll-behavior:smooth }
+body { margin:0; background:var(--paper); color:var(--ink); font:400 17px/1.55 Inter, system-ui, sans-serif; overflow-x:hidden }
+h1, h2, h3 { font-family:Fredoka, Inter, sans-serif; line-height:1.08; margin:0 }
+a { color:inherit }
+img { max-width:100%; height:auto; display:block }
+.wrap { width:min(1160px, 100% - 32px); margin-inline:auto }
+
+/* A Lego plate: studs in the background */
+.studs { background-color:var(--c, var(--blue)); background-image:radial-gradient(circle at 50% 50%, rgba(255,255,255,.22) 0 9px, rgba(0,0,0,.12) 10px 11px, transparent 12px); background-size:36px 36px }
+
+/* nav */
+nav { position:sticky; top:0; z-index:10; background:var(--ink); color:#fff; border-bottom:6px solid var(--yellow) }
+nav .wrap { display:flex; align-items:center; gap:16px; height:64px }
+.logo { display:flex; align-items:center; gap:10px; font:700 20px Silkscreen, monospace; letter-spacing:1px; text-decoration:none }
+.logo b { color:var(--yellow) }
+.brick { width:34px; height:24px; background:var(--yellow); border-radius:4px; position:relative; box-shadow:inset 0 -4px 0 rgba(0,0,0,.2) }
+.brick::before, .brick::after { content:''; position:absolute; top:-6px; width:10px; height:7px; background:inherit; border-radius:3px 3px 0 0 }
+.brick::before { left:5px } .brick::after { right:5px }
+nav .spacer { flex:1 }
+.lang { display:flex; border:2px solid #fff; border-radius:999px; overflow:hidden }
+.lang button { all:unset; cursor:pointer; padding:4px 12px; font:700 14px Fredoka, sans-serif }
+.lang button[aria-pressed="true"] { background:var(--yellow); color:var(--ink) }
+.lang button:focus-visible { outline:3px solid var(--sky) }
+.gh { font:600 15px Fredoka, sans-serif; text-decoration:none; padding:6px 14px; border-radius:999px; background:#fff; color:var(--ink) }
+
+/* buttons */
+.btn { color:var(--ink); display:inline-flex; align-items:center; gap:8px; padding:14px 24px; border-radius:14px; font:700 19px Fredoka, sans-serif; text-decoration:none; border:3px solid var(--ink); box-shadow:0 6px 0 var(--ink); transition:transform .1s, box-shadow .1s }
+.btn:hover { transform:translateY(2px); box-shadow:0 4px 0 var(--ink) }
+.btn:active { transform:translateY(6px); box-shadow:0 0 0 var(--ink) }
+.btn.y { background:var(--yellow) } .btn.w { background:#fff }
+
+/* hero */
+.hero { --c:var(--blue); color:#fff; padding:64px 0 96px; position:relative; overflow:hidden }
+.hero .wrap { display:grid; grid-template-columns:1.05fr 1fr; gap:48px; align-items:center }
+.tag { display:inline-block; background:var(--pink); color:#fff; font:700 15px Fredoka, sans-serif; padding:6px 14px; border-radius:999px; transform:rotate(-3deg); box-shadow:var(--shadow); margin-bottom:18px }
+.hero h1 { font-size:clamp(40px, 6vw, 74px); text-shadow:4px 4px 0 var(--ink) }
+.hero h1 em { font-style:normal; color:var(--yellow) }
+.hero p.lead { font-size:clamp(18px, 2vw, 22px); margin:22px 0 30px; max-width:34ch; background:rgba(22,22,29,.55); padding:14px 18px; border-radius:14px }
+.hero .ctas { display:flex; flex-wrap:wrap; gap:14px }
+.shot { border:6px solid var(--ink); border-radius:18px; overflow:hidden; box-shadow:12px 12px 0 var(--ink); transform:rotate(2.5deg); background:var(--ink) }
+.shot.l { transform:rotate(-2deg) }
+.float { position:absolute; width:56px; height:38px; border-radius:6px; box-shadow:inset 0 -6px 0 rgba(0,0,0,.22); animation:bob 6s ease-in-out infinite }
+.float::before, .float::after { content:''; position:absolute; top:-9px; width:16px; height:11px; background:inherit; border-radius:4px 4px 0 0 }
+.float::before { left:8px } .float::after { right:8px }
+@keyframes bob { 50% { transform:translateY(-14px) rotate(var(--r, 8deg)) } }
+
+/* receipt */
+.bill { padding:90px 0; background:var(--yellow) }
+.bill .wrap { display:grid; grid-template-columns:1fr 1fr; gap:56px; align-items:center }
+.bill h2 { font-size:clamp(32px, 4.5vw, 54px) }
+.bill p { font-size:19px; max-width:40ch }
+.receipt { background:#fff; font:400 16px/1.7 "Courier New", monospace; padding:28px 26px 96px; position:relative; transform:rotate(1.5deg); box-shadow:10px 10px 0 var(--ink); border:3px solid var(--ink);
+  mask:conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 22px 100% }
+.receipt h3 { font:700 18px "Courier New", monospace; text-align:center; letter-spacing:2px; border-bottom:2px dashed var(--ink); padding-bottom:10px; margin-bottom:10px }
+.row { display:flex; justify-content:space-between; gap:12px }
+.row > span:last-child { white-space:nowrap; text-align:right }
+.row.total { border-top:2px dashed var(--ink); margin-top:10px; padding-top:10px; font-weight:700 }
+.row.sub span:last-child { color:var(--red) }
+.row.us { font-weight:700; font-size:20px; color:var(--green) }
+.stamp { position:absolute; right:26px; bottom:30px; font:700 30px Fredoka, sans-serif; color:var(--red); border:5px solid var(--red); border-radius:10px; padding:2px 14px; transform:rotate(-14deg); opacity:.85; letter-spacing:2px }
+
+/* features */
+.features { padding:96px 0; background:var(--paper) }
+.features h2, .soon h2 { font-size:clamp(34px, 5vw, 58px); text-align:center }
+.features .sub { text-align:center; color:var(--muted); font-size:19px; margin:12px auto 48px; max-width:52ch }
+.grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:26px }
+.card { background:var(--card); border:4px solid var(--ink); border-radius:22px; overflow:hidden; box-shadow:8px 8px 0 var(--c); display:flex; flex-direction:column; transition:transform .15s }
+.card:hover { transform:translate(-3px, -3px) rotate(-.6deg) }
+.card .pic { aspect-ratio:16 / 10; border-bottom:4px solid var(--ink); display:grid; place-items:center; font-size:72px; overflow:hidden }
+.card .pic img { width:100%; height:100%; object-fit:cover }
+.card .body { padding:20px 22px 24px }
+.card h3 { font-size:24px; margin-bottom:8px }
+.card p { margin:0; color:var(--muted) }
+.chip { display:inline-block; font:600 13px Fredoka, sans-serif; padding:2px 10px; border-radius:999px; background:var(--c); color:#fff; margin-bottom:10px }
+.ranks { display:flex; flex-wrap:wrap; gap:6px; padding:16px; justify-content:center }
+.ranks span { font:700 14px Fredoka, sans-serif; padding:6px 10px; border-radius:8px; color:#fff; box-shadow:0 3px 0 rgba(0,0,0,.25) }
+.tv { width:72%; aspect-ratio:16 / 9; background:#000; border-radius:10px; position:relative; display:grid; place-items:center; box-shadow:0 0 0 6px #333 }
+.tv::after { content:'▶'; color:#fff; font-size:40px; background:var(--red); border-radius:12px; padding:2px 22px }
+.tv i { position:absolute; left:8px; top:8px; font:700 13px/1 Fredoka, sans-serif; color:var(--yellow); background:rgba(0,0,0,.6); padding:5px 7px; border-radius:6px; font-style:normal }
+.tv i + i { left:auto; right:8px; color:#5bd36a }
+
+/* coming soon */
+.soon { --c:var(--purple); color:#fff; padding:96px 0; text-align:center }
+.soon h2 { text-shadow:4px 4px 0 var(--ink) }
+.soon p { font-size:20px; max-width:46ch; margin:18px auto 30px; background:rgba(22,22,29,.5); padding:12px 18px; border-radius:14px }
+.load { width:min(520px, 100%); margin:0 auto 34px; height:34px; border:4px solid var(--ink); border-radius:12px; background:#fff; overflow:hidden; position:relative }
+.load i { position:absolute; inset:0 auto 0 0; width:87%; background:repeating-linear-gradient(90deg, var(--red) 0 40px, var(--yellow) 40px 80px, var(--green) 80px 120px, var(--blue) 120px 160px); animation:fill 3s ease-out }
+.load span { position:absolute; inset:0; display:grid; place-items:center; font:700 15px Fredoka, sans-serif; color:var(--ink); text-shadow:0 0 6px #fff }
+@keyframes fill { from { width:0 } }
+
+footer { background:var(--ink); color:#cfcfe0; padding:36px 0; font-size:14px }
+footer .wrap { display:flex; flex-wrap:wrap; justify-content:space-between; gap:16px }
+footer a { color:var(--yellow) }
+
+@media (max-width:900px) {
+  .hero .wrap, .bill .wrap { grid-template-columns:1fr }
+  .grid { grid-template-columns:repeat(2, 1fr) }
+  .hero { padding:44px 0 72px }
+}
+@media (max-width:600px) {
+  .grid { grid-template-columns:1fr }
+  .gh { display:none }
+  .shot { box-shadow:7px 7px 0 var(--ink) }
+  .float { display:none }
+}
+@media (prefers-reduced-motion:reduce) { * { animation:none !important; transition:none !important; scroll-behavior:auto !important } }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#"><span class="brick" aria-hidden="true"></span>LE <b>MOLLET</b></a>
+    <span class="spacer"></span>
+    <div class="lang" role="group" aria-label="Langue / Language">
+      <button type="button" data-lang="fr" aria-pressed="true">FR</button>
+      <button type="button" data-lang="en" aria-pressed="false">EN</button>
+    </div>
+    <a class="gh" href="https://github.com/Lujeni/le-mollet" target="_blank" rel="noopener">GitHub ★</a>
+  </div>
+</nav>
+
+<header class="hero studs">
+  <span class="float" style="background:var(--red);left:4%;top:12%;--r:-10deg" aria-hidden="true"></span>
+  <span class="float" style="background:var(--yellow);right:6%;top:8%;animation-delay:-2s" aria-hidden="true"></span>
+  <span class="float" style="background:var(--green);left:46%;bottom:6%;animation-delay:-4s;--r:12deg" aria-hidden="true"></span>
+  <div class="wrap">
+    <div>
+      <span class="tag" data-i18n="tag">Arrive bientôt · gratuit pour de vrai</span>
+      <h1 data-i18n="h1">Ton vélo t'a coûté <em>un rein</em>. Ton home trainer, <em>l'autre</em>.</h1>
+      <p class="lead" data-i18n="lead">Et maintenant on voudrait te faire payer tous les mois pour regarder des watts sur des polygones… en Bluetooth ? Le Mollet, c'est le même plaisir, en briques, libre et gratuit.</p>
+      <div class="ctas">
+        <a class="btn y" href="#features" data-i18n="cta1">Voir les features ↓</a>
+        <a class="btn w" href="https://github.com/Lujeni/le-mollet" target="_blank" rel="noopener" data-i18n="cta2">★ Suivre le projet</a>
+      </div>
+    </div>
+    <div class="shot"><img src="img/alpe.jpg" width="1440" height="900" alt="L'Alpe d'Huez en briques, avec les supporters au bord de la route" data-i18n-alt="altHero"></div>
+  </div>
+</header>
+
+<section class="bill">
+  <div class="wrap">
+    <div>
+      <h2 data-i18n="billH">Faisons les comptes.</h2>
+      <p data-i18n="billP">Le vélo, le home trainer, la ceinture cardio, le ventilo pour ne pas mourir… Le dernier truc qu'il manquait à ta facture, c'était bien un abonnement à vie. On l'a rayé.</p>
+    </div>
+    <div class="receipt" aria-live="polite">
+      <h3 data-i18n="rTitle">TICKET DE CAISSE</h3>
+      <div class="row"><span data-i18n="r1">Vélo de route « pas trop cher »</span><span data-eur="3499"></span></div>
+      <div class="row"><span data-i18n="r2">Home trainer connecté</span><span data-eur="899"></span></div>
+      <div class="row"><span data-i18n="r3">Ceinture cardio</span><span data-eur="79"></span></div>
+      <div class="row"><span data-i18n="r4">Ventilateur de survie</span><span data-eur="59"></span></div>
+      <div class="row sub"><span><span data-i18n="r5">Abonnement</span> × <b id="months">1</b> <span data-i18n="r5m">mois</span></span><span id="subCost">19,99 €</span></div>
+      <div class="row total"><span data-i18n="rT">TOTAL</span><span id="total">4 555,99 €</span></div>
+      <div class="row us"><span>Le Mollet</span><span data-eur="0"></span></div>
+      <span class="stamp" data-i18n="stamp">OFFERT</span>
+    </div>
+  </div>
+</section>
+
+<section class="features" id="features">
+  <div class="wrap">
+    <h2 data-i18n="fH">Tout ce qu'il faut. Rien à payer.</h2>
+    <p class="sub" data-i18n="fSub">Branche ton home trainer, ouvre ton navigateur, et roule. Pas de compte obligatoire chez toi, pas de carte bleue, jamais.</p>
+    <div class="grid">
+      <article class="card" style="--c:var(--red)">
+        <div class="pic"><img src="img/climbs.jpg" loading="lazy" alt="Les cols en magnets de frigo avec leur drapeau" data-i18n-alt="altClimbs"></div>
+        <div class="body"><span class="chip" data-i18n="c1t">Vrais cols</span><h3 data-i18n="c1h">Les cols de légende, brique par brique</h3>
+          <p data-i18n="c1p">Alpe d'Huez, Ventoux, Tourmalet, Stelvio, Angliru, Zoncolan… rebâtis depuis les vraies routes et le vrai relief, au pourcentage près.</p></div>
+      </article>
+      <article class="card" style="--c:var(--orange)">
+        <div class="pic"><img src="img/pen.jpg" loading="lazy" alt="Les coureurs dans la zone de départ avant une course" data-i18n-alt="altPen"></div>
+        <div class="body"><span class="chip" data-i18n="c2t">Multijoueur</span><h3 data-i18n="c2h">Courses, sorties de groupe, peloton tactique</h3>
+          <p data-i18n="c2p">Une course toutes les 30 minutes, une sortie de groupe tous les quarts d'heure, et un peloton qui attaque, chasse et sprinte pour de vrai.</p></div>
+      </article>
+      <article class="card" style="--c:var(--purple)">
+        <div class="pic" style="background:linear-gradient(135deg,#2a1b4a,#8a3fd1)">
+          <div class="ranks" aria-hidden="true">
+            <span style="background:#b0703a">Bronze</span><span style="background:#9aa3ad">Argent</span><span style="background:#d9a400">Or</span>
+            <span style="background:#2aa198">Platine</span><span style="background:#3d7bf0">Diamant</span><span style="background:#b23cd6">Maître</span><span style="background:#e3242b">Légende</span>
+          </div>
+        </div>
+        <div class="body"><span class="chip" data-i18n="c3t">Classé</span><h3 data-i18n="c3h">Des rangs, comme dans les jeux</h3>
+          <p data-i18n="c3p">De Bronze à Légende selon tes W/kg. Et les watts trop beaux pour être vrais sont vérifiés par le serveur : pas de triche au mollet.</p></div>
+      </article>
+      <article class="card" style="--c:var(--pink)">
+        <div class="pic" style="background:linear-gradient(135deg,#1b2a34,#5a1a6e)"><div class="tv" aria-hidden="true"><i>247 W</i><i>Z4</i></div></div>
+        <div class="body"><span class="chip" data-i18n="c4t">Mode Cinéma</span><h3 data-i18n="c4h">Ta vidéo YouTube, tes watts par-dessus</h3>
+          <p data-i18n="c4p">Colle un lien, roule devant ta série ou ton course replay, avec ta puissance, ta zone et tes vitesses toujours à l'écran.</p></div>
+      </article>
+      <article class="card" style="--c:var(--green)">
+        <div class="pic" style="background:var(--green)">🎮</div>
+        <div class="body"><span class="chip" data-i18n="c5t">Matos</span><h3 data-i18n="c5h">Ton home trainer, ta manette, tes vitesses</h3>
+          <p data-i18n="c5p">Home trainers Bluetooth FTMS, capteurs cardio et cadence, manette au guidon avec 24 vitesses virtuelles. Et un mode debug pour faire marcher le reste.</p></div>
+      </article>
+      <article class="card" style="--c:var(--blue)">
+        <div class="pic"><img src="img/island.jpg" loading="lazy" alt="L'Île des Briques, un monde fait main" data-i18n-alt="altIsland"></div>
+        <div class="body"><span class="chip" data-i18n="c6t">Libre</span><h3 data-i18n="c6h">Chez toi, en LAN ou en ligne. Open source.</h3>
+          <p data-i18n="c6p">Un seul binaire en Rust, tes données restent chez toi. Lance-le dans ton salon ou héberge ton serveur pour ton club. Code ouvert, MIT / Apache.</p></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="soon studs">
+  <div class="wrap">
+    <h2 data-i18n="sH">Arrive bientôt.</h2>
+    <p data-i18n="sP">On emboîte les dernières briques. Mets une étoile sur GitHub pour être prévenu du départ, ou viens tester ton home trainer avec nous.</p>
+    <div class="load" role="img" aria-label="87 %"><i></i><span data-i18n="load">Chargement des briques… 87 %</span></div>
+    <a class="btn y" href="https://github.com/Lujeni/le-mollet" target="_blank" rel="noopener" data-i18n="cta2">★ Suivre le projet</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span data-i18n="foot1">Fait avec des briques et des mollets. Code libre, MIT / Apache 2.0.</span>
+    <span data-i18n="foot2">Routes © contributeurs OpenStreetMap · relief IGN. Aucun lien avec une marque de jouets ou une appli d'abonnement.</span>
+  </div>
+</footer>
+
+<script>
+const T = {
+  en: {
+    tag:'Coming soon · actually free', h1:'Your bike cost you <em>a kidney</em>. Your smart trainer, <em>the other one</em>.',
+    lead:'And now someone wants a monthly fee so you can watch watts on polygons… over Bluetooth? Le Mollet is the same fun, in bricks, open and free.',
+    cta1:'See the features ↓', cta2:'★ Follow the project', altHero:"Alpe d'Huez in bricks, fans by the road",
+    billH:"Let's do the maths.", billP:"The bike, the trainer, the heart rate strap, the fan that keeps you alive… The one thing your bill was missing was a lifetime subscription. We crossed it out.",
+    rTitle:'RECEIPT', r1:'Road bike, "not too expensive"', r2:'Smart trainer', r3:'Heart rate strap', r4:'Survival fan', r5:'Subscription', r5m:'months', rT:'TOTAL', stamp:'FREE',
+    fH:'Everything you need. Nothing to pay.', fSub:'Plug in your trainer, open your browser, ride. No account needed at home, no credit card, ever.',
+    c1t:'Real climbs', c1h:'Legendary climbs, brick by brick', c1p:"Alpe d'Huez, Ventoux, Tourmalet, Stelvio, Angliru, Zoncolan… rebuilt from the real roads and the real relief, down to the percent.",
+    c2t:'Multiplayer', c2h:'Races, group rides, a tactical peloton', c2p:'A race every 30 minutes, a group ride every quarter hour, and a peloton that attacks, chases and sprints for real.',
+    c3t:'Ranked', c3h:'Ranks, like in games', c3p:'From Bronze to Legend by your W/kg. Watts too good to be true are checked by the server: no cheating on the calves.',
+    c4t:'Cinema mode', c4h:'Your YouTube video, your watts on top', c4p:'Paste a link, ride in front of your show or a race replay, with your power, zone and gears always on screen.',
+    c5t:'Gear', c5h:'Your trainer, your controller, your gears', c5p:'Bluetooth FTMS trainers, heart rate and cadence sensors, a handlebar controller with 24 virtual gears. And a debug mode to get the rest working.',
+    c6t:'Open', c6h:'At home, on your LAN or online. Open source.', c6p:'One Rust binary, your data stays with you. Run it in your living room or host a server for your club. Open code, MIT / Apache.',
+    altClimbs:'Climbs as fridge magnets with their flags', altPen:'Riders in the start pen before a race', altIsland:'The Brick Island, a hand-made world',
+    sH:'Coming soon.', sP:'We are clicking the last bricks in place. Star it on GitHub to hear when it rolls out, or come test your trainer with us.',
+    load:'Loading bricks… 87 %', foot1:'Made of bricks and calves. Open source, MIT / Apache 2.0.',
+    foot2:'Roads © OpenStreetMap contributors · relief IGN. Not affiliated with any toy brand or subscription app.',
+    title:'Le Mollet · the smart trainer game, no subscription',
+  },
+};
+// French is written in the page; keep it as the dictionary to switch back to.
+T.fr = { title:document.title };
+document.querySelectorAll('[data-i18n]').forEach(e => T.fr[e.dataset.i18n] = e.innerHTML);
+document.querySelectorAll('[data-i18n-alt]').forEach(e => T.fr[e.dataset.i18nAlt] = e.alt);
+
+const store = { get:k => { try { return localStorage.getItem(k) } catch { return null } }, set:(k, v) => { try { localStorage.setItem(k, v) } catch {} } };
+let lang = 'fr';
+function setLang(l) {
+  lang = T[l] ? l : 'fr';
+  const d = T[lang];
+  document.documentElement.lang = lang;
+  document.title = d.title;
+  document.querySelectorAll('[data-i18n]').forEach(e => { if (d[e.dataset.i18n]) e.innerHTML = d[e.dataset.i18n] });
+  document.querySelectorAll('[data-i18n-alt]').forEach(e => { if (d[e.dataset.i18nAlt]) e.alt = d[e.dataset.i18nAlt] });
+  document.querySelectorAll('.lang button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lang === lang));
+  bill();
+}
+document.querySelectorAll('.lang button').forEach(b => b.addEventListener('click', () => { store.set('lemollet.site.lang', b.dataset.lang); setLang(b.dataset.lang) }));
+
+// The receipt: the subscription line keeps counting months, up to ten years, then forever.
+const BASE = 3499 + 899 + 79 + 59, SUB = 19.99;
+let months = 1;
+const money = v => v.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-GB', { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' €';
+function bill() {
+  document.querySelectorAll("[data-eur]").forEach(e => e.textContent = money(+e.dataset.eur));
+  const forever = months > 120;
+  document.getElementById('months').textContent = forever ? '∞' : months;
+  document.getElementById('subCost').textContent = forever ? '∞ €' : money(months * SUB);
+  document.getElementById('total').textContent = forever ? (lang === 'fr' ? 'ton PEL' : 'your savings') : money(BASE + months * SUB);
+}
+const tick = setInterval(() => { months += months < 12 ? 1 : 6; if (months > 120) clearInterval(tick); bill() },
+  matchMedia('(prefers-reduced-motion: reduce)').matches ? 60000 : 700);
+
+const asked = new URLSearchParams(location.search).get('lang');
+setLang(asked ?? store.get('lemollet.site.lang') ?? (navigator.language?.toLowerCase().startsWith('fr') ? 'fr' : 'en'));
+</script>
+</body>
+</html>
