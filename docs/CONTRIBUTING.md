@@ -156,8 +156,9 @@ the next person starts from there.
 
 ## Licensing and data
 
-- Code contributions are released under the project license, **MIT OR Apache-2.0**, at your choice, like the
-  rest of the crate. By opening a pull request you agree to this.
+- Code contributions are released under the project license, the **PolyForm Noncommercial License 1.0.0**, and
+  you also grant Lujeni the right to license them under other terms, commercial ones included (the dual license).
+  By opening a pull request you agree to this.
 - Only add data and assets you are allowed to redistribute: OpenStreetMap (ODbL), IGN (Licence Ouverte),
   public domain or CC0 sounds. Credit them (README "Credits", `web/audio/CREDITS.md`).
 - No trademarks or proprietary data: no official race logos, route files or names used as branding.

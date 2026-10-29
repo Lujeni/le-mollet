@@ -3,7 +3,7 @@ name = "le-mollet-client"
 version = "0.1.0"
 edition = "2024"
 description = "le-mollet native game client (Bevy): renders the ride the le-mollet server simulates"
-license = "MIT OR Apache-2.0"
+license = "PolyForm-Noncommercial-1.0.0"
 
 [dependencies]
 le-mollet = { path = ".." }

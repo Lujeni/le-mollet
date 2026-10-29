@@ -2,7 +2,7 @@
 
 # le-mollet
 
-A multiplayer, online indoor cycling training program. Open source, core in Rust.
+A multiplayer, online indoor cycling training program. Source available, free for non-commercial use, core in Rust.
 
 - **Free forever.** No subscription, no paywall, ever.
 - **No account required.** Run it on your PC and ride: no sign-up, everything stays local, you are admin. Open it to
@@ -218,3 +218,11 @@ Everything else is in the [contributing guide](docs/CONTRIBUTING.md).
 
 Road data © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).
 Sounds from Wikimedia Commons and Freesound, public domain and CC0: see [web/audio/CREDITS.md](web/audio/CREDITS.md).
+
+## License
+
+Free for any non-commercial use, under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): ride it, host it for
+yourself, your friends or your club, read it, change it, share it. Commercial use (selling it, a paid service, a
+product built on it, use inside a company) needs a separate commercial license: open an issue or ask Lujeni.
+
+Required Notice: Copyright (c) 2026 Lujeni (https://github.com/Lujeni/le-mollet)

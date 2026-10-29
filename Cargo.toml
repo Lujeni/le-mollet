@@ -3,7 +3,7 @@ name = "le-mollet"
 version.workspace = true
 edition = "2024"
 description = "Open-source indoor cycling engine: smart trainer control over BLE"
-license = "MIT OR Apache-2.0"
+license = "PolyForm-Noncommercial-1.0.0"
 
 [dependencies]
 btleplug = "0.11"
