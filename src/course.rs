@@ -53,6 +53,11 @@ const SMOOTH_SIGMA_PTS: f32 = 5.0;
 /// height, so the smoothing is twice as wide (100 m).
 const SMOOTH_SIGMA_DEM_PTS: f32 = 10.0;
 pub(crate) const UA: &str = "le-mollet/0.1 (https://github.com/lujeni/le-mollet)";
+/// The Overpass API: overpass-api.de, or a mirror in `LE_MOLLET_OVERPASS` (e.g.
+/// https://overpass.kumi.systems/api/interpreter) when the main one is busy or refuses this host.
+pub(crate) fn overpass() -> String {
+    std::env::var("LE_MOLLET_OVERPASS").unwrap_or_else(|_| "https://overpass-api.de/api/interpreter".into())
+}
 
 impl Course {
     pub fn length(&self) -> f32 {
@@ -156,7 +161,7 @@ impl Course {
     /// round the loop, so the start is not a seam.
     pub fn build_ring(name: &str, relation: u64, start: Option<[f64; 2]>) -> Result<Self> {
         let query = format!("[out:json][timeout:90];rel({relation});out geom;way(r);out tags;");
-        let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &query)]))?;
+        let r = request_json(|| ureq::post(&overpass()).set("User-Agent", UA).send_form(&[("data", &query)]))?;
         let els = r["elements"].as_array().context("Overpass: no elements")?;
         let rel = els.iter().find(|e| e["type"] == "relation").with_context(|| format!("no relation {relation}"))?;
         let oneway: HashSet<i64> = els.iter().filter(|e| e["type"] == "way" && e["tags"]["oneway"] == "yes").filter_map(|e| e["id"].as_i64()).collect();
@@ -258,7 +263,7 @@ fn elevations(samples: &[(f64, [f64; 2])]) -> Result<(Vec<f32>, bool)> {
 /// ISO 3166 code of the country at a point, from OpenStreetMap's admin boundaries; None if unknown.
 fn country_at([lat, lon]: [f64; 2]) -> Option<String> {
     let query = format!("[out:json][timeout:60];is_in({lat},{lon})->.a;area.a[admin_level=2][\"ISO3166-1\"];out tags;");
-    let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &query)])).ok()?;
+    let r = request_json(|| ureq::post(&overpass()).set("User-Agent", UA).send_form(&[("data", &query)])).ok()?;
     r["elements"].as_array()?.iter().find_map(|e| e["tags"]["ISO3166-1"].as_str().map(str::to_owned))
 }
 
@@ -280,7 +285,7 @@ fn route_osm(waypoints: &[[f64; 2]], roads: &[String]) -> Result<Vec<[f64; 2]>> 
     let (s, n) = (fold(f64::min, 0, 90.0) - PAD, fold(f64::max, 0, -90.0) + PAD);
     let (w, e) = (fold(f64::min, 1, 180.0) - PAD, fold(f64::max, 1, -180.0) + PAD);
     let query = format!("[out:json][timeout:90];way({s},{w},{n},{e})[highway~\"^({})$\"];out body geom;", DRIVABLE.join("|"));
-    let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &query)]))?;
+    let r = request_json(|| ureq::post(&overpass()).set("User-Agent", UA).send_form(&[("data", &query)]))?;
 
     let (mut graph, mut on_road, mut coords) = (Graph::new(), HashSet::new(), HashMap::new());
     for way in r["elements"].as_array().context("Overpass: no elements")? {

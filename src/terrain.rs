@@ -5,7 +5,7 @@
 //! then width*height u16 elevations in decimeters, then width*height u8 cover codes.
 //! Rows go north to south, columns west to east.
 
-use crate::course::{Course, UA, request_json};
+use crate::course::{Course, UA, overpass, request_json};
 use anyhow::{Result, bail};
 use std::io::Read;
 
@@ -116,7 +116,7 @@ impl Terrain {
              way[leisure~\"^(park|garden)$\"]{b};way[landuse~\"^(grass|meadow|cemetery)$\"]{b};\
              way[building]{b};);out geom;"
         );
-        let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &query)]))?;
+        let r = request_json(|| ureq::post(&overpass()).set("User-Agent", UA).send_form(&[("data", &query)]))?;
         let mut features: Vec<(u8, Vec<Ring>)> = vec![];
         for el in r["elements"].as_array().into_iter().flatten() {
             let tag = |k: &str| el["tags"][k].as_str().unwrap_or("");

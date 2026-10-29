@@ -5,7 +5,7 @@
 //! course's `props`. See docs/courses.md.
 
 use crate::city::Prop;
-use crate::course::{Course, UA, haversine_m, request_json};
+use crate::course::{Course, UA, haversine_m, overpass, request_json};
 use crate::terrain::{BUILDING, GRASS, FOREST, ROAD, ROCK, Terrain, WATER};
 use anyhow::{Context, Result, bail};
 use std::collections::HashMap;
@@ -423,7 +423,7 @@ fn osm_features(t: &Terrain) -> Result<Vec<Feature>> {
         "[out:json][timeout:180];(node[natural=tree]{b};way[natural=tree_row]{b};node[amenity=bench]{b};\
          node[highway=street_lamp]{b};way[barrier~\"^(fence|hedge|wall)$\"]{b};nwr[man_made=windmill]{b};);out tags geom;"
     );
-    let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &query)]))?;
+    let r = request_json(|| ureq::post(&overpass()).set("User-Agent", UA).send_form(&[("data", &query)]))?;
     let mut out = vec![];
     for el in r["elements"].as_array().into_iter().flatten() {
         let tag = |k: &str| el["tags"][k].as_str().unwrap_or("");

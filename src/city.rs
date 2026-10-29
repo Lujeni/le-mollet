@@ -3,7 +3,7 @@
 //! Built offline from OpenStreetMap streets inside an admin boundary + the IGN elevation grid,
 //! see docs/city.md.
 
-use crate::course::{Course, Point, STEP_M, UA, haversine_m, request_json, resample, smooth};
+use crate::course::{Course, Point, STEP_M, UA, haversine_m, overpass, request_json, resample, smooth};
 use crate::terrain::{self, Terrain};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -281,7 +281,7 @@ pub fn build(name: &str, relation: u64, start: [f64; 2]) -> Result<(City, Terrai
         "[out:json][timeout:300];rel({relation});out bb;area({area})->.p;\
          way(area.p)[highway~\"^({STREETS})$\"][area!=yes][access!~\"^(private|no)$\"][bicycle!=no];out body geom;"
     );
-    let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &query)]))?;
+    let r = request_json(|| ureq::post(&overpass()).set("User-Agent", UA).send_form(&[("data", &query)]))?;
     let els = r["elements"].as_array().context("Overpass: no elements")?;
     let bb = &els.first().context("Overpass: boundary relation not found")?["bounds"];
     let (s, w, n, e) = (bb["minlat"].as_f64(), bb["minlon"].as_f64(), bb["maxlat"].as_f64(), bb["maxlon"].as_f64());

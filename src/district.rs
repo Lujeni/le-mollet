@@ -8,7 +8,7 @@
 //! 1 paved square, 2 water, 3 park).
 
 use crate::buildings::{self, Building};
-use crate::course::{UA, request_json};
+use crate::course::{UA, overpass, request_json};
 use crate::terrain::{Ring, fetch_heights, fill_even_odd};
 use anyhow::{Context, Result, bail};
 use serde_json::json;
@@ -42,7 +42,7 @@ pub fn build(dir: &str, [south, west, north, east]: [f64; 4]) -> Result<()> {
     std::fs::write(format!("{dir}/ortho.jpg"), &jpg)?;
 
     let q = format!("[out:json][timeout:90];node[natural=tree]({south},{west},{north},{east});out;");
-    let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &q)]))?;
+    let r = request_json(|| ureq::post(&overpass()).set("User-Agent", UA).send_form(&[("data", &q)]))?;
     let trees: Vec<[f64; 2]> = r["elements"].as_array().context("Overpass: no elements")?.iter().filter_map(|n| Some([n["lat"].as_f64()?, n["lon"].as_f64()?])).collect();
     std::fs::write(format!("{dir}/trees.json"), serde_json::to_string(&trees)?)?;
 
@@ -67,7 +67,7 @@ fn streets_and_surfaces([south, west, north, east]: [f64; 4], w: usize, h: usize
         "[out:json][timeout:180];(way[highway]{b};way[leisure~\"^(park|garden)$\"]{b};relation[leisure~\"^(park|garden)$\"]{b};\
          way[natural=water]{b};relation[natural=water]{b};way[place=square]{b};node[highway~\"^(crossing|street_lamp)$\"]{b};);out geom;"
     );
-    let r = request_json(|| ureq::post("https://overpass-api.de/api/interpreter").set("User-Agent", UA).send_form(&[("data", &q)]))?;
+    let r = request_json(|| ureq::post(&overpass()).set("User-Agent", UA).send_form(&[("data", &q)]))?;
     let grid = |lat: f64, lon: f64| ((lon - west) / (east - west) * w as f64, (north - lat) / (north - south) * h as f64);
     let ring = |g: &serde_json::Value| -> Ring { g.as_array().into_iter().flatten().filter_map(|p| Some(grid(p["lat"].as_f64()?, p["lon"].as_f64()?))).collect() };
     let (mut roads, mut crossings, mut lamps, mut areas) = (vec![], vec![], vec![], vec![]);
