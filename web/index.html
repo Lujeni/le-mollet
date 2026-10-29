@@ -10,8 +10,17 @@
 // Before first paint, so there is no flash: saved choice, else the system setting.
 try { document.documentElement.dataset.theme = localStorage.getItem('lemollet.theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') } catch { document.documentElement.dataset.theme = 'dark' }
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* The fonts ship with the server (web/fonts, served at /fonts with their Google Fonts version as ?v=): no third party. */
+@font-face { font-family:'Fredoka'; font-style:normal; font-weight:300 700; font-display:swap; src:url(/fonts/fredoka-latin.woff2?v=17) format('woff2'); unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD }
+@font-face { font-family:'Fredoka'; font-style:normal; font-weight:300 700; font-display:swap; src:url(/fonts/fredoka-latin-ext.woff2?v=17) format('woff2'); unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF }
+@font-face { font-family:'Inter'; font-style:normal; font-weight:100 900; font-display:swap; src:url(/fonts/inter-latin.woff2?v=20) format('woff2'); unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD }
+@font-face { font-family:'Inter'; font-style:normal; font-weight:100 900; font-display:swap; src:url(/fonts/inter-latin-ext.woff2?v=20) format('woff2'); unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF }
+@font-face { font-family:'Silkscreen'; font-style:normal; font-weight:400; font-display:swap; src:url(/fonts/silkscreen-400-latin.woff2?v=6) format('woff2'); unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD }
+@font-face { font-family:'Silkscreen'; font-style:normal; font-weight:400; font-display:swap; src:url(/fonts/silkscreen-400-latin-ext.woff2?v=6) format('woff2'); unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF }
+@font-face { font-family:'Silkscreen'; font-style:normal; font-weight:700; font-display:swap; src:url(/fonts/silkscreen-700-latin.woff2?v=6) format('woff2'); unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD }
+@font-face { font-family:'Silkscreen'; font-style:normal; font-weight:700; font-display:swap; src:url(/fonts/silkscreen-700-latin-ext.woff2?v=6) format('woff2'); unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF }
+</style>
 <style>
 /* Look: frosted glass panels over the 3D world, chunky Lego-brick buttons with studs, a round game font. */
 :root {
@@ -622,10 +631,11 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   .side { width:100%; max-height:48vh; padding:16px; border-radius:var(--r) var(--r) 0 0 }
 }
 </style>
+<link rel="modulepreload" href="/vendor/three.module.js?v=170">
 <script type="importmap">
 { "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  "three": "/vendor/three.module.js?v=170",
+  "three/addons/controls/OrbitControls.js": "/vendor/OrbitControls.js?v=170"
 } }
 </script>
 </head>

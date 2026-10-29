@@ -42,6 +42,7 @@
 //!   GET /friend/view?pid=&h=                   a friend's profile and rides (friends only)
 //!   POST /friend/ride?pid=  (a ride as JSON);  POST /friend/unride?pid=&id=   the rides friends see
 //!   GET /audio/<name>.mp3                      nature ambience loops (web/audio/CREDITS.md)
+//!   GET /vendor/<file>, /fonts/<file>          three.js and the fonts, shipped in the binary (web/fonts/CREDITS.md)
 //!   GET /rider?pid= ; POST /rider?pid=&weight=<kg>&ftp=<W>   the profile as the server knows it (weight, FTP seen, rank); with
 //!                                              weight and ftp, register or update it (docs/security.md)
 //!   GET /admin/flags                           rides the fair-play checks flagged (moderate)
@@ -100,6 +101,21 @@ const AUDIO: &[(&str, &[u8])] = &[
     ("/audio/deer.mp3", include_bytes!("../web/audio/deer.mp3")),
 ];
 const DT: f32 = 0.1;
+/// Libraries and fonts the page used to take from CDNs: one origin, no third party, cached for good by their version.
+/// (path, content type, version in the page's URL as `?v=`, bytes)
+const VENDOR: &[(&str, &str, &str, &[u8])] = &[
+    ("/vendor/three.module.js", "text/javascript", "170", include_bytes!("../web/vendor/three.module.js")),
+    ("/vendor/OrbitControls.js", "text/javascript", "170", include_bytes!("../web/vendor/OrbitControls.js")),
+    ("/fonts/fredoka-latin.woff2", "font/woff2", "17", include_bytes!("../web/fonts/fredoka-latin.woff2")),
+    ("/fonts/fredoka-latin-ext.woff2", "font/woff2", "17", include_bytes!("../web/fonts/fredoka-latin-ext.woff2")),
+    ("/fonts/inter-latin.woff2", "font/woff2", "20", include_bytes!("../web/fonts/inter-latin.woff2")),
+    ("/fonts/inter-latin-ext.woff2", "font/woff2", "20", include_bytes!("../web/fonts/inter-latin-ext.woff2")),
+    ("/fonts/silkscreen-400-latin.woff2", "font/woff2", "6", include_bytes!("../web/fonts/silkscreen-400-latin.woff2")),
+    ("/fonts/silkscreen-400-latin-ext.woff2", "font/woff2", "6", include_bytes!("../web/fonts/silkscreen-400-latin-ext.woff2")),
+    ("/fonts/silkscreen-700-latin.woff2", "font/woff2", "6", include_bytes!("../web/fonts/silkscreen-700-latin.woff2")),
+    ("/fonts/silkscreen-700-latin-ext.woff2", "font/woff2", "6", include_bytes!("../web/fonts/silkscreen-700-latin-ext.woff2")),
+];
+static VENDOR_GZ: std::sync::LazyLock<HashMap<&'static str, Arc<Vec<u8>>>> = std::sync::LazyLock::new(|| VENDOR.iter().filter(|v| v.1 == "text/javascript").map(|v| (v.0, Arc::new(gzip(v.3)))).collect()); // woff2 is already compressed
 static PAGE_GZ: std::sync::LazyLock<Arc<Vec<u8>>> = std::sync::LazyLock::new(|| Arc::new(gzip(PAGE.as_bytes())));
 static PAGE_TAG: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
     let mut h = Fnv::default();
@@ -823,10 +839,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     }
     // Cloud: only the page and the way to sign in are open to strangers.
     // The track files are open data (OSM, IGN...) and the same for everyone: public, so a CDN can keep them.
-    let open = matches!(path, "/" | "/whoami" | "/course" | "/terrain" | "/buildings" | "/ortho" | "/district") || path.starts_with("/auth/") || path.starts_with("/audio/");
+    let open = matches!(path, "/" | "/whoami" | "/course" | "/terrain" | "/buildings" | "/ortho" | "/district") || path.starts_with("/auth/") || is_asset(path);
     // Another site's page must not drive this one in the visitor's browser (CSRF): every call but a visit is refused
     // when the browser says it comes from elsewhere.
-    if !(path == "/" || path.starts_with("/audio/")) && cross_site(&req) {
+    if !(path == "/" || is_asset(path)) && cross_site(&req) {
         metrics::inc("le_mollet_rejected_total", &[("reason", "cross_site")]);
         return reply(&mut sock, "403 Forbidden", "text/plain", b"cross-site request").await;
     }
@@ -872,6 +888,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/", _) => reply_static(&mut sock, &req, "", "text/html; charset=utf-8", PAGE.as_bytes(), Some(PAGE_GZ.clone()), &PAGE_TAG).await,
         (p, _) if p.starts_with("/audio/") => match AUDIO.iter().find(|a| a.0 == p) {
             Some((_, bytes)) => reply_static(&mut sock, &req, "", "audio/mpeg", bytes, None, &PAGE_TAG).await, // they ship with the page
+            None => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
+        },
+        (p, _) if p.starts_with("/vendor/") || p.starts_with("/fonts/") => match VENDOR.iter().find(|v| v.0 == p) {
+            Some((_, ctype, tag, bytes)) => reply_static(&mut sock, &req, query, ctype, bytes, VENDOR_GZ.get(p).cloned(), tag).await,
             None => reply(&mut sock, "404 Not Found", "text/plain", b"not found").await,
         },
         ("/workouts", _) => reply(&mut sock, "200 OK", "application/json", app.workouts_json.as_bytes()).await,
@@ -2070,11 +2090,16 @@ async fn redirect(sock: &mut TcpStream, to: &str, set_cookie: Option<&str>) -> s
 }
 
 /// A request's route for the metrics: the known paths, everything else as "other" (no unbounded labels).
+/// Files that ship with the page: open to anyone, fetched by the browser itself (no CSRF question).
+fn is_asset(path: &str) -> bool {
+    path.starts_with("/audio/") || path.starts_with("/vendor/") || path.starts_with("/fonts/")
+}
+
 fn route_label(path: &str) -> &'static str {
     const ROUTES: [&str; 38] = ["/friend", "/friend/ask", "/friend/accept", "/friend/remove", "/friend/view", "/friend/ride", "/friend/unride", "/", "/courses", "/worlds", "/worlds/new", "/course", "/terrain", "/buildings", "/district", "/ortho", "/workouts", "/turn", "/events",
         "/power", "/segments", "/whoami", "/emote", "/seek", "/pause", "/powerup", "/rider", "/metrics", "/club", "/club/create", "/club/join", "/club/leave",
         "/event/list", "/event/create", "/event/join", "/event/leave", "/event/delete", "/admin/flags"];
-    ROUTES.iter().find(|r| **r == path).copied().unwrap_or(if path.starts_with("/audio/") { "/audio" } else if path.starts_with("/auth/") { "/auth" } else if path.starts_with("/admin/") { "/admin" } else { "other" })
+    ROUTES.iter().find(|r| **r == path).copied().unwrap_or(if path.starts_with("/audio/") { "/audio" } else if path.starts_with("/vendor/") || path.starts_with("/fonts/") { "/vendor" } else if path.starts_with("/auth/") { "/auth" } else if path.starts_with("/admin/") { "/admin" } else { "other" })
 }
 
 /// Times a request into the metrics when it is answered (dropped).
@@ -2105,7 +2130,10 @@ async fn reply_static(sock: &mut TcpStream, req: &str, query: &str, ctype: &str,
 }
 
 /// Headers every response carries: never framed by another site, no content sniffing, no referrer leaks.
-const SAFE_HEADERS: &str = "X-Frame-Options: DENY\r\nContent-Security-Policy: frame-ancestors 'none'\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n";
+/// The page only ever talks to its own origin: scripts, fonts, audio, fetches and ride streams come from here (the
+/// libraries and fonts ship in the binary), the one frame is the cinema's YouTube player and its thumbnails. Inline
+/// scripts and styles are the page itself, so they stay allowed; nothing from elsewhere can run or be called.
+const SAFE_HEADERS: &str = "X-Frame-Options: DENY\r\nContent-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; media-src 'self'; font-src 'self'; connect-src 'self'; frame-src https://www.youtube-nocookie.com; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n";
 
 /// Equal, in time that does not depend on where they differ.
 fn same_secret(a: &str, b: &str) -> bool {
