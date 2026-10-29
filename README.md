@@ -16,6 +16,7 @@ for hardware to support: tell us how your trainer did with a [hardware report](h
 - **One binary.** Download a [release](https://github.com/Lujeni/le-mollet/releases) for Linux, macOS or Windows, run
   `le-mollet serve`, open the page ([getting started](docs/getting-started.md)).
 - **Just a browser.** No heavy client to install: the UI runs in any modern web browser. An optional, experimental
+- **French and English.** The page follows the browser's language; a button in the header switches.
   native 3D client is in the works for more realistic rendering.
 
 <p align="center"><img src="docs/screenshots/alpe.jpg" alt="Climbing the last hairpins of Alpe d'Huez, minifig fans cheering"></p>
