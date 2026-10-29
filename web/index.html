@@ -537,6 +537,21 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 /* Free worlds, training */
 #free .panel, #training .panel { width:min(760px, 100%); max-height:100%; overflow:auto }
 .online { color:#7fd36b; font-weight:600 }
+/* Free: one card per loop, its shape on a stud plate */
+.loops { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:16px; margin-bottom:16px }
+.loop-card { position:relative; display:flex; flex-direction:column; overflow:hidden; cursor:pointer; border-radius:18px; border:1px solid var(--edge); background:var(--glass-hi); transition:transform .12s, box-shadow .15s }
+.loop-card:hover, .loop-card:focus-visible { transform:translateY(-3px); box-shadow:0 10px 0 -4px var(--c), 0 16px 30px rgba(0,0,0,.25); outline:none }
+.loop-card canvas { width:100%; height:170px; display:block }
+.loop-card .body { display:flex; flex-direction:column; gap:8px; padding:12px 14px 14px }
+.loop-card strong { font:600 17px var(--font) }
+.loop-card .tags { display:flex; flex-wrap:wrap; gap:6px }
+.loop-card .tags i { font-style:normal; padding:3px 9px; border-radius:999px; background:var(--glass-hi2); font:600 12px var(--font); color:var(--ink) }
+.loop-card .tags i.kind { background:var(--c); color:#fff }
+.loop-card .live { position:absolute; top:10px; right:10px; display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; background:rgba(14,17,22,.75); color:#fff; font:600 12px var(--font) }
+.loop-card .live b { width:8px; height:8px; border-radius:50%; background:#8a8f98 }
+.loop-card .live.on b { background:#5bd36a; box-shadow:0 0 0 0 #5bd36a; animation:ping 1.6s infinite }
+@keyframes ping { 70% { box-shadow:0 0 0 8px rgba(91,211,106,0) } 100% { box-shadow:0 0 0 0 rgba(91,211,106,0) } }
+@media (prefers-reduced-motion:reduce) { .loop-card, .loop-card .live.on b { transition:none; animation:none } }
 .course-card, .workout-card { display:flex; flex-direction:column; gap:6px; padding:14px 16px; cursor:pointer; background:var(--glass-hi); border:1px solid var(--edge); border-radius:16px; transition:background .15s, transform .12s }
 .course-card:hover, .course-card:focus-visible, .workout-card:hover, .workout-card:focus-visible { background:var(--glass-hi2); transform:translateY(-2px); outline:none }
 .workout-card strong, .course-card strong { font-family:var(--font); font-weight:600; font-size:17px }
@@ -847,7 +862,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <button class="btn" id="freeBack">‹ Rouler</button>
       </div>
       <p class="muted">Des boucles ouvertes à tous : chaque cycliste connecté voit les autres rouler.</p>
-      <div id="worldList" class="list"></div>
+      <div id="worldList" class="loops"></div>
     </div>
   </main>
 
@@ -2006,35 +2021,56 @@ function showCourses() {
   }));
 }
 
-// Elevation thumbnail filled in the accent color.
-function sparkline(cv, prof) {
+// A loop's card art: a stud plate in the loop's color, the road from above (start chequered), the profile below.
+const LOOP_COLORS = { Plat:'#1595ad', 'Vallonné':'#e9781a', Montagneux:'#1c58a8' }; // a real loop: grass green
+function loopArt(cv, w, color) {
   const [W, H] = [cv.clientWidth, cv.clientHeight], dpr = Math.min(devicePixelRatio, 2);
   cv.width = W * dpr; cv.height = H * dpr;
   const ctx = cv.getContext('2d');
   ctx.scale(dpr, dpr);
-  const lo = Math.min(...prof), hi = Math.max(...prof);
-  ctx.fillStyle = '#f2cd37';
-  ctx.beginPath();
-  ctx.moveTo(0, H);
-  prof.forEach((e, i) => ctx.lineTo(i / (prof.length - 1) * W, H - 2 - (e - lo) / (hi - lo || 1) * (H - 4)));
-  ctx.lineTo(W, H);
-  ctx.fill();
+  ctx.fillStyle = color; ctx.fillRect(0, 0, W, H);
+  for (let x = 10; x < W; x += 20) for (let y = 10; y < H; y += 20) { // studs
+    ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.beginPath(); ctx.arc(x + 1, y + 1.5, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill();
+  }
+  const prof = w.profile, lo = Math.min(...prof), hi = Math.max(...prof), band = 34; // the profile, a hill along the bottom
+  ctx.fillStyle = 'rgba(14,17,22,.35)'; ctx.beginPath(); ctx.moveTo(0, H);
+  prof.forEach((e, i) => ctx.lineTo(i / (prof.length - 1) * W, H - 4 - (e - lo) / (hi - lo || 1) * (band - 8)));
+  ctx.lineTo(W, H); ctx.fill();
+  const pts = w.outline;
+  if (!pts?.length) return;
+  const k = Math.cos(pts[0][0] * Math.PI / 180), xs = pts.map(p => p[1] * k), ys = pts.map(p => -p[0]);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const sc = Math.min((W - 40) / (x1 - x0 || 1), (H - band - 24) / (y1 - y0 || 1));
+  const ox = (W - (x1 - x0) * sc) / 2, oy = (H - band - (y1 - y0) * sc) / 2;
+  const P = pts.map((_, i) => [ox + (xs[i] - x0) * sc, oy + (ys[i] - y0) * sc]);
+  const road = (width, style, dash = []) => {
+    ctx.lineWidth = width; ctx.strokeStyle = style; ctx.setLineDash(dash); ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.beginPath(); P.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+  };
+  road(13, 'rgba(0,0,0,.25)'); road(10, '#f4f4f4'); road(7, '#4a4c48'); road(1.5, '#f2cd37', [5, 6]);
+  const [sx, sy] = P[0]; // start line, chequered
+  ctx.setLineDash([]);
+  for (let i = 0; i < 4; i++) { ctx.fillStyle = i % 2 ? '#111' : '#fff'; ctx.fillRect(sx - 6 + (i % 2) * 6, sy - 6 + (i >> 1) * 6, 6, 6) }
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5; ctx.strokeRect(sx - 6, sy - 6, 12, 12);
 }
 
 async function renderWorlds() {
   const worlds = await fetch('/worlds').then(r => r.json()).catch(() => []);
   $('#worldList').replaceChildren(...worlds.map(w => {
-    const cv = h('canvas', { 'aria-hidden':'true' });
+    const cv = h('canvas', { 'aria-hidden':'true' }), color = LOOP_COLORS[w.relief] ?? '#4b9f4a';
     const card = h('div', {
-        class:'workout-card block', role:'button', tabindex:0,
+        class:'loop-card', role:'button', tabindex:0, style:`--c:${color}`,
+        'aria-label':`${w.name}, ${(w.length / 1000).toFixed(1)} km, +${w.gain} m par tour, ${w.riders} en ligne`,
         onclick: () => openRide(w.id, true),
         onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRide(w.id, true) } },
       },
-      h('div', { class:'row' }, h('strong', {}, `${w.country ? `${flag(w.country)} ` : ''}${w.name}`),
-        h('small', { class: w.riders ? 'online' : '' }, w.riders ? `${w.riders} cycliste${w.riders > 1 ? 's' : ''} en ligne` : 'personne pour l\'instant')),
-      h('small', {}, `${(w.length / 1000).toFixed(1)} km · +${w.gain} m par tour · ${w.relief ?? 'circuit réel'}`),
-      cv);
-    requestAnimationFrame(() => sparkline(cv, w.profile));
+      cv,
+      h('span', { class:`live${w.riders ? ' on' : ''}` }, h('b'), w.riders ? `${w.riders} en ligne` : 'Personne'),
+      h('div', { class:'body' },
+        h('strong', {}, `${w.country ? `${flag(w.country)} ` : ''}${w.name}`),
+        h('div', { class:'tags' }, h('i', { class:'kind' }, w.relief ?? 'Circuit réel'), h('i', {}, `${(w.length / 1000).toFixed(1)} km`), h('i', {}, `+${w.gain} m / tour`))));
+    requestAnimationFrame(() => loopArt(cv, w, color));
     return card;
   }));
 }

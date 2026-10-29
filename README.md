@@ -22,7 +22,7 @@ A multiplayer, online indoor cycling training program. Source available, free fo
 <table>
 <tr>
 <td width="50%"><img src="docs/screenshots/home.jpg" alt="Home screen: menu bricks and the Lego rider on the trainer"><br><sub><b>Home.</b> Your rider on the trainer, everything one brick away.</sub></td>
-<td width="50%"><img src="docs/screenshots/destinations.jpg" alt="Where to ride: climbs, the Lego island, Paris, the daily loop"><br><sub><b>Where to ride.</b> Real climbs, a hand-made Lego island, Paris, the daily loop.</sub></td>
+<td width="50%"><img src="docs/screenshots/destinations.jpg" alt="Where to ride: climbs, the Lego island, the daily loop"><br><sub><b>Where to ride.</b> Real climbs, a hand-made Lego island, the daily loop.</sub></td>
 </tr>
 <tr>
 <td><img src="docs/screenshots/island.jpg" alt="Riding the pirate port of the Île des Briques, round minimap"><br><sub><b>Île des Briques.</b> The pirate port, its cars and walkers, the round Lego minimap.</sub></td>
@@ -81,9 +81,8 @@ A multiplayer, online indoor cycling training program. Source available, free fo
 - **Race your ghost.** Finish a climb and your best time rides with you next time, see-through, with the gap in
   seconds live and your record on the magnet.
 - **Free roam.** A procedural "Boucle du jour", the same for everyone today. Ride lap after lap, no finish line.
-- **Paris, every street.** All 1,790 km of Paris streets with real elevation: pick left, straight or right at
-  each junction, a round Lego minimap shows where you go. Start from Notre-Dame, Concorde, Montmartre and more.
-  Montmartre hurts.
+- **Open cities.** Build a whole town from OpenStreetMap, every street with real elevation: pick left, straight or
+  right at each junction, a round Lego minimap shows where you go. Not shipped; recipe (Paris) in [docs/city.md](docs/city.md).
 - **Anneau de Longchamp.** The Paris cyclists' ring around the racecourse, 3.5 km a lap, built from the real
   place: the IGN aerial photo paints the ground as a Lego mosaic and finds every tree (6,000 of them, autumn
   colors included), OpenStreetMap places the benches, lamps, white rails, hedges and the Moulin de Longchamp,

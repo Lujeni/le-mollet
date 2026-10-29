@@ -251,7 +251,11 @@ impl Track {
         let c = &self.course;
         // 60-sample elevation profile for the picker thumbnails.
         let profile: Vec<f32> = (0..60).map(|i| c.ele_at(c.length() * i as f32 / 59.0).round()).collect();
+        // A loop's shape seen from above, 80 `[lat, lon]`, for the Free cards.
+        let n = c.points.len();
+        let outline: Option<Vec<[f64; 2]>> = (c.looped && n > 1).then(|| (0..80).map(|i| { let p = &c.points[i * (n - 1) / 79]; [p.lat, p.lon] }).collect());
         json!({
+            "outline": outline,
             "id": self.id, "name": c.name, "country": c.country, "length": c.length(), "gain": c.elevation_gain().round(), "profile": profile,
             "terrain": self.terrain.is_some(), "looped": c.looped,
             "relief": self.relief.map(Relief::label), "riders": self.riders.lock().unwrap_or_else(|e| e.into_inner()).values().filter(|p| !p.bot).count(),
