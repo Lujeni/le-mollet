@@ -1,6 +1,7 @@
 //! le-mollet core: smart trainer engine over Bluetooth LE.
 
 pub mod account;
+pub mod audit;
 pub mod auth;
 pub mod club;
 pub mod db;

@@ -75,6 +75,10 @@ checks are for.
   guess, nothing to leak, and the settings (e-mail, delete) trust the session, which came from the mailbox.
 - **Passwords** (home only): Argon2id hashes, torii's; five wrong passwords from one client lock that name for that client for 15
   minutes (another client cannot lock you out), and sign-ins are limited to 10 an hour per client.
+- **Audit trail**: every account event is one logfmt line on stderr (`audit event=signin via=link account=… ip=…`;
+  sign-ups, links sent and used, sign-ins refused and why, sign-outs, name/e-mail/password changes, deletions,
+  provisional accounts swept, roles given by the CLI, mails sent or failed; `src/audit.rs`). On a server journald
+  keeps and dates them: `journalctl -u le-mollet -g '^audit '`, `-g 'account=1234'` for one account.
 - **Sign-ups, against bots**: 3 an hour and 5 a day per client, 100 an hour for the whole server; and each one
   carries a proof of work (`/auth/challenge`, `account::pow_check`): the browser spends about a second of
   SHA-256 on a signed, dated challenge, used once. A human never sees it; a farm of accounts costs a farm of CPU.

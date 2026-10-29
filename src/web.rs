@@ -69,6 +69,7 @@ use le_mollet::friend::Friends;
 use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
 use le_mollet::peloton::{self, View};
 use le_mollet::account::{self, Auth};
+use le_mollet::audit::audit;
 use torii::{User, UserId};
 use le_mollet::city::{City, Exit, Route, Turn};
 use le_mollet::course::{Course, Point};
@@ -508,8 +509,8 @@ impl App {
         let (subject, body) = account::link_mail(&name, &format!("{}/?link={token}", base.trim_end_matches('/')));
         tokio::task::spawn_blocking(move || {
             match le_mollet::mail::send(&to, &subject, &body) {
-                Ok(()) => metrics::inc("le_mollet_mails_total", &[("result", "sent")]),
-                Err(e) => { eprintln!("mail to {name}: {e:#}"); metrics::inc("le_mollet_mails_total", &[("result", "failed")]) }
+                Ok(()) => { metrics::inc("le_mollet_mails_total", &[("result", "sent")]); audit("mail.sent", &[("to", &to), ("name", &name)]) }
+                Err(e) => { metrics::inc("le_mollet_mails_total", &[("result", "failed")]); audit("mail.failed", &[("to", &to), ("name", &name), ("error", &format!("{e:#}"))]) }
             }
         });
     }
@@ -891,18 +892,21 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 });
                 if let Err(e) = checked {
                     metrics::inc("le_mollet_rejected_total", &[("reason", "pow")]);
+                    audit("signup.refused", &[("reason", e), ("ip", &client)]);
                     return reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await;
                 }
                 if app.mode == Mode::Cloud {
                     if email.is_empty() { return reply(&mut sock, "400 Bad Request", "text/plain", b"email: required").await }
-                    app.auth.sweep().await; // yesterday's sign-ups that never answered go first
+                    let swept = app.auth.sweep().await; // yesterday's sign-ups that never answered go first
+                    if swept > 0 { audit("sweep", &[("dropped", &swept.to_string())]) }
                     return match app.auth.signup_by_email(&email).await {
                         Ok((u, token)) => {
                             metrics::inc("le_mollet_signins_total", &[("result", "signup")]);
+                            audit("signup", &[("account", &Auth::account_id(&u.id).to_string()), ("name", u.name.as_deref().unwrap_or("")), ("email", &u.email), ("ip", &client)]);
                             app.mail_link(&u, &token.token, &req); // the first sign-in is by the link: the mailbox proven before anything
                             reply(&mut sock, "202 Accepted", "text/plain", b"link sent").await
                         }
-                        Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
+                        Err(e) => { audit("signup.refused", &[("email", &email), ("reason", e), ("ip", &client)]); reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await }
                     };
                 }
             }
@@ -922,6 +926,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             match res {
                 Ok((u, session)) => {
                     metrics::inc("le_mollet_signins_total", &[("result", if path == "/auth/signup" { "signup" } else { "ok" })]);
+                    audit(if path == "/auth/signup" { "signup" } else { "signin" }, &[("via", "password"), ("account", &Auth::account_id(&u.id).to_string()), ("name", u.name.as_deref().unwrap_or("")), ("ip", &client)]);
                     app.login_fails.lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
                     signed_in(&mut sock, &app, &u, &session).await
                 }
@@ -933,6 +938,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                         f.0 += 1;
                     }
                     metrics::inc("le_mollet_signins_total", &[("result", if locked { "locked" } else { "refused" })]);
+                    audit(if path == "/auth/signup" { "signup.refused" } else { "signin.refused" }, &[("via", "password"), ("name", &name), ("reason", e), ("ip", &client)]);
                     reply(&mut sock, if locked { "429 Too Many Requests" } else { "400 Bad Request" }, "text/plain", e.as_bytes()).await
                 }
             }
@@ -942,7 +948,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/auth/link", _) if req.starts_with("POST ") => {
             let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
             let email = param(form, "email").map(decode).unwrap_or_default();
-            if let Some((u, token)) = app.auth.link(&email).await { app.mail_link(&u, &token.token, &req) }
+            let known = match app.auth.link(&email).await { Some((u, token)) => { app.mail_link(&u, &token.token, &req); true } None => false };
+            audit("link.sent", &[("email", &email.trim().to_ascii_lowercase()), ("known", if known { "true" } else { "false" }), ("ip", &client)]);
             reply(&mut sock, "202 Accepted", "text/plain", b"link sent").await
         }
         ("/auth/link/use", _) if req.starts_with("POST ") => {
@@ -951,10 +958,12 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             match app.auth.use_link(&t, Some(client.clone())).await {
                 Ok((u, session)) => {
                     metrics::inc("le_mollet_signins_total", &[("result", "link")]);
+                    audit("signin", &[("via", "link"), ("account", &Auth::account_id(&u.id).to_string()), ("name", u.name.as_deref().unwrap_or("")), ("ip", &client)]);
                     signed_in(&mut sock, &app, &u, &session).await
                 }
                 Err(e) => {
                     metrics::inc("le_mollet_signins_total", &[("result", "refused")]);
+                    audit("signin.refused", &[("via", "link"), ("reason", e), ("ip", &client)]);
                     reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await
                 }
             }
@@ -962,8 +971,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/auth/logout", _) => {
             // `all=1`: every browser of the account, not only this one.
             match (cookie(&req, SESSION_COOKIE), &who.user, param(query, "all")) {
-                (_, Some(id), Some("1")) => app.auth.sign_out_all(&UserId::new(id)).await,
-                (Some(c), ..) => app.auth.sign_out(c).await,
+                (_, Some(id), Some("1")) => { app.auth.sign_out_all(&UserId::new(id)).await; audit("signout", &[("account", &who.account.unwrap_or(0).to_string()), ("all", "true")]) }
+                (Some(c), ..) => { app.auth.sign_out(c).await; if let Some(a) = who.account { audit("signout", &[("account", &a.to_string())]) } }
                 _ => {}
             }
             redirect(&mut sock, "/", Some(CLEAR_COOKIE)).await
@@ -979,6 +988,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let field = |k: &str| param(form, k).map(decode).unwrap_or_default();
             let password = field("password");
             if app.mode == Mode::Local && path != "/auth/password" && !app.auth.check_password(&me, &password).await {
+                audit("settings.refused", &[("account", &account.to_string()), ("path", path), ("reason", "wrong password"), ("ip", &client)]);
                 return reply(&mut sock, "400 Bad Request", "text/plain", b"wrong name or password").await;
             }
             let res: Result<(), &str> = match path {
@@ -987,6 +997,16 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 "/auth/email" => app.auth.set_email(&me, &field("email")).await.map(|_| ()),
                 _ => app.auth.delete(&me.id).await,
             };
+            let acc = account.to_string();
+            match &res {
+                Ok(()) => match path {
+                    "/auth/password" => audit("password.changed", &[("account", &acc), ("ip", &client)]),
+                    "/auth/name" => audit("name.changed", &[("account", &acc), ("from", me.name.as_deref().unwrap_or("")), ("to", field("name").trim())]),
+                    "/auth/email" => audit("email.changed", &[("account", &acc), ("from", &me.email), ("to", &field("email").trim().to_ascii_lowercase())]),
+                    _ => audit("account.deleted", &[("account", &acc), ("name", me.name.as_deref().unwrap_or("")), ("email", &me.email), ("ip", &client)]),
+                },
+                Err(e) => audit("settings.refused", &[("account", &acc), ("path", path), ("reason", e), ("ip", &client)]),
+            }
             match res {
                 Ok(()) if path == "/auth/password" => {
                     // The other browsers out, this one on a fresh session.
@@ -998,7 +1018,6 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 }
                 Ok(()) if path == "/auth/delete" => {
                     app.forget_profiles(account);
-                    eprintln!("account {} deleted itself", who.name.as_deref().unwrap_or("?"));
                     redirect(&mut sock, "/", Some(CLEAR_COOKIE)).await
                 }
                 Ok(()) => reply(&mut sock, "204 No Content", "text/plain", b"").await,

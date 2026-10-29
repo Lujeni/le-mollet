@@ -192,12 +192,14 @@ async fn main() -> anyhow::Result<()> {
                     let role = Role::parse(&role).context("role: admin, organizer or rider")?;
                     r.grants.insert(Auth::account_id(&a.id), Grant { role, note });
                     r.save(&db)?;
+                    le_mollet::audit::audit("role", &[("account", &Auth::account_id(&a.id).to_string()), ("name", &label(&a)), ("role", &format!("{role:?}").to_lowercase()), ("by", "cli")]);
                     println!("{} is now {role:?} on this server (effective at once).", label(&a));
                 }
                 ("remove", Some(name), _) => {
                     let a = auth.by_name(&name).await.with_context(|| format!("no account named {name}"))?;
                     anyhow::ensure!(r.grants.remove(&Auth::account_id(&a.id)).is_some(), "{} has no role", label(&a));
                     r.save(&db)?;
+                    le_mollet::audit::audit("role", &[("account", &Auth::account_id(&a.id).to_string()), ("name", &label(&a)), ("role", "rider"), ("by", "cli")]);
                     println!("{} is a rider again.", label(&a));
                 }
                 ("list", _, _) => for (id, g) in &r.grants {
@@ -321,7 +323,7 @@ async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &st
     };
     let auth = le_mollet::account::Auth::open(db).await?;
     let swept = auth.sweep().await;
-    if swept > 0 { eprintln!("{swept} provisional account(s) dropped: signed up by e-mail, never signed in") }
+    if swept > 0 { le_mollet::audit::audit("sweep", &[("dropped", &swept.to_string())]) }
     let db = le_mollet::db::Db::open(db, &[courses, db_dir(db)])?;
     let app = Arc::new(web::App::new(courses, trainer, difficulty, db, auth, mode)?);
     if mode == web::Mode::Local && addr.starts_with("0.0.0.0:") {
