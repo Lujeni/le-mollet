@@ -209,6 +209,7 @@ button.friend-row { cursor:pointer } button.friend-row:hover { background:var(--
 .account h2 { margin:0; font-size:17px } .account .muted { margin:0 }
 #signinGate .gate { max-width:420px; margin:18vh auto 0; text-align:center; display:grid; gap:18px; justify-items:center }
 .account-form { display:grid; gap:10px; width:100%; max-width:360px; text-align:left } .account-form label { display:grid; gap:4px }
+.account-settings { display:grid; gap:14px; width:100%; margin-top:6px } .account-settings h3 { margin:0; font-size:15px } .account-settings > .btn { justify-self:start }
 #signOut { text-decoration:none }
 .role-chip { margin-left:8px; padding:2px 10px; border-radius:999px; background:#81007b; color:#fff; font:700 12px var(--font); vertical-align:middle }
 .board .reset { margin-left:auto; padding:2px 8px; font-size:11px }
@@ -343,7 +344,7 @@ button.friend-row { cursor:pointer } button.friend-row:hover { background:var(--
 @media (prefers-reduced-motion:reduce) { .zones.hot .watts::before, .zones.inferno, .zones .wow, .zones .gear.shifted b, .dev.just, .dev-cheer:not(:empty) { animation:none } .brick-burst { display:none } }
 #devGo { padding:14px; font-size:17px }
 .dev-status { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:-8px 0 20px; padding:8px 8px 8px 14px; border-radius:14px; background:var(--glass-hi); font-size:13px }
-.dev-status > span { display:flex; flex-wrap:wrap; gap:4px 14px }
+.dev-status > span { display:flex; flex-wrap:wrap; gap:4px 14px; margin-right:auto }
 .dev-state { font-size:12.5px; color:var(--muted) } .dev-state::before { content:''; display:inline-block; width:8px; height:8px; border-radius:50%; background:#8a93a0; margin-right:6px }
 .dev-state.on { color:var(--ink) } .dev-state.on::before { background:#4bd06a; box-shadow:0 0 6px #4bd06a }
 .dev-diff { flex-direction:row; align-items:center; justify-content:space-between; gap:12px; font-size:13px }
@@ -625,6 +626,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     <div class="gate block panel">
       <h1>le-mollet</h1>
       <p class="muted">Ce serveur est en ligne : connecte-toi, ou crée ton compte, pour rouler avec les autres.</p>
+      <p class="dev-help" id="gateBt"></p>
     </div>
   </main>
   <main id="profiles">
@@ -697,7 +699,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   <main id="home" hidden>
     <div class="block panel">
       <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1><span id="homeHello"></span><span id="homeRole"></span></h1><div class="chips" id="homeStats"></div><div id="homeLevel"></div></div></div>
-      <div class="dev-status"><span id="homeDevices"></span><button class="btn" id="goDevices">Équipements</button></div>
+      <div class="dev-status"><span id="homeDevices"></span><button class="btn" id="goDevices">Équipements</button><button class="btn" id="homeSignOut" type="button" hidden>Se déconnecter</button></div>
       <button class="home-event" id="homeEvent" hidden></button>
       <div class="tiles">
         <button class="tile ride" id="goRide">
@@ -764,6 +766,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <p class="muted" id="accountState"></p>
         <div id="accountIn"></div>
         <button class="btn" id="signOut" type="button" hidden>Se déconnecter</button>
+        <div id="accountSettings" hidden></div>
       </section>
     </div>
   </main>
@@ -5348,15 +5351,31 @@ function renderSensors() {
     h('span', { class:'act' }, pads === 1 ? 'Deux poignées ? Clique encore pour l\'autre' : pads ? 'Boutons noirs : à droite ça monte, à gauche ça descend' : 'Cliquer pour chercher : vitesses virtuelles et boutons du jeu'));
   for (const id of ['#devTrainer', '#devHr', '#devPad']) $(id).disabled = !ok;
   $('#devGo').textContent = t ? "C'est parti ›" : 'Continuer en mode démo ›';
-  $('#homeDevices').replaceChildren(chip(t, t ? `${t.name} · ${Math.round(t.power)} W` : ride.list?.trainer ? `Trainer du serveur : ${ride.list.trainer}` : 'Mode démo (curseur)'), ...(hr ? [chip(true, `${hr.bpm ?? '…'} bpm`)] : []));
+  $('#homeDevices').replaceChildren(chip(t, t ? `${t.name} · ${Math.round(t.power)} W` : ride.list?.trainer ? `Trainer du serveur : ${ride.list.trainer}` : ok ? 'Mode démo (curseur)' : 'Pas de Bluetooth web : Chrome ou Edge'), ...(hr ? [chip(true, `${hr.bpm ?? '…'} bpm`)] : []));
   renderDevHelp(ok);
   $('#difficulty').value = Math.round((current?.difficulty ?? 0.5) * 100);
   $('#difficultyOut').textContent = `${$('#difficulty').value} %`;
 }
+// Can this browser reach a trainer? The API (Chrome and Edge only, https or localhost), then an adapter that is
+// on. Answered before anything is tried, so nobody signs up for a demo ride by mistake.
+async function btStatus() {
+  if (!navigator.bluetooth) return { ok:false, why:'absent' };
+  const adapter = await navigator.bluetooth.getAvailability?.().catch(() => null);
+  return adapter === false ? { ok:false, why:'adapter' } : { ok:true, why:adapter === null ? 'unknown' : '' };
+}
+const BT_WHY = { absent:'Bluetooth web absent : il faut Google Chrome ou Microsoft Edge pour parler au home trainer.', adapter:'Ce navigateur sait parler Bluetooth, mais aucun adaptateur Bluetooth n\'est allumé sur cet appareil.' };
+// On the sign-in gate (a public server): the verdict before the account.
+btStatus().then(s => {
+  const el = $('#gateBt');
+  el.classList.toggle('warn', !s.ok);
+  el.replaceChildren(s.ok ? h('span', { class:'dev-state on' }, 'Bluetooth web prêt : ton home trainer se connectera depuis cette page.')
+    : h('span', {}, h('b', {}, BT_WHY[s.why]), ' Sans, tu peux quand même rouler en mode démo (curseur).'));
+});
 // How to connect, step by step; and when the browser has no Bluetooth, how to get it.
 function renderDevHelp(ok) {
   const el = $('#devHint'), ua = navigator.userAgent, chromium = /Chrome|Edg\//.test(ua) && !/Firefox/.test(ua);
   el.classList.toggle('warn', !ok);
+  if (ok) btStatus().then(s => { if (s.why === 'adapter') { el.classList.add('warn'); el.prepend(h('p', {}, h('b', {}, BT_WHY.adapter), ' Allume-le, puis reviens sur cet écran.')) } });
   if (ok) return el.replaceChildren(
     ride.list?.trainer ? h('p', {}, `Le serveur pilote aussi « ${ride.list.trainer} » : ton trainer à toi passe en priorité.`) : '',
     h('ol', {},
@@ -6324,17 +6343,53 @@ function accountForm(done) {
 }
 $('#signinGate .gate').append(accountForm(() => { $('#signinGate').hidden = true; showProfiles() }));
 $('#accountIn').append(accountForm());
+// The account's settings, signed in: the browsers it is on, a new password, sign out everywhere, delete it.
+function accountSettings() {
+  const post = (path, form) => authed(path, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:new URLSearchParams(form ? new FormData(form) : {}) });
+  const fail = async (err, r) => { const t = await r?.text().catch(() => ''); err.textContent = ACCOUNT_ERRORS[t] ?? (t || 'Serveur injoignable.') };
+  const pwErr = h('p', { class:'club-error', role:'alert' });
+  const pw = h('form', { class:'account-form' }, h('h3', {}, 'Changer le mot de passe'),
+    h('label', {}, 'Mot de passe actuel', h('input', { name:'password', type:'password', required:'', autocomplete:'current-password' })),
+    h('label', {}, 'Nouveau mot de passe', h('input', { name:'new', type:'password', required:'', minlength:8, maxlength:128, autocomplete:'new-password' })),
+    h('div', { class:'form-actions' }, h('button', { class:'btn primary' }, 'Changer')), pwErr);
+  pw.addEventListener('submit', async e => {
+    e.preventDefault();
+    const r = await post('/auth/password', pw).catch(() => null);
+    if (!r?.ok) return fail(pwErr, r);
+    pw.reset(); pwErr.textContent = 'Mot de passe changé. Les autres appareils sont déconnectés.';
+    whoami();
+  });
+  const delErr = h('p', { class:'club-error', role:'alert' });
+  const del = h('form', { class:'account-form' }, h('h3', {}, 'Supprimer le compte'),
+    h('p', { class:'muted' }, 'Le compte, ses connexions et les profils qu\'il possède sur ce serveur disparaissent. Ce qui est dans ce navigateur reste.'),
+    h('label', {}, 'Mot de passe', h('input', { name:'password', type:'password', required:'', autocomplete:'current-password' })),
+    h('div', { class:'form-actions' }, h('button', { class:'btn danger' }, 'Supprimer le compte')), delErr);
+  del.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!confirm(`Supprimer le compte ${auth.me.name} ? C'est définitif.`)) return;
+    const r = await post('/auth/delete', del).catch(() => null);
+    if (!r?.ok) return fail(delErr, r);
+    location.reload();
+  });
+  const everywhere = h('button', { class:'btn', type:'button', onclick: async () => { await authed('/auth/logout?all=1', { method:'POST' }).catch(() => {}); location.reload() } }, 'Se déconnecter partout');
+  return h('div', { class:'account-settings' }, h('p', { class:'muted', id:'accountDevices' }), everywhere, pw, del);
+}
+$('#accountSettings').append(accountSettings());
 async function whoami() {
   auth.me = await authed('/whoami').then(r => r.json()).catch(() => auth.me);
   const { me } = auth, signed = !!me.account, owner = me.mode === 'local' && me.role === 'admin' && !signed;
   // Cloud: nothing but the sign-in until an account says who this is.
   if (me.mode === 'cloud' && !signed) { for (const sc of SCREENS) $(sc).hidden = true; $('#signinGate').hidden = false; return }
+  if (signed && !ride.list) await loadLists(); // refused before the sign-in
   $('#accountState').textContent = signed ? `Connecté : ${me.name} · ${ROLE_NAMES[me.role]}`
     : owner ? 'Mode local : pas besoin de compte, tout reste sur ce PC et tu es admin.'
     : 'Pas besoin de compte pour rouler ici. Avec un compte, ce serveur te reconnaît (et peut te donner un rôle).';
   $('#accountIn').hidden = signed || owner;
   $('#signOut').hidden = !signed;
-  $('#signOut').onclick = async () => { await authed('/auth/logout', { method:'POST' }).catch(() => {}); location.reload() };
+  $('#accountSettings').hidden = !signed;
+  if (signed) $('#accountDevices').textContent = me.devices === 1 ? 'Connecté sur cet appareil seulement.' : `Connecté sur ${me.devices} appareils.`;
+  $('#homeSignOut').hidden = !signed;
+  $('#signOut').onclick = $('#homeSignOut').onclick = async () => { await authed('/auth/logout', { method:'POST' }).catch(() => {}); location.reload() };
   $('#homeRole').replaceChildren(...(me.role !== 'rider' ? [h('span', { class:'role-chip' }, ROLE_NAMES[me.role])] : []));
 }
 whoami();
@@ -6380,7 +6435,6 @@ const BADGES = [
   ['up1000', '⛰️', '1 000 m', '1 000 m de dénivelé cumulé', 200, s => [s.climbed, 1000]],
   ['everest', '🏔️', 'Everest', '8 848 m de dénivelé cumulé', 1000, s => [s.climbed, 8848]],
   ['up25k', '🛰️', 'Stratosphère', '25 000 m de dénivelé cumulé', 2000, s => [s.climbed, 25000]],
-  if (signed && !ride.list) await loadLists(); // refused before the sign-in
   ['fondo', '🏅', 'Gran fondo', '100 km en une sortie', 800, s => [s.longestKm, 100]],
   ['twoh', '⏱️', 'Deux heures', '2 h en selle d\'un coup', 300, s => [s.longestH, 2]],
   ['col', '🧗', 'Premier col', 'Monte un col jusqu\'en haut', 300, s => [s.climbs, 1]],

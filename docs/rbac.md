@@ -42,7 +42,10 @@ compte*).
 - **Password**: 8 to 128 characters, stored as an Argon2id hash (its own salt, PHC string), never as such.
 - `POST /auth/signup` or `/auth/login` with `name` and `password` (form-encoded) set an `lm_session` cookie:
   HttpOnly, SameSite=Lax, 30 days, and `Secure` when `LE_MOLLET_PUBLIC_URL` starts with `https://`. Sessions are
-  kept in the database: a restart signs nobody out. `/auth/logout` ends one.
+  kept in the database: a restart signs nobody out. `/auth/logout` ends one, `/auth/logout?all=1` every one of the account.
+- **Settings** (Profile > Compte, signed in): `POST /auth/password` (`password`, `new`) changes the password and signs
+  the other browsers out; `POST /auth/delete` (`password`) removes the account, its sessions and the profiles it
+  owns (their club seats and friendships with them). `/whoami` tells how many browsers are signed in (`devices`).
 - **Password guessing**: five wrong passwords for a name lock that name for 15 minutes. A wrong name and a wrong
   password get the same answer, in the same time (an unknown name is checked against a dummy hash).
 - Requests from another site's page are refused, sign-in included (docs/security.md).

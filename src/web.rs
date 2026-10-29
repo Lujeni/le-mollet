@@ -18,7 +18,8 @@
 //!   GET /power?session=<n>&w=<W>[&cad=&hr=&src=bt]  the rider's power: demo slider, or the browser's own trainer
 //!   GET /segments?id=<id>                      KOM and sprint leaderboards of a course or open world
 //!   GET /whoami                                the caller's identity, role and permissions (docs/rbac.md)
-//!   POST /auth/signup, /auth/login  (name=&password=, form-encoded)   a Le Mollet account; POST /auth/logout signs out
+//!   POST /auth/signup, /auth/login  (name=&password=, form-encoded)   a Le Mollet account; POST /auth/logout[?all=1] signs out
+//!   POST /auth/password  (password=&new=)   a new password, the other browsers signed out;  POST /auth/delete  (password=)   the account gone
 //!   POST /admin/segments/reset?id=<id>&name=<segment>  wipe a leaderboard (moderate)
 //!
 //!   GET /emote?session=<n>&course=<id>&e=<rideon|wave|fire|laugh|party>[&to=<rider id>]  a bubble over my rider; a Ride On to someone
@@ -533,6 +534,44 @@ impl App {
         true
     }
 
+    /// End one sign-in session.
+    fn end_session(&self, id: &str) -> usize {
+        let gone = self.sessions.lock().unwrap_or_else(|e| e.into_inner()).remove(id).is_some();
+        if let Err(e) = self.db.delete("sessions", id) { eprintln!("sessions: {e}") }
+        gone as usize
+    }
+
+    /// End an account's sessions, all but `keep` (this browser's, after a password change). How many went.
+    fn end_sessions(&self, account: u64, keep: Option<&str>) -> usize {
+        let gone: Vec<String> = self.sessions.lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|(k, s)| s.account == account && Some(k.as_str()) != keep).map(|(k, _)| k.clone()).collect();
+        gone.iter().map(|k| self.end_session(k)).sum()
+    }
+
+    /// An account is gone: so are the profiles it owned, and their club seats and friendships.
+    fn forget_profiles(&self, account: u64) {
+        let pids: Vec<String> = {
+            let mut riders = self.riders.lock().unwrap_or_else(|e| e.into_inner());
+            let pids: Vec<String> = riders.riders.iter().filter(|(_, r)| r.owner == Some(account)).map(|(k, _)| k.clone()).collect();
+            for p in &pids { riders.riders.remove(p); if let Err(e) = self.db.delete("riders", p) { eprintln!("riders: {e}") } }
+            pids
+        };
+        if pids.is_empty() { return }
+        {
+            let mut clubs = self.clubs.lock().unwrap_or_else(|e| e.into_inner());
+            for p in &pids { clubs.leave(p) }
+            if let Err(e) = clubs.save(&self.db) { eprintln!("clubs: {e}") }
+        }
+        let mut friends = self.friends.lock().unwrap_or_else(|e| e.into_inner());
+        for p in &pids {
+            let handles: Vec<String> = friends.people.get(p).map(|me| me.friends.iter().chain(&me.asked).filter_map(|k| friends.people.get(k)).map(|o| o.handle()).collect()).unwrap_or_default();
+            for h in handles { let _ = friends.remove(p, &h); }
+            let others: Vec<String> = friends.sent(p);
+            for h in others { let _ = friends.remove(p, &h); }
+            friends.people.remove(p);
+            if let Err(e) = self.db.delete("friends", p) { eprintln!("friends: {e}") }
+        }
+    }
+
     fn add_world(&self, track: Track) -> String {
         let id = track.id.clone();
         self.tracks.write().unwrap().push(Arc::new(track));
@@ -615,8 +654,8 @@ fn public_id(sid: u64) -> u64 {
 
 /// Calls that change something: POST only (`/rider` with a weight too). Steering one's own ride stays GET: it
 /// needs the ride's session, which only its page knows.
-const POST_ONLY: [&str; 15] = ["/worlds/new", "/event/create", "/event/join", "/event/leave", "/event/delete", "/club/create", "/club/join", "/club/leave",
-    "/friend/ask", "/friend/accept", "/friend/remove", "/friend/ride", "/friend/unride", "/auth/logout", "/admin/segments/reset"];
+const POST_ONLY: [&str; 17] = ["/worlds/new", "/event/create", "/event/join", "/event/leave", "/event/delete", "/club/create", "/club/join", "/club/leave",
+    "/friend/ask", "/friend/accept", "/friend/remove", "/friend/ride", "/friend/unride", "/auth/logout", "/auth/password", "/auth/delete", "/admin/segments/reset"];
 
 /// Emotes a rider can send.
 const EMOTES: [&str; 5] = ["rideon", "wave", "fire", "laugh", "party"];
@@ -708,7 +747,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let client = client_ip(&req, peer, app.mode);
     // What costs the server something (a password hash, a world, a row that stays) is counted per client.
     let budget = match path {
-        "/auth/signup" => Some(("auth", 10, 3600)),
+        "/auth/signup" | "/auth/password" | "/auth/delete" => Some(("auth", 10, 3600)),
         "/auth/login" => Some(("auth", 10, 3600)),
         "/worlds/new" => Some(("world", 3, 600)),
         "/club/create" | "/event/create" => Some(("create", 10, 3600)),
@@ -777,7 +816,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/workouts", _) => reply(&mut sock, "200 OK", "application/json", app.workouts_json.as_bytes()).await,
         ("/courses", _) => reply(&mut sock, "200 OK", "application/json", app.list_json.as_bytes()).await,
         ("/whoami", _) => {
-            let body = json!({ "role": who.role, "name": who.name, "account": who.account, "perms": who.role.perms(), "mode": app.mode }).to_string();
+            // `devices`: the account's live sessions, for its settings.
+            let devices = who.account.map(|id| app.sessions.lock().unwrap_or_else(|e| e.into_inner()).values().filter(|s| s.account == id && s.expires > std::time::SystemTime::now()).count());
+            let body = json!({ "role": who.role, "name": who.name, "account": who.account, "perms": who.role.perms(), "mode": app.mode, "devices": devices }).to_string();
             reply(&mut sock, "200 OK", "application/json", body.as_bytes()).await
         }
         ("/auth/signup" | "/auth/login", _) if req.starts_with("POST ") => {
@@ -837,11 +878,34 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             }
         }
         ("/auth/logout", _) => {
-            if let Some(c) = cookie(&req, SESSION_COOKIE) {
-                app.sessions.lock().unwrap_or_else(|e| e.into_inner()).remove(c);
-                if let Err(e) = app.db.delete("sessions", c) { eprintln!("sessions: {e}") }
+            // `all=1`: every browser of the account, not only this one.
+            match (cookie(&req, SESSION_COOKIE), who.account, param(query, "all")) {
+                (_, Some(id), Some("1")) => app.end_sessions(id, None),
+                (Some(c), ..) => app.end_session(c),
+                _ => 0,
+            };
+            redirect(&mut sock, "/", Some(CLEAR_COOKIE)).await
+        }
+        // The account's own settings: a new password (the other browsers sign out), or the account gone with its
+        // sessions and the profiles it owns.
+        ("/auth/password" | "/auth/delete", _) if req.starts_with("POST ") => {
+            let Some((id, name)) = who.account.zip(who.name.clone()) else { return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await };
+            let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
+            let (password, new) = (param(form, "password").map(decode).unwrap_or_default(), param(form, "new").map(decode).unwrap_or_default());
+            let res = tokio::task::block_in_place(|| if path == "/auth/password" { account::set_password(&app.db, &name, &password, &new) } else { account::delete(&app.db, &name, &password) });
+            match res {
+                Ok(_) if path == "/auth/password" => {
+                    app.end_sessions(id, cookie(&req, SESSION_COOKIE));
+                    reply(&mut sock, "204 No Content", "text/plain", b"").await
+                }
+                Ok(_) => {
+                    app.end_sessions(id, None);
+                    app.forget_profiles(id);
+                    eprintln!("account {name} deleted itself");
+                    redirect(&mut sock, "/", Some(CLEAR_COOKIE)).await
+                }
+                Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
             }
-            redirect(&mut sock, "/", Some(&format!("{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"))).await
         }
         ("/admin/segments/reset", Some(t)) => {
             let name = param(query, "name").map(decode).unwrap_or_default();
@@ -1849,6 +1913,7 @@ async fn ride_session(
 
 /// Sign-in sessions: an HttpOnly cookie naming an entry of `App::sessions`.
 const SESSION_COOKIE: &str = "lm_session";
+const CLEAR_COOKIE: &str = "lm_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
 const SESSION_TTL: Duration = Duration::from_secs(30 * 86_400);
 
 #[derive(Clone, Serialize, serde::Deserialize)]

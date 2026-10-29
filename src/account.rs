@@ -37,10 +37,8 @@ pub fn by_id(db: &Db, id: u64) -> Option<Account> {
 /// Create an account. Slow on purpose (the hash): call it off the async threads.
 pub fn signup(db: &Db, name: &str, password: &str, now: u64) -> Result<Account, &'static str> {
     if !valid_name(name) { return Err("name: 3 to 24 letters, digits, - or _") }
-    if password.chars().count() < 8 { return Err("password: 8 characters at least") }
-    if password.len() > 128 { return Err("password: 128 characters at most") }
     if find(db, name).is_some() { return Err("name taken") }
-    let hash = Argon2::default().hash_password(password.as_bytes()).map_err(|_| "could not hash the password")?.to_string();
+    let hash = hash(password)?;
     // A random id below 2^53, so the page reads it exactly.
     let id = ((uuid::Uuid::new_v4().as_u128() >> 75) as u64).max(1);
     let a = Account { id, name: name.into(), hash, created: now };
@@ -50,6 +48,28 @@ pub fn signup(db: &Db, name: &str, password: &str, now: u64) -> Result<Account, 
         Ok(false) => Err("name taken"),
         Err(_) => Err("could not save the account"),
     }
+}
+
+/// 8 to 128 characters, hashed. Slow on purpose: call it off the async threads.
+fn hash(password: &str) -> Result<String, &'static str> {
+    if password.chars().count() < 8 { return Err("password: 8 characters at least") }
+    if password.len() > 128 { return Err("password: 128 characters at most") }
+    Ok(Argon2::default().hash_password(password.as_bytes()).map_err(|_| "could not hash the password")?.to_string())
+}
+
+/// A new password, the current one checked first.
+pub fn set_password(db: &Db, name: &str, password: &str, new: &str) -> Result<Account, &'static str> {
+    let mut a = login(db, name, password)?;
+    a.hash = hash(new)?;
+    db.put("accounts", &key(name), &a).map_err(|_| "could not save the account")?;
+    Ok(a)
+}
+
+/// The account gone, its password checked first. Its sessions and profiles are the server's to end (src/web.rs).
+pub fn delete(db: &Db, name: &str, password: &str) -> Result<Account, &'static str> {
+    let a = login(db, name, password)?;
+    db.delete("accounts", &key(name)).map_err(|_| "could not delete the account")?;
+    Ok(a)
 }
 
 /// A hash to check an unknown name against, so a wrong name takes as long as a wrong password.
@@ -80,5 +100,14 @@ mod tests {
         assert_eq!(login(&db, "Julien", "pedale-douce").unwrap_err(), "wrong name or password");
         assert_eq!(login(&db, "nobody", "pédale-douce").unwrap_err(), "wrong name or password");
         assert_eq!(by_id(&db, a.id).unwrap().name, "Julien");
+
+        // A new password needs the old one; the account goes the same way.
+        assert_eq!(set_password(&db, "julien", "wrong-one", "nouveau-mdp").unwrap_err(), "wrong name or password");
+        assert_eq!(set_password(&db, "julien", "pédale-douce", "court").unwrap_err(), "password: 8 characters at least");
+        assert_eq!(set_password(&db, "julien", "pédale-douce", "nouveau-mdp").unwrap().id, a.id);
+        assert!(login(&db, "julien", "pédale-douce").is_err() && login(&db, "julien", "nouveau-mdp").is_ok());
+        assert_eq!(delete(&db, "julien", "pédale-douce").unwrap_err(), "wrong name or password");
+        assert_eq!(delete(&db, "julien", "nouveau-mdp").unwrap().id, a.id);
+        assert!(find(&db, "julien").is_none());
     }
 }
