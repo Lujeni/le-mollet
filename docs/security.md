@@ -71,7 +71,8 @@ checks are for.
   mailed to that address (`/auth/link`, src/mail.rs over SMTP): a torii magic link, a random 256-bit token kept in
   the database for 15 minutes and spent on first use (one UPDATE, so two clicks cannot both win); the page posts it (`/auth/link/use`), so a mail scanner that
   opens the link does not spend it. The answer to `/auth/link` is the same for a known and an unknown address, and
-  the mail is sent off the request: nothing to enumerate, nothing to time. 5 links an hour per client. Nothing to
+  the mail is sent off the request: nothing to enumerate, nothing to time; a sign-up with an address that has an
+  account answers the same too, and sends nothing. 5 links an hour per client. Nothing to
   guess, nothing to leak, and the settings (e-mail, delete) trust the session, which came from the mailbox.
 - **Passwords** (home only): Argon2id hashes, torii's; five wrong passwords from one client lock that name for that client for 15
   minutes (another client cannot lock you out), and sign-ins are limited to 10 an hour per client.

@@ -906,6 +906,12 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                             app.mail_link(&u, &token.token, &req); // the first sign-in is by the link: the mailbox proven before anything
                             reply(&mut sock, "202 Accepted", "text/plain", b"link sent").await
                         }
+                        Err("email taken") => {
+                            // An account already: nothing to tell a stranger (the same answer), and nothing sent: the
+                            // mailbox's owner signs in with the other brick.
+                            audit("signup.existing", &[("email", &email), ("ip", &client)]);
+                            reply(&mut sock, "202 Accepted", "text/plain", b"link sent").await
+                        }
                         Err(e) => { audit("signup.refused", &[("email", &email), ("reason", e), ("ip", &client)]); reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await }
                     };
                 }
