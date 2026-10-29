@@ -6380,6 +6380,7 @@ const BADGES = [
   ['up1000', '⛰️', '1 000 m', '1 000 m de dénivelé cumulé', 200, s => [s.climbed, 1000]],
   ['everest', '🏔️', 'Everest', '8 848 m de dénivelé cumulé', 1000, s => [s.climbed, 8848]],
   ['up25k', '🛰️', 'Stratosphère', '25 000 m de dénivelé cumulé', 2000, s => [s.climbed, 25000]],
+  if (signed && !ride.list) await loadLists(); // refused before the sign-in
   ['fondo', '🏅', 'Gran fondo', '100 km en une sortie', 800, s => [s.longestKm, 100]],
   ['twoh', '⏱️', 'Deux heures', '2 h en selle d\'un coup', 300, s => [s.longestH, 2]],
   ['col', '🧗', 'Premier col', 'Monte un col jusqu\'en haut', 300, s => [s.climbs, 1]],
@@ -6687,10 +6688,14 @@ $('#autoBtn').addEventListener('click', () => {
   $('#autoBtn').classList.toggle('on', ride.auto);
   $('#autoBtn').setAttribute('aria-pressed', ride.auto);
 });
-Promise.all(['/courses', '/workouts'].map(u => fetch(u).then(r => r.ok ? r.json() : null).catch(() => null))).then(([list, workouts]) => {
-  [ride.list, ride.workouts] = [list, workouts ?? []];
-  if (current && !$('#home').hidden) showHome();
-});
+// The courses and workouts: at load, and again after a sign-in when the first ask was refused (cloud mode).
+function loadLists() {
+  return Promise.all(['/courses', '/workouts'].map(u => fetch(u).then(r => r.ok ? r.json() : null).catch(() => null))).then(([list, workouts]) => {
+    [ride.list, ride.workouts] = [list, workouts ?? []];
+    if (current && !$('#home').hidden) showHome();
+  });
+}
+loadLists();
 showProfiles();
 </script>
 </body>
