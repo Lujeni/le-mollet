@@ -10,7 +10,7 @@ for hardware to support: tell us how your trainer did with a [hardware report](h
 - **Free forever.** No subscription, no paywall, ever.
 - **No account required.** Run it on your PC and ride: no sign-up, everything stays local, you are admin. Open it to
   your LAN with `serve --lan`. A public server (`--mode cloud`) asks riders for a Le Mollet account, a name
-  and an e-mail, a password if they like, else a sign-in link by mail ([accounts and roles](docs/rbac.md)).
+  and an e-mail, no password: a sign-in link by mail ([accounts and roles](docs/rbac.md)).
 - **Self-hostable.** Run the whole thing at home, on your own machine or LAN.
 - **Highly modular.** Trainers, courses, terrain and UI are independent pieces you can swap or extend.
 - **One binary.** Download a [release](https://github.com/Lujeni/le-mollet/releases) for Linux, macOS or Windows, run

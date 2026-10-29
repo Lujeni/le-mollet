@@ -34,11 +34,10 @@ to show or hide controls; the server checks again on every request.
 
 ## Accounts
 
-A Le Mollet account is a name and a password, or a name and an e-mail, or all three (`src/account.rs`), created
-from the page: **the sign-in screen** in cloud mode, or **Profile > Compte** elsewhere (same form: *Se connecter*,
-*Créer un compte*, or *Recevoir un lien par e-mail*). In cloud mode the e-mail is required and the password
-optional: an account without one signs in by a link sent to its mailbox (15 minutes, one use; docs/security.md),
-and the first sign-in proves the address. The e-mail is changed from the account settings, password in hand.
+A Le Mollet account (`src/account.rs`) is, at home, a name and a password (**Profile > Compte**: *Se connecter* or
+*Créer un compte*); on a public server, a name and an e-mail and no password at all (**the sign-in screen**): every
+sign-in is a link sent to the mailbox (15 minutes, one use; docs/security.md), and the first one proves the address.
+The e-mail is changed from the account settings; at home, password in hand.
 
 - **Name**: 3 to 24 letters, digits, `-` or `_`; "Julien" and "julien" are one account.
 - **Password**: 8 to 128 characters, stored as an Argon2id hash (its own salt, PHC string), never as such.

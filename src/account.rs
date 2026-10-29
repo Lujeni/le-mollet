@@ -90,9 +90,15 @@ pub fn set_password(db: &Db, name: &str, password: &str, new: &str) -> Result<Ac
     Ok(a)
 }
 
-/// A new e-mail, the password checked first (an account without one got here by its mail: it has no other key).
-pub fn set_email(db: &Db, name: &str, password: &str, email: &str) -> Result<Account, &'static str> {
-    let mut a = login(db, name, password)?;
+/// The account behind a settings change: at home its password, checked; on a public server there is none, the
+/// session is the proof (it came from the mailbox), `None`.
+fn owner(db: &Db, name: &str, password: Option<&str>) -> Result<Account, &'static str> {
+    match password { Some(p) => login(db, name, p), None => find(db, name).ok_or("no such account") }
+}
+
+/// A new e-mail.
+pub fn set_email(db: &Db, name: &str, password: Option<&str>, email: &str) -> Result<Account, &'static str> {
+    let mut a = owner(db, name, password)?;
     let email = email.trim().to_ascii_lowercase();
     if !valid_email(&email) { return Err("email: not an address") }
     if by_email(db, &email).is_some_and(|o| o.id != a.id) { return Err("email taken") }
@@ -101,9 +107,9 @@ pub fn set_email(db: &Db, name: &str, password: &str, email: &str) -> Result<Acc
     Ok(a)
 }
 
-/// The account gone, its password checked first. Its sessions and profiles are the server's to end (src/web.rs).
-pub fn delete(db: &Db, name: &str, password: &str) -> Result<Account, &'static str> {
-    let a = login(db, name, password)?;
+/// The account gone. Its sessions and profiles are the server's to end (src/web.rs).
+pub fn delete(db: &Db, name: &str, password: Option<&str>) -> Result<Account, &'static str> {
+    let a = owner(db, name, password)?;
     db.delete("accounts", &key(name)).map_err(|_| "could not delete the account")?;
     Ok(a)
 }
@@ -195,8 +201,8 @@ mod tests {
         assert_eq!(set_password(&db, "julien", "pédale-douce", "court").unwrap_err(), "password: 8 characters at least");
         assert_eq!(set_password(&db, "julien", "pédale-douce", "nouveau-mdp").unwrap().id, a.id);
         assert!(login(&db, "julien", "pédale-douce").is_err() && login(&db, "julien", "nouveau-mdp").is_ok());
-        assert_eq!(delete(&db, "julien", "pédale-douce").unwrap_err(), "wrong name or password");
-        assert_eq!(delete(&db, "julien", "nouveau-mdp").unwrap().id, a.id);
+        assert_eq!(delete(&db, "julien", Some("pédale-douce")).unwrap_err(), "wrong name or password");
+        assert_eq!(delete(&db, "julien", Some("nouveau-mdp")).unwrap().id, a.id);
         assert!(find(&db, "julien").is_none());
     }
 
@@ -214,9 +220,13 @@ mod tests {
         assert_eq!(by_email(&db, "MARIE@mail.fr").unwrap().id, m.id);
         assert!(by_email(&db, "nobody@mail.fr").is_none());
         let j = signup(&db, "Julien", None, Some("pédale-douce"), 1).unwrap();
-        assert_eq!(set_email(&db, "julien", "pédale-douce", "marie@mail.fr").unwrap_err(), "email taken");
-        assert_eq!(set_email(&db, "julien", "pédale-douce", "ju@mail.fr").unwrap().email.as_deref(), Some("ju@mail.fr"));
+        assert_eq!(set_email(&db, "julien", Some("pédale-douce"), "marie@mail.fr").unwrap_err(), "email taken");
+        assert_eq!(set_email(&db, "julien", Some("pédale-douce"), "ju@mail.fr").unwrap().email.as_deref(), Some("ju@mail.fr"));
         assert_eq!(by_email(&db, "ju@mail.fr").unwrap().id, j.id);
+        // On a public server nobody has a password: the session vouches, `None`.
+        assert_eq!(set_email(&db, "marie", None, "m2@mail.fr").unwrap().email.as_deref(), Some("m2@mail.fr"));
+        assert_eq!(delete(&db, "marie", None).unwrap().id, m.id);
+        assert_eq!(delete(&db, "marie", None).unwrap_err(), "no such account");
         assert!(link_mail("Marie", "https://x/?link=1").1.contains("https://x/?link=1"));
     }
 

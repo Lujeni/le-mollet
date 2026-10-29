@@ -18,8 +18,8 @@
 //!   GET /power?session=<n>&w=<W>[&cad=&hr=&src=bt]  the rider's power: demo slider, or the browser's own trainer
 //!   GET /segments?id=<id>                      KOM and sprint leaderboards of a course or open world
 //!   GET /whoami                                the caller's identity, role and permissions (docs/rbac.md)
-//!   POST /auth/signup (name=&email=&password=), /auth/login (name=&password=)   a Le Mollet account (form-encoded; in cloud mode the
-//!                                              e-mail is required and the password optional: without one, a link is mailed); POST /auth/logout[?all=1] signs out
+//!   POST /auth/signup (name=&email=&password=), /auth/login (name=&password=)   a Le Mollet account (form-encoded). In cloud mode there
+//!                                              are no passwords: the e-mail is required, /auth/login refused, a link mailed instead; POST /auth/logout[?all=1] signs out
 //!   POST /auth/link  (email=)   mails a sign-in link, {url}/?link=<t>;  POST /auth/link/use  (t=)   signs in with it (one use, 15 min)
 //!   POST /auth/password  (password=&new=)   a new password, the other browsers signed out;  POST /auth/email  (password=&email=)   a new e-mail;
 //!   POST /auth/delete  (password=)   the account gone
@@ -106,6 +106,7 @@ const DT: f32 = 0.1;
 const VENDOR: &[(&str, &str, &str, &[u8])] = &[
     ("/vendor/three.module.js", "text/javascript", "170", include_bytes!("../web/vendor/three.module.js")),
     ("/vendor/OrbitControls.js", "text/javascript", "170", include_bytes!("../web/vendor/OrbitControls.js")),
+    ("/vendor/logo.png", "image/png", "1", include_bytes!("../web/logo.png")), // docs/logo.png, 320 px
     ("/fonts/fredoka-latin.woff2", "font/woff2", "17", include_bytes!("../web/fonts/fredoka-latin.woff2")),
     ("/fonts/fredoka-latin-ext.woff2", "font/woff2", "17", include_bytes!("../web/fonts/fredoka-latin-ext.woff2")),
     ("/fonts/inter-latin.woff2", "font/woff2", "20", include_bytes!("../web/fonts/inter-latin.woff2")),
@@ -904,8 +905,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         }
         ("/auth/challenge", _) => reply(&mut sock, "200 OK", "application/json", json!({ "token": account::pow_challenge(unix_now()), "bits": account::POW_BITS }).to_string().as_bytes()).await,
         ("/auth/signup" | "/auth/login", _) if req.starts_with("POST ") => {
+            // A public server has no passwords: an e-mail and a link (`/auth/link`), nothing to guess or to leak.
+            if app.mode == Mode::Cloud && path == "/auth/login" { return reply(&mut sock, "400 Bad Request", "text/plain", b"no passwords here: sign in by e-mail").await }
             let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
-            let (name, password) = (param(form, "name").map(decode).unwrap_or_default(), param(form, "password").map(decode).unwrap_or_default());
+            let (name, password) = (param(form, "name").map(decode).unwrap_or_default(), param(form, "password").map(decode).filter(|_| app.mode != Mode::Cloud).unwrap_or_default());
             let name = name.trim().to_owned();
             let email = param(form, "email").map(decode).map(|e| e.trim().to_ascii_lowercase()).filter(|e| !e.is_empty());
             // A sign-up carries its proof of work (account::pow_check), each challenge good for one account; in
@@ -1003,10 +1006,11 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         // The account's own settings: a new password (the other browsers sign out), or the account gone with its
         // sessions and the profiles it owns.
         ("/auth/password" | "/auth/delete", _) if req.starts_with("POST ") => {
+            if app.mode == Mode::Cloud && path == "/auth/password" { return reply(&mut sock, "400 Bad Request", "text/plain", b"no passwords here: sign in by e-mail").await }
             let Some((id, name)) = who.account.zip(who.name.clone()) else { return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await };
             let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
             let (password, new) = (param(form, "password").map(decode).unwrap_or_default(), param(form, "new").map(decode).unwrap_or_default());
-            let res = tokio::task::block_in_place(|| if path == "/auth/password" { account::set_password(&app.db, &name, &password, &new) } else { account::delete(&app.db, &name, &password) });
+            let res = tokio::task::block_in_place(|| if path == "/auth/password" { account::set_password(&app.db, &name, &password, &new) } else { account::delete(&app.db, &name, (app.mode != Mode::Cloud).then_some(password.as_str())) });
             match res {
                 Ok(_) if path == "/auth/password" => {
                     app.end_sessions(id, cookie(&req, SESSION_COOKIE));
@@ -1025,7 +1029,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let Some(name) = who.name.clone().filter(|_| who.account.is_some()) else { return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await };
             let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
             let (password, email) = (param(form, "password").map(decode).unwrap_or_default(), param(form, "email").map(decode).unwrap_or_default());
-            match tokio::task::block_in_place(|| account::set_email(&app.db, &name, &password, &email)) {
+            match tokio::task::block_in_place(|| account::set_email(&app.db, &name, (app.mode != Mode::Cloud).then_some(password.as_str()), &email)) {
                 Ok(_) => reply(&mut sock, "204 No Content", "text/plain", b"").await,
                 Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
             }

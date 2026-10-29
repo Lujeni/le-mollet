@@ -67,11 +67,12 @@ checks are for.
   A page elsewhere cannot make a visitor's browser cancel an event or leave a club. Whatever changes something
   (events, clubs, friends, a profile, a world, signing out, a reset) is POST only: a link, a prefetch or a browser
   without `Sec-Fetch-Site` cannot do it by accident.
-- **E-mail**: in cloud mode an account carries an e-mail (one account each), and the password is optional: without
-  one, signing in is a link mailed to that address (`/auth/link`, src/mail.rs over SMTP), a random 256-bit token kept
+- **No passwords in cloud mode**: an account is a name and an e-mail (one account each); signing in is a link
+  mailed to that address (`/auth/link`, src/mail.rs over SMTP), a random 256-bit token kept
   in memory for 15 minutes and spent on first use; the page posts it (`/auth/link/use`), so a mail scanner that
   opens the link does not spend it. The answer to `/auth/link` is the same for a known and an unknown address, and
-  the mail is sent off the request: nothing to enumerate, nothing to time. 5 links an hour per client.
+  the mail is sent off the request: nothing to enumerate, nothing to time. 5 links an hour per client. Nothing to
+  guess, nothing to leak, and the settings (e-mail, delete) trust the session, which came from the mailbox.
 - **Passwords**: Argon2id hashes; five wrong passwords from one client lock that name for that client for 15
   minutes (another client cannot lock you out), and sign-ins are limited to 10 an hour per client.
 - **Sign-ups, against bots**: 3 an hour and 5 a day per client, 100 an hour for the whole server; and each one
