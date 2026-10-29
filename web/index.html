@@ -763,7 +763,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <h2>Compte</h2>
         <p class="muted" id="accountState"></p>
         <div id="accountIn"></div>
-        <a class="btn" id="signOut" href="/auth/logout" hidden>Se déconnecter</a>
+        <button class="btn" id="signOut" type="button" hidden>Se déconnecter</button>
       </section>
     </div>
   </main>
@@ -1093,7 +1093,7 @@ async function syncRider(p = current) {
   const key = p && `${p.id}|${p.weightKg}|${p.ftp}`;
   if (!p || key === riderSynced) return;
   riderSynced = key;
-  const r = await fetch(`/rider?${new URLSearchParams({ pid:p.id, weight:p.weightKg, ftp:p.ftp })}`).catch(() => null);
+  const r = await fetch(`/rider?${new URLSearchParams({ pid:p.id, weight:p.weightKg, ftp:p.ftp })}`, { method:'POST' }).catch(() => null);
   const body = await r?.json().catch(() => null);
   if (r?.status === 409 && body?.rider && body.rider.weight !== p.weightKg) {
     alert(`Poids refusé : il bouge de 2 kg par semaine au plus, pour des courses justes. On garde ${body.rider.weight} kg.`);
@@ -1908,7 +1908,16 @@ $('#surprise').addEventListener('click', () => {
 });
 
 // ---------- ride (live from the Rust engine: `le-mollet ride`) ----------
-const ride = { list:null, workouts:null, mode:'course', course:null, workout:null, state:null, events:null, session:0, auto:false, ended:false };
+const ride = { list:null, workouts:null, mode:'course', course:null, workout:null, state:null, events:null, session:0, auto:false, ended:false, known:new Map() };
+// A frame names the other riders (name, color, bike, flag) the first time only, then sends what moves: fill the rest back in.
+function frame(e) {
+  const f = JSON.parse(e.data);
+  for (const o of f.others ?? []) {
+    if (o.name !== undefined) ride.known.set(o.id, { name:o.name, color:o.color, frame:o.frame, country:o.country, bot:o.bot });
+    else Object.assign(o, ride.known.get(o.id));
+  }
+  return f;
+}
 const GRADE_COLORS = [[0, '#36aebf'], [3, '#5d9b3a'], [6, '#f2cd37'], [9, '#fe8a18'], [12, '#c91a09'], [Infinity, '#7a0c0c']];
 const gradeColor = g => GRADE_COLORS.find(([max]) => g < max)[1];
 
@@ -2203,6 +2212,7 @@ function openWorkout(w) {
   $('#courseName').textContent = w.name;
   $('#attrib').textContent = `Cibles en % de ta FTP (${current.ftp} W). Sons : Wikimedia Commons et Freesound (domaine public, CC0).`;
   ride.state = null;
+  ride.known.clear();
   ride.session = Math.floor(Math.random() * 2 ** 52);
   const demo = demoRide();
   $('#demo').hidden = !demo;
@@ -2214,7 +2224,7 @@ function openWorkout(w) {
   const which = w.imported ? `workout=custom&steps=${stepsQuery(w.steps)}&wname=${encodeURIComponent(w.name)}` : `workout=${w.id}`;
   ride.events = new EventSource(`/events?${which}&ftp=${current.ftp}&mass=${current.weightKg + 8}&session=${ride.session}`);
   ride.events.onmessage = e => {
-    ride.state = JSON.parse(e.data);
+    ride.state = frame(e);
     trackEnergy();
     recordSample();
     recordFull();
@@ -2231,7 +2241,7 @@ async function openZombie() {
   sub.textContent = 'Les zombies se réveillent…';
   amb.ctx ??= new AudioContext(); // still inside the click
   try {
-    const r = await fetch('/worlds/new?length=5&relief=flat');
+    const r = await fetch('/worlds/new?length=5&relief=flat', { method:'POST' });
     if (r.ok) await openRide((await r.json()).id, true, 'zombie');
   } finally {
     sub.textContent = text;
@@ -2271,6 +2281,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
   $('#courseName').textContent = zombie ? 'Zombie Halloween' : ride.course.name;
   $('#attrib').textContent = attribution();
   ride.state = null;
+  ride.known.clear();
   renderStats();
   ride.session = Math.floor(Math.random() * 2 ** 52);
   const demo = demoRide();
@@ -2294,7 +2305,7 @@ async function openRide(id, hasTerrain, kind = 'course', start = null, event = n
     if (kind === 'city' && ride.list.cities?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
     if (kind === 'course' && ride.list.courses?.find(c => c.id === id)?.buildings && w3.T) loadBuildings(id).catch(() => {});
   }
-  ride.events.onmessage = e => { ride.state = JSON.parse(e.data); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); renderFair(); renderZones(); renderStrip(); renderAhead(); renderBoard(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
+  ride.events.onmessage = e => { ride.state = frame(e); trackEnergy(); recordGhost(); recordSample(); recordFull(); trackSegments(); trackEmotes(); trackPowerup(); renderEvent(); renderFair(); renderZones(); renderStrip(); renderAhead(); renderBoard(); growRoute(); zombieNews(); renderStats(); renderJunction(); drawProfile(); mixAmbience(); checkEnd() };
   startAmbience().catch(() => {}); // no sound is not worth an error
   resize();
 }
@@ -5478,7 +5489,7 @@ async function renderBoards() {
   box.replaceChildren(h('h3', {}, 'Classements'), ...list.map(sg => {
     const rows = (sg.today.length ? sg.today : sg.all).slice(0, 5);
     return h('div', { class:'board' }, h('strong', { style:'display:flex;align-items:center;gap:6px' }, `${sg.kind === 'kom' ? '⛰' : '⚡'} ${sg.name}`, h('small', {}, sg.today.length ? ' · du jour' : ' · général'),
-        can('moderate') && sg.all.length ? h('button', { class:'btn reset', onclick: async () => { if (!confirm(`Effacer tous les temps de « ${sg.name} » ?`)) return; await authed(`/admin/segments/reset?id=${encodeURIComponent(ride.id)}&name=${encodeURIComponent(sg.name)}`); renderBoards() } }, 'Remettre à zéro') : ''),
+        can('moderate') && sg.all.length ? h('button', { class:'btn reset', onclick: async () => { if (!confirm(`Effacer tous les temps de « ${sg.name} » ?`)) return; await authed(`/admin/segments/reset?id=${encodeURIComponent(ride.id)}&name=${encodeURIComponent(sg.name)}`, { method:'POST' }); renderBoards() } }, 'Remettre à zéro') : ''),
       ...(rows.length ? rows.map((e, i) => h('div', { class:'board-row' + (e.who === mine ? ' me' : '') },
         h('span', { class:'jersey ' + (i === 0 ? sg.kind : '') }, String(i + 1)), h('i', { style:`background:${e.color}` }), h('span', {}, e.name), h('b', {}, hms(e.time))))
         : [h('small', { class:'muted' }, 'Personne encore : à toi de jouer !')]));
@@ -5954,7 +5965,8 @@ function renderPlan() {
 
 // ---------- events: group rides and races (src/event.rs), signed up by profile ----------
 const evs = { list:[], now:0, at:0, worlds:[] };
-const evApi = (path, args = {}) => fetch(`/event/${path}?${new URLSearchParams({ pid:current.id, me:current.name, ...args })}`)
+// Whatever changes something is a POST (the server refuses a GET): a link or a prefetch cannot do it.
+const evApi = (path, args = {}) => fetch(`/event/${path}?${new URLSearchParams({ pid:current.id, me:current.name, ...args })}`, { method: path === 'list' ? 'GET' : 'POST' })
   .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.json() });
 const evNow = () => evs.now + (Date.now() - evs.at) / 1000; // the server's clock
 const myWkg = () => (current.ftp / current.weightKg).toFixed(2);
@@ -6144,7 +6156,7 @@ function renderEvent() {
 // ---------- clubs: a name and a tag before members' names, kilometres of the week (kept by the server) ----------
 // The profile keeps its club's tag to show it on the road; the server is the reference (see src/club.rs).
 const clubName = () => current.club?.tag ? `[${current.club.tag}] ${current.name}` : current.name;
-const clubApi = (path, args = {}) => fetch(`/club${path}?${new URLSearchParams({ pid:current.id, me:current.name, ...args })}`)
+const clubApi = (path, args = {}) => fetch(`/club${path}?${new URLSearchParams({ pid:current.id, me:current.name, ...args })}`, { method: path ? 'POST' : 'GET' })
   .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.json() });
 function keepClub(c) {
   if (!c?.tag) c = null; // older servers answered {"members":null} for no club
@@ -6195,7 +6207,7 @@ $('#goClub').addEventListener('click', showClub);
 // ---------- friends: a handle (Name#1234), requests, and a friend's profile and rides (src/friend.rs) ----------
 // Friends see each other's profile and rides: a coach follows their riders. Sharing starts the first time the
 // screen opens: the page sends the history (its last 100 rides) once, then each ride it keeps.
-const friendApi = (path, args = {}) => fetch(`/friend${path}?${new URLSearchParams({ pid:current.id, me:current.name, country:current.country ?? '', ...args })}`)
+const friendApi = (path, args = {}) => fetch(`/friend${path}?${new URLSearchParams({ pid:current.id, me:current.name, country:current.country ?? '', ...args })}`, { method: path && path !== '/view' ? 'POST' : 'GET' })
   .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.json() });
 // One ride a request (the server reads 16 KB at most): a long trace is thinned to fit.
 function shareRide(r, p = current) {
@@ -6322,6 +6334,7 @@ async function whoami() {
     : 'Pas besoin de compte pour rouler ici. Avec un compte, ce serveur te reconnaît (et peut te donner un rôle).';
   $('#accountIn').hidden = signed || owner;
   $('#signOut').hidden = !signed;
+  $('#signOut').onclick = async () => { await authed('/auth/logout', { method:'POST' }).catch(() => {}); location.reload() };
   $('#homeRole').replaceChildren(...(me.role !== 'rider' ? [h('span', { class:'role-chip' }, ROLE_NAMES[me.role])] : []));
 }
 whoami();

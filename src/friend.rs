@@ -1,7 +1,9 @@
 //! Friends: each profile gets a handle, `Name#1234`; a request is sent to a handle, and once accepted both
 //! profiles see each other's profile and rides (a coach follows their riders this way). The page sends each ride
 //! it keeps; the server keeps the last ones. Handles are all the others ever see: profile ids stay on the server.
-//! Kept in the database (src/db.rs), one row per profile.
+//! Kept in the database (src/db.rs): one row per profile (handle, friends, the rides' ids and dates), and each
+//! ride as a row of its own (`rides:<pid>`), read only when a friend looks: a ride is a few KB of trace, so
+//! neither the memory nor a profile's row grows with them.
 //! ponytail: a pid is the only credential, like clubs (src/club.rs); in cloud mode the account owns the pid
 
 use crate::db::Db;
@@ -33,9 +35,16 @@ pub struct Person {
     /// Profile ids that asked, waiting for an answer.
     #[serde(default)]
     pub asked: Vec<String>,
-    /// The rides as the page keeps them (summary and trace), newest first.
+    /// The rides' ids and dates, newest first; each ride is a row of `rides:<pid>`.
     #[serde(default)]
-    pub rides: Vec<Value>,
+    pub kept: Vec<(String, String)>,
+    /// Older servers kept the rides themselves here: moved to their own rows on the first load.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    rides: Vec<Value>,
+}
+
+fn coll(pid: &str) -> String {
+    format!("rides:{pid}")
 }
 
 impl Person {
@@ -52,7 +61,14 @@ fn clean(name: &str) -> String {
 
 impl Friends {
     pub fn load(db: &Db) -> Result<Self> {
-        Ok(Self { people: db.all("friends")?.into_iter().collect() })
+        let mut f = Self { people: db.all("friends")?.into_iter().collect() };
+        // Rides an older server kept in the profile's row move to rows of their own.
+        let old: Vec<String> = f.people.iter().filter(|(_, p)| !p.rides.is_empty()).map(|(k, _)| k.clone()).collect();
+        for pid in &old {
+            for r in std::mem::take(&mut f.people.get_mut(pid).unwrap().rides) { let _ = f.add_ride(db, pid, r); }
+        }
+        f.save(db, &old.iter().map(String::as_str).collect::<Vec<_>>())?;
+        Ok(f)
     }
 
     /// Store these profiles.
@@ -73,7 +89,7 @@ impl Friends {
         let name = clean(name);
         let num = self.people.get(pid).map_or(seed % 10_000, |p| p.num);
         let num = (0..10_000).map(|i| (num + i) % 10_000).find(|n| !self.taken(pid, &name, *n)).unwrap_or(num);
-        let p = self.people.entry(pid.into()).or_insert_with(|| Person { name: name.clone(), num, country: None, friends: vec![], asked: vec![], rides: vec![] });
+        let p = self.people.entry(pid.into()).or_insert_with(|| Person { name: name.clone(), num, country: None, friends: vec![], asked: vec![], kept: vec![], rides: vec![] });
         (p.name, p.num, p.country) = (name, num, country);
         p
     }
@@ -123,20 +139,32 @@ impl Friends {
         Ok(other)
     }
 
-    /// A ride the page keeps (an object with an `id`); the same id again replaces it.
-    pub fn add_ride(&mut self, pid: &str, ride: Value) -> Result<(), &'static str> {
+    /// A ride the page keeps (an object with an `id`), stored as a row of its own; the same id again replaces it.
+    pub fn add_ride(&mut self, db: &Db, pid: &str, ride: Value) -> Result<(), &'static str> {
         let id = ride.get("id").and_then(Value::as_str).ok_or("ride: needs an id")?.to_owned();
+        let date = ride.get("date").and_then(Value::as_str).unwrap_or_default().to_owned();
         let p = self.people.get_mut(pid).ok_or("no such profile")?;
-        p.rides.retain(|r| r.get("id").and_then(Value::as_str) != Some(&id));
-        p.rides.insert(0, ride);
+        db.put(&coll(pid), &id, &ride).map_err(|_| "could not save the ride")?;
+        p.kept.retain(|r| r.0 != id);
+        p.kept.push((id, date));
         // Newest first by date (a backfill sends older rides after newer ones); ISO dates sort as text.
-        p.rides.sort_by(|a, b| b.get("date").and_then(Value::as_str).cmp(&a.get("date").and_then(Value::as_str)));
-        p.rides.truncate(MAX_RIDES);
+        p.kept.sort_by(|a, b| b.1.cmp(&a.1));
+        for (old, _) in p.kept.drain(MAX_RIDES.min(p.kept.len())..) { let _ = db.delete(&coll(pid), &old); }
         Ok(())
     }
 
-    pub fn drop_ride(&mut self, pid: &str, id: &str) {
-        if let Some(p) = self.people.get_mut(pid) { p.rides.retain(|r| r.get("id").and_then(Value::as_str) != Some(id)) }
+    pub fn drop_ride(&mut self, db: &Db, pid: &str, id: &str) {
+        if let Some(p) = self.people.get_mut(pid) {
+            p.kept.retain(|r| r.0 != id);
+            let _ = db.delete(&coll(pid), id);
+        }
+    }
+
+    /// A profile's rides as the page sent them, newest first.
+    pub fn rides(db: &Db, pid: &str) -> Vec<Value> {
+        let mut v: Vec<Value> = db.all(&coll(pid)).unwrap_or_default().into_iter().map(|(_, r)| r).collect();
+        v.sort_by(|a, b| b.get("date").and_then(Value::as_str).cmp(&a.get("date").and_then(Value::as_str)));
+        v
     }
 
     /// A friend's entry, and their profile id; only between friends.
@@ -181,16 +209,26 @@ mod tests {
         f.ask("c", "lujeni#2139").unwrap();
         assert!(f.view("b", "Coach1#0007").is_some());
 
-        // Rides: newest first by date, the same id replaced.
-        f.add_ride("a", json!({ "id":"r1", "date":"2026-10-01T10:00:00Z" })).unwrap();
-        f.add_ride("a", json!({ "id":"r2", "date":"2026-10-03T10:00:00Z" })).unwrap();
-        f.add_ride("a", json!({ "id":"r0", "date":"2026-09-01T10:00:00Z" })).unwrap();
-        f.add_ride("a", json!({ "id":"r1", "date":"2026-10-01T10:00:00Z", "name":"again" })).unwrap();
-        let ids = |f: &Friends| f.view("c", "Lujeni#2138").unwrap().1.rides.iter().map(|r| r["id"].as_str().unwrap().to_owned()).collect::<Vec<_>>();
+        // Rides: newest first by date, the same id replaced, each in a row of its own.
+        let db = Db::memory();
+        f.add_ride(&db, "a", json!({ "id":"r1", "date":"2026-10-01T10:00:00Z" })).unwrap();
+        f.add_ride(&db, "a", json!({ "id":"r2", "date":"2026-10-03T10:00:00Z" })).unwrap();
+        f.add_ride(&db, "a", json!({ "id":"r0", "date":"2026-09-01T10:00:00Z" })).unwrap();
+        f.add_ride(&db, "a", json!({ "id":"r1", "date":"2026-10-01T10:00:00Z", "name":"again" })).unwrap();
+        let ids = |f: &Friends| f.view("c", "Lujeni#2138").unwrap().1.kept.iter().map(|r| r.0.clone()).collect::<Vec<_>>();
         assert_eq!(ids(&f), ["r2", "r1", "r0"]);
-        assert!(f.add_ride("a", json!({ "date":"x" })).is_err());
-        f.drop_ride("a", "r2");
+        assert_eq!(Friends::rides(&db, "a").iter().map(|r| r["id"].as_str().unwrap()).collect::<Vec<_>>(), ["r2", "r1", "r0"]);
+        assert_eq!(Friends::rides(&db, "a")[1]["name"], "again");
+        assert!(f.add_ride(&db, "a", json!({ "date":"x" })).is_err());
+        f.drop_ride(&db, "a", "r2");
         assert_eq!(ids(&f), ["r1", "r0"]);
+        assert_eq!(Friends::rides(&db, "a").len(), 2);
+
+        // An older server's row, rides inside: moved to their own rows on load.
+        db.put("friends", "z", &json!({ "name":"Old", "num":1, "rides":[{ "id":"o1", "date":"2026-01-01" }] })).unwrap();
+        let g = Friends::load(&db).unwrap();
+        assert_eq!((g.people["z"].kept.len(), Friends::rides(&db, "z").len()), (1, 1));
+        assert!(db.get::<Value>("friends", "z").unwrap().unwrap().get("rides").is_none());
 
         // Removing a friend ends it both ways.
         f.remove("c", "Lujeni#2138").unwrap();

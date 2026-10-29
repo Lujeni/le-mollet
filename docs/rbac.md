@@ -44,7 +44,7 @@ compte*).
   HttpOnly, SameSite=Lax, 30 days, and `Secure` when `LE_MOLLET_PUBLIC_URL` starts with `https://`. Sessions are
   kept in the database: a restart signs nobody out. `/auth/logout` ends one.
 - **Password guessing**: five wrong passwords for a name lock that name for 15 minutes. A wrong name and a wrong
-  password get the same answer.
+  password get the same answer, in the same time (an unknown name is checked against a dummy hash).
 - Requests from another site's page are refused, sign-in included (docs/security.md).
 
 ## Giving roles

@@ -64,12 +64,15 @@ checks are for.
 
 - **CSRF**: every call but the page itself and the audio is refused when the browser says
   it comes from another site (`Sec-Fetch-Site: cross-site|same-site`, or an `Origin` that is not this host).
-  A page elsewhere cannot make a visitor's browser cancel an event or leave a club.
+  A page elsewhere cannot make a visitor's browser cancel an event or leave a club. Whatever changes something
+  (events, clubs, friends, a profile, a world, signing out, a reset) is POST only: a link, a prefetch or a browser
+  without `Sec-Fetch-Site` cannot do it by accident.
 - **Passwords**: Argon2id hashes; five wrong passwords from one client lock that name for that client for 15
   minutes (another client cannot lock you out), and sign-ups and sign-ins are limited to 10 an hour per client.
 - **Names**: in cloud mode the name shown to others is the account's (with the club tag the server knows), never
   the page's word; at home it is free text, as there is no account.
-- **Budgets**, per client address (behind the reverse proxy of cloud mode, the address it forwards): a world
+- **Budgets**, per client address (behind the reverse proxy of cloud mode, the last address of `X-Forwarded-For`,
+  the one the proxy appended: a client cannot name another to dodge them): a world
   generation 3 per 10 min, an event or a club 10 an hour, a profile update 30 an hour; 20 profiles per account,
   500 entrants per event, 20 sessions per account, 12 open worlds in all (a new one waits until one is empty).
 - **Connections**: a request's head must arrive within 10 s, a ride frame must be taken within 5 s (else the

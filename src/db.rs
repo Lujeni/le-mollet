@@ -13,9 +13,10 @@ use std::sync::Mutex;
 
 pub struct Db(Mutex<Connection>);
 
-/// A database call, timed and counted (src/metrics.rs).
+/// A database call, timed and counted (src/metrics.rs). Run as blocking work: on an async worker, tokio hands
+/// the other tasks to another thread meanwhile; outside a runtime (the CLI, tests) it just runs.
 fn timed<T>(op: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
-    let r = crate::metrics::time("le_mollet_db_seconds", &[("op", op)], f);
+    let r = tokio::task::block_in_place(|| crate::metrics::time("le_mollet_db_seconds", &[("op", op)], f));
     if r.is_err() { crate::metrics::inc("le_mollet_db_errors_total", &[("op", op)]) }
     r
 }
@@ -113,6 +114,14 @@ impl Db {
         })
     }
 
+    /// Store a new record; false when the id is taken (atomic: two sign-ups with one name cannot both win).
+    pub fn insert<T: Serialize + ?Sized>(&self, coll: &str, id: &str, v: &T) -> Result<bool> {
+        timed("insert", || {
+            let c = self.0.lock().unwrap();
+            Ok(c.execute("INSERT OR IGNORE INTO docs (coll, id, data) VALUES (?1, ?2, ?3)", params![coll, id, serde_json::to_string(v)?])? == 1)
+        })
+    }
+
     pub fn delete(&self, coll: &str, id: &str) -> Result<()> {
         timed("delete", || {
             self.0.lock().unwrap().execute("DELETE FROM docs WHERE coll = ?1 AND id = ?2", [coll, id])?;
@@ -155,6 +164,8 @@ mod tests {
         assert!(dir.join("events.json.bak").exists() && !dir.join("events.json").exists());
         assert_eq!(db.get::<serde_json::Value>("boards", "alpe:KOM").unwrap().unwrap()[0]["t"], 1);
 
+        assert!(db.insert("accounts", "x", &1).unwrap() && !db.insert("accounts", "x", &2).unwrap());
+        assert_eq!(db.get::<i32>("accounts", "x").unwrap(), Some(1));
         db.put("riders", "a", &5).unwrap();
         db.replace("events", [("e3".to_string(), &7)]).unwrap();
         drop(db);

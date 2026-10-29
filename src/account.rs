@@ -44,17 +44,24 @@ pub fn signup(db: &Db, name: &str, password: &str, now: u64) -> Result<Account, 
     // A random id below 2^53, so the page reads it exactly.
     let id = ((uuid::Uuid::new_v4().as_u128() >> 75) as u64).max(1);
     let a = Account { id, name: name.into(), hash, created: now };
-    db.put("accounts", &key(name), &a).map_err(|_| "could not save the account")?;
-    Ok(a)
+    // Atomic: two sign-ups with one name at once, one wins (the check above only gives the quick answer).
+    match db.insert("accounts", &key(name), &a) {
+        Ok(true) => Ok(a),
+        Ok(false) => Err("name taken"),
+        Err(_) => Err("could not save the account"),
+    }
 }
 
-/// Check a name and password. One answer for a wrong name and a wrong password.
+/// A hash to check an unknown name against, so a wrong name takes as long as a wrong password.
+static DUMMY: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| Argon2::default().hash_password(b"nobody").map(|h| h.to_string()).unwrap_or_default());
+
+/// Check a name and password. One answer, in the same time, for a wrong name and a wrong password.
 pub fn login(db: &Db, name: &str, password: &str) -> Result<Account, &'static str> {
     const WRONG: &str = "wrong name or password";
-    let a = find(db, name).ok_or(WRONG)?;
-    let hash = PasswordHash::new(&a.hash).map_err(|_| WRONG)?;
+    let a = find(db, name);
+    let hash = PasswordHash::new(a.as_ref().map_or(DUMMY.as_str(), |a| a.hash.as_str())).map_err(|_| WRONG)?;
     Argon2::default().verify_password(password.as_bytes(), &hash).map_err(|_| WRONG)?;
-    Ok(a)
+    a.ok_or(WRONG)
 }
 
 #[cfg(test)]
