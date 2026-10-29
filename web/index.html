@@ -37,7 +37,20 @@ header { padding:18px 22px; display:flex; align-items:center; justify-content:sp
 .logo b { color:var(--accent) }
 .logo i { width:30px; height:22px; border-radius:5px; background:var(--accent); position:relative; box-shadow:inset 0 -4px 0 rgba(0,0,0,.22) } /* a 2x1 brick */
 .logo i::before { content:''; position:absolute; top:-5px; left:4px; width:22px; height:6px; background:radial-gradient(circle at 4px 3px, #f7dc6a 3.5px, transparent 4px) 0 0 / 11px 6px repeat-x }
-.top-actions { display:flex; gap:8px } #theme, #topSignOut { pointer-events:auto; font-size:13px; padding:7px 12px }
+.top-actions { display:flex; gap:10px; align-items:center; position:relative } #theme { pointer-events:auto; font-size:13px; padding:7px 12px }
+/* The account, top right: a brick button and its menu in the landing page's clothes (ink, yellow, hard shadows). */
+.acct { pointer-events:auto; display:flex; align-items:center; gap:8px; padding:4px 12px 4px 5px; border-radius:12px; background:#ffcf1a; color:#16161d; border:3px solid #16161d; box-shadow:0 4px 0 #16161d; font:700 14px var(--font); cursor:pointer; transition:transform .1s, box-shadow .1s }
+.acct:hover { transform:translateY(1px); box-shadow:0 3px 0 #16161d } .acct:active, .acct[aria-expanded=true] { transform:translateY(4px); box-shadow:0 0 0 #16161d }
+.acct-av { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; background:var(--c, #e3242b); color:#fff; font:700 13px var(--font); border:2px solid #16161d; flex:none }
+.acct-menu { position:absolute; right:0; top:calc(100% + 14px); width:min(320px, calc(100vw - 32px)); background:#fff8e7; color:#16161d; border:3px solid #16161d; border-radius:16px; box-shadow:0 8px 0 #16161d, 0 24px 40px rgba(0,0,0,.35); padding:22px 16px 16px; display:grid; gap:12px; z-index:11; pointer-events:auto; font-family:var(--font) }
+.acct-menu[hidden] { display:none }
+.acct-menu::before { content:''; position:absolute; left:-3px; right:-3px; top:-3px; height:12px; border:3px solid #16161d; border-bottom:0; border-radius:14px 14px 0 0; background:#ffcf1a radial-gradient(circle at 6px 6px, rgba(255,255,255,.45) 0 2.5px, transparent 3.5px) 0 0/14px 12px }
+.acct-menu .who { display:flex; align-items:center; gap:12px } .acct-menu .who .acct-av { width:40px; height:40px; font-size:18px } .acct-menu .who b { font-size:19px; display:block }
+.acct-menu .tag { display:inline-block; margin-top:4px; background:#ff4fa3; color:#fff; font:700 12px var(--font); padding:3px 10px; border-radius:999px; transform:rotate(-3deg); box-shadow:0 3px 0 rgba(0,0,0,.18) }
+.acct-menu .muted { color:#55556a; margin:0; font-size:13.5px }
+.bbtn { display:block; width:100%; padding:10px 14px; border-radius:12px; border:3px solid #16161d; box-shadow:0 4px 0 #16161d; font:700 15px var(--font); color:#16161d; background:#fff; cursor:pointer; transition:transform .1s, box-shadow .1s }
+.bbtn:hover { transform:translateY(2px); box-shadow:0 2px 0 #16161d } .bbtn:active { transform:translateY(4px); box-shadow:0 0 0 #16161d }
+.bbtn.y { background:#ffcf1a } .bbtn.r { background:#e3242b; color:#fff }
 .block { background:var(--glass); backdrop-filter:blur(16px) saturate(1.35); -webkit-backdrop-filter:blur(16px) saturate(1.35); border:1px solid var(--edge); border-radius:var(--r); box-shadow:var(--shadow) }
 .panel { padding:24px; pointer-events:auto }
 h1, h2, legend { font-family:var(--font); font-weight:700; margin:0 0 12px; letter-spacing:.2px }
@@ -210,7 +223,6 @@ button.friend-row { cursor:pointer } button.friend-row:hover { background:var(--
 #signinGate .gate { max-width:420px; margin:18vh auto 0; text-align:center; display:grid; gap:18px; justify-items:center }
 .account-form { display:grid; gap:10px; width:100%; max-width:360px; text-align:left } .account-form label { display:grid; gap:4px }
 .account-settings { display:grid; gap:14px; width:100%; margin-top:6px } .account-settings h3 { margin:0; font-size:15px } .account-settings > .btn { justify-self:start }
-#signOut { text-decoration:none }
 .role-chip { margin-left:8px; padding:2px 10px; border-radius:999px; background:#81007b; color:#fff; font:700 12px var(--font); vertical-align:middle }
 .board .reset { margin-left:auto; padding:2px 8px; font-size:11px }
 
@@ -620,7 +632,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 <body>
 <canvas id="scene"></canvas>
 <div class="ui">
-  <header><span class="logo"><i></i>LE <b>MOLLET</b></span><span class="top-actions"><button class="btn" id="topSignOut" type="button" hidden></button><button class="btn" id="theme" aria-label="Basculer thème clair ou sombre"></button></span></header>
+  <header><span class="logo"><i></i>LE <b>MOLLET</b></span><span class="top-actions"><button class="acct" id="acctBtn" type="button" hidden aria-haspopup="true" aria-expanded="false" aria-controls="acctMenu"></button><div class="acct-menu" id="acctMenu" hidden></div><button class="btn" id="theme" aria-label="Basculer thème clair ou sombre"></button></span></header>
 
   <main id="signinGate" hidden>
     <div class="gate block panel">
@@ -765,8 +777,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <h2>Compte</h2>
         <p class="muted" id="accountState"></p>
         <div id="accountIn"></div>
-        <button class="btn" id="signOut" type="button" hidden>Se déconnecter</button>
-        <div id="accountSettings" hidden></div>
+        <button class="btn" id="accountOpen" type="button" hidden>Mon compte</button>
       </section>
     </div>
   </main>
@@ -1026,6 +1037,12 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
       <div class="menu-actions"><button class="btn" id="hudReset">Réinitialiser</button><button class="btn primary" id="hudDone">Terminé</button></div>
     </div>
   </main>
+  <div class="modal" id="accountModal" hidden role="dialog" aria-modal="true" aria-labelledby="accountTitle">
+    <div class="block panel">
+      <div class="ride-head"><h2 id="accountTitle">Mon compte</h2><button class="btn" id="accountClose" type="button">Fermer</button></div>
+      <div id="accountSettings"></div>
+    </div>
+  </div>
   <div class="modal" id="menu" hidden role="dialog" aria-modal="true" aria-labelledby="menuTitle">
     <div class="block panel">
       <h2 id="menuTitle"></h2>
@@ -1754,6 +1771,7 @@ function showHome(p = current) {
   $('#goTrainSub').textContent = planToday() ?? `${ride.workouts?.length ?? 0} séances calées sur ta FTP`;
   renderHistory();
   renderSensors();
+  renderAcct(); // the header brick takes the profile's color
   initProgress(p);
   const L = levelOf(p.xp ?? 0);
   $('#homeAvatar').dataset.level = L.level;
@@ -6410,6 +6428,29 @@ function accountSettings() {
   return h('div', { class:'account-settings' }, h('p', { class:'muted', id:'accountDevices' }), everywhere, pw, del);
 }
 $('#accountSettings').append(accountSettings());
+// The account in the header, on every screen: a brick with the name, a menu with the role, the devices, the
+// settings and the way out.
+const signOut = async () => { await authed('/auth/logout', { method:'POST' }).catch(() => {}); location.reload() };
+const openAccount = () => { closeAcct(); $('#accountModal').hidden = false; $('#accountClose').focus() };
+const closeAcct = () => { $('#acctMenu').hidden = true; $('#acctBtn').setAttribute('aria-expanded', 'false') };
+function renderAcct() {
+  const { me } = auth, signed = !!me.account, btn = $('#acctBtn');
+  btn.hidden = !signed;
+  if (!signed) return closeAcct();
+  const av = () => h('span', { class:'acct-av', style:`--c:${current?.bike?.frame ?? '#e3242b'}` }, me.name[0].toUpperCase());
+  btn.replaceChildren(av(), me.name, h('span', { 'aria-hidden':'true' }, '▾'));
+  $('#acctMenu').replaceChildren(
+    h('div', { class:'who' }, av(), h('div', {}, h('b', {}, me.name), h('span', { class:'tag' }, ROLE_NAMES[me.role]))),
+    h('p', { class:'muted' }, me.devices === 1 ? 'Connecté sur cet appareil seulement.' : `Connecté sur ${me.devices} appareils.`),
+    h('button', { class:'bbtn y', type:'button', onclick: openAccount }, 'Mon compte'),
+    h('button', { class:'bbtn r', type:'button', onclick: signOut }, 'Se déconnecter'));
+}
+$('#acctBtn').addEventListener('click', () => { const open = $('#acctMenu').hidden; $('#acctMenu').hidden = !open; $('#acctBtn').setAttribute('aria-expanded', open) });
+document.addEventListener('click', e => { if (!e.target.closest('.top-actions')) closeAcct() });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeAcct(); $('#accountModal').hidden = true } });
+$('#accountOpen').addEventListener('click', openAccount);
+$('#accountClose').addEventListener('click', () => { $('#accountModal').hidden = true });
+$('#accountModal').addEventListener('click', e => { if (e.target === $('#accountModal')) $('#accountModal').hidden = true });
 async function whoami() {
   auth.me = await authed('/whoami').then(r => r.json()).catch(() => auth.me);
   const { me } = auth, signed = !!me.account, owner = me.mode === 'local' && me.role === 'admin' && !signed;
@@ -6420,13 +6461,10 @@ async function whoami() {
     : owner ? 'Mode local : pas besoin de compte, tout reste sur ce PC et tu es admin.'
     : 'Pas besoin de compte pour rouler ici. Avec un compte, ce serveur te reconnaît (et peut te donner un rôle).';
   $('#accountIn').hidden = signed || owner;
-  $('#signOut').hidden = !signed;
-  $('#accountSettings').hidden = !signed;
+
   if (signed) $('#accountDevices').textContent = me.devices === 1 ? 'Connecté sur cet appareil seulement.' : `Connecté sur ${me.devices} appareils.`;
-  // In the header, on every screen: who is signed in, and the way out.
-  $('#topSignOut').hidden = !signed;
-  $('#topSignOut').textContent = signed ? `${me.name} · Se déconnecter` : '';
-  $('#signOut').onclick = $('#topSignOut').onclick = async () => { await authed('/auth/logout', { method:'POST' }).catch(() => {}); location.reload() };
+  $('#accountOpen').hidden = !signed;
+  renderAcct();
   $('#homeRole').replaceChildren(...(me.role !== 'rider' ? [h('span', { class:'role-chip' }, ROLE_NAMES[me.role])] : []));
 }
 whoami();
