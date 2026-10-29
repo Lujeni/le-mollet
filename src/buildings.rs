@@ -40,9 +40,7 @@ pub fn fetch(west: f64, south: f64, east: f64, north: f64) -> Result<Vec<Buildin
         let feats = r["features"].as_array().context("BD TOPO: no features")?;
         for f in feats {
             let p = &f["properties"];
-            let height = p["hauteur"].as_f64().map(|h| h as f32)
-                .or_else(|| p["nombre_d_etages"].as_f64().map(|n| n as f32 * 3.0))
-                .unwrap_or(DEFAULT_HEIGHT_M);
+            let height = p["hauteur"].as_f64().map(|h| h as f32).or_else(|| p["nombre_d_etages"].as_f64().map(|n| n as f32 * 3.0)).unwrap_or(DEFAULT_HEIGHT_M);
             let alt = |k: &str| p[k].as_f64().map(|v| v as f32);
             let (ground, eaves, ridge) = (alt("altitude_minimale_sol"), alt("altitude_minimale_toit"), alt("altitude_maximale_toit"));
             // MultiPolygon -> polygons -> rings -> [lon, lat, z]; keep each polygon's outer ring.
@@ -55,24 +53,32 @@ pub fn fetch(west: f64, south: f64, east: f64, north: f64) -> Result<Vec<Buildin
                         ring.push([lat, lon]);
                     }
                 }
-                if ring.len() > 3 && ring.first() == ring.last() { ring.pop(); }
+                if ring.len() > 3 && ring.first() == ring.last() {
+                    ring.pop();
+                }
                 if ring.len() >= 3 && area_m2(&ring, kx) >= MIN_AREA_M2 {
                     out.push(Building { height, ground, eaves, ridge, ring });
                 }
             }
         }
         eprintln!("buildings: {} so far", out.len());
-        if feats.len() < PAGE { break }
+        if feats.len() < PAGE {
+            break;
+        }
     }
     Ok(out)
 }
 
 fn area_m2(ring: &[[f64; 2]], kx: f64) -> f64 {
     let n = ring.len();
-    (0..n).map(|i| {
-        let (a, b) = (ring[i], ring[(i + 1) % n]);
-        (a[1] * kx) * (b[0] * 110_540.0) - (b[1] * kx) * (a[0] * 110_540.0)
-    }).sum::<f64>().abs() / 2.0
+    (0..n)
+        .map(|i| {
+            let (a, b) = (ring[i], ring[(i + 1) % n]);
+            (a[1] * kx) * (b[0] * 110_540.0) - (b[1] * kx) * (a[0] * 110_540.0)
+        })
+        .sum::<f64>()
+        .abs()
+        / 2.0
 }
 
 pub fn to_bytes(buildings: &[Building], west: f64, north: f64) -> Vec<u8> {

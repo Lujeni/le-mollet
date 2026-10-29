@@ -96,15 +96,7 @@ pub enum Phase {
 
 /// Ranks by FTP in W/kg, like a ladder in a game, strongest first: code, lowest W/kg, name.
 /// Riders may race up a rank, never down. The page has the same table (TIERS in web/index.html).
-pub const TIERS: [(char, f32, &str); 7] = [
-    ('L', 5.0, "Légende"),
-    ('M', 4.4, "Maître"),
-    ('D', 3.8, "Diamant"),
-    ('P', 3.2, "Platine"),
-    ('O', 2.5, "Or"),
-    ('A', 2.0, "Argent"),
-    ('B', 0.0, "Bronze"),
-];
+pub const TIERS: [(char, f32, &str); 7] = [('L', 5.0, "Légende"), ('M', 4.4, "Maître"), ('D', 3.8, "Diamant"), ('P', 3.2, "Platine"), ('O', 2.5, "Or"), ('A', 2.0, "Argent"), ('B', 0.0, "Bronze")];
 
 /// A rider's rank by FTP in W/kg.
 pub fn category(wkg: f32) -> char {
@@ -173,8 +165,12 @@ impl Events {
     /// Sign up (again: name and W/kg updated). Not once the race is on.
     pub fn join(&mut self, id: &str, pid: &str, name: &str, wkg: f32, now: u64) -> Result<&Event, &'static str> {
         let e = self.events.iter_mut().find(|e| e.id == id).ok_or("no such event")?;
-        if e.kind == Kind::Race && e.phase(now) != Phase::Upcoming && e.phase(now) != Phase::Pen { return Err("the race has started") }
-        if !e.open_to(category(wkg)) { return Err("not your category") }
+        if e.kind == Kind::Race && e.phase(now) != Phase::Upcoming && e.phase(now) != Phase::Pen {
+            return Err("the race has started");
+        }
+        if !e.open_to(category(wkg)) {
+            return Err("not your category");
+        }
         e.entrants.retain(|x| x.pid != pid);
         e.entrants.push(Entrant { pid: pid.into(), name: name.into(), wkg, cat: category(wkg), bot: false });
         Ok(e)
@@ -185,13 +181,17 @@ impl Events {
     /// `tracks` in turn (id, name, lap m, looped). Returns whether it added any.
     /// ponytail: an organizer deleting a scheduled race sees it come back; keep a list of skipped ids if that bothers
     pub fn schedule(&mut self, now: u64, tracks: &[(String, String, f32, bool)]) -> bool {
-        if tracks.is_empty() { return false }
+        if tracks.is_empty() {
+            return false;
+        }
         let mut added = false;
         for slot in now / SLOT_S + 1..=(now + AHEAD_S) / SLOT_S {
             let (track, name, lap_m, looped) = &tracks[slot as usize % tracks.len()];
             for (cat, _, tier) in TIERS {
                 let id = format!("auto-{slot}-{cat}");
-                if self.get(&id).is_some() { continue }
+                if self.get(&id).is_some() {
+                    continue;
+                }
                 self.events.push(Event {
                     id,
                     kind: Kind::Race,
@@ -214,11 +214,15 @@ impl Events {
         let loops: Vec<_> = tracks.iter().filter(|t| t.3).collect();
         let rides = if loops.is_empty() { tracks.iter().collect() } else { loops };
         for slot in now / GROUP_SLOT_S + 1..=(now + AHEAD_S) / GROUP_SLOT_S {
-            if (slot * GROUP_SLOT_S).is_multiple_of(SLOT_S) { continue } // the races' half hours
+            if (slot * GROUP_SLOT_S).is_multiple_of(SLOT_S) {
+                continue;
+            } // the races' half hours
             let (track, name, ..) = rides[slot as usize % rides.len()];
             for (i, (pace, label)) in GROUP_PACES.iter().enumerate() {
                 let id = format!("auto-g{slot}-{i}");
-                if self.get(&id).is_some() { continue }
+                if self.get(&id).is_some() {
+                    continue;
+                }
                 self.events.push(Event {
                     id,
                     kind: Kind::Group,
@@ -242,7 +246,9 @@ impl Events {
     }
 
     pub fn leave(&mut self, id: &str, pid: &str) {
-        if let Some(e) = self.events.iter_mut().find(|e| e.id == id) { e.entrants.retain(|x| x.pid != pid) }
+        if let Some(e) = self.events.iter_mut().find(|e| e.id == id) {
+            e.entrants.retain(|x| x.pid != pid)
+        }
     }
 
     /// A rider crossed the finish line: their place overall and in their category (1-based), once.
@@ -263,8 +269,55 @@ impl Events {
 mod tests {
     use super::*;
 
+    #[test]
+    fn who_may_enter_and_who_left() {
+        let mut e = race(10_000);
+        assert!(e.open_to('B') && e.open_to('L')); // no ranks named: everyone
+        e.cats = "PO".into();
+        assert!(e.open_to('P') && e.open_to('O') && e.open_to('A') && e.open_to('B') && !e.open_to('D') && !e.open_to('L')); // a weaker rider races up, a stronger one never down
+        assert!(e.open_to('?')); // an unknown rank counts as the weakest
+        e.keep = 60;
+        assert_eq!([e.phase(10_059), e.phase(10_060)], [Phase::Live, Phase::Over]); // a keep of its own
+        assert_eq!(race(0).distance(1000.0, true), 5000.0);
+        let mut ev = Events { events: vec![race(10_000)] };
+        ev.join("e1", "a", "Ana", 3.4, 9_000).unwrap();
+        ev.join("e1", "a", "Ana la forte", 4.0, 9_100).unwrap(); // again: updated, not doubled
+        assert_eq!((ev.get("e1").unwrap().entrants.len(), ev.get("e1").unwrap().entrants[0].name.as_str(), ev.get("e1").unwrap().entrants[0].cat), (1, "Ana la forte", 'D'));
+        ev.leave("e1", "a");
+        ev.leave("e1", "nobody");
+        assert!(ev.get("e1").unwrap().entrants.is_empty());
+        assert_eq!(ev.join("nope", "a", "Ana", 3.0, 9_000).unwrap_err(), "no such event");
+        assert_eq!(ev.finish("nope", "a", "Ana", 1.0), None);
+        // A group ride can be joined once it is on.
+        let mut g = race(10_000);
+        g.kind = Kind::Group;
+        let mut ev = Events { events: vec![g] };
+        assert!(ev.join("e1", "b", "Bob", 2.0, 10_500).is_ok());
+        // Stored and read back in start order.
+        let db = Db::memory();
+        ev.events.push(race(5_000));
+        ev.events[1].id = "e0".into();
+        ev.save(&db).unwrap();
+        assert_eq!(Events::load(&db).unwrap().events.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["e0", "e1"]);
+    }
+
     fn race(start: u64) -> Event {
-        Event { id: "e1".into(), kind: Kind::Race, name: "Critérium".into(), track: "longchamp".into(), start, laps: 5, pace: 0.0, keep: 0, cats: String::new(), club: None, by: "a".into(), by_name: "Ana".into(), entrants: vec![], results: vec![] }
+        Event {
+            id: "e1".into(),
+            kind: Kind::Race,
+            name: "Critérium".into(),
+            track: "longchamp".into(),
+            start,
+            laps: 5,
+            pace: 0.0,
+            keep: 0,
+            cats: String::new(),
+            club: None,
+            by: "a".into(),
+            by_name: "Ana".into(),
+            entrants: vec![],
+            results: vec![],
+        }
     }
 
     #[test]

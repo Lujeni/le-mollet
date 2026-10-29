@@ -39,7 +39,7 @@ jobs:
           dir=le-mollet-$v-${{ matrix.name }}
           mkdir -p "$dir/courses"
           cp courses/*.json courses/AGENTS.md "$dir/courses/"
-          cp README.md LICENSE-MIT LICENSE-APACHE "$dir/"
+          cp README.md LICENSE.md "$dir/"
           cp -r docs "$dir/docs"
           if [ "${{ matrix.os }}" = windows-latest ]; then
             cp target/${{ matrix.target }}/release/le-mollet.exe "$dir/"

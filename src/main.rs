@@ -180,8 +180,8 @@ async fn main() -> anyhow::Result<()> {
             serve(&addr, trainer, difficulty, &courses, &db, mode).await
         }
         Cmd::Role { action, account, role, note, db } => {
-            use le_mollet::auth::{Grant, Role, Roles};
             use le_mollet::account::Auth;
+            use le_mollet::auth::{Grant, Role, Roles};
             let auth = Auth::open(&db).await?;
             let db = le_mollet::db::Db::open(&db, &[db_dir(&db)])?;
             let mut r = Roles::load(&db)?;
@@ -202,10 +202,12 @@ async fn main() -> anyhow::Result<()> {
                     le_mollet::audit::audit("role", &[("account", &Auth::account_id(&a.id).to_string()), ("name", &label(&a)), ("role", "rider"), ("by", "cli")]);
                     println!("{} is a rider again.", label(&a));
                 }
-                ("list", _, _) => for (id, g) in &r.grants {
-                    let name = auth.by_account(*id).await.map_or_else(|| format!("#{id}"), |a| label(&a));
-                    println!("{name:<24} {:<10} {}", format!("{:?}", g.role), g.note)
-                },
+                ("list", _, _) => {
+                    for (id, g) in &r.grants {
+                        let name = auth.by_account(*id).await.map_or_else(|| format!("#{id}"), |a| label(&a));
+                        println!("{name:<24} {:<10} {}", format!("{:?}", g.role), g.note)
+                    }
+                }
                 _ => anyhow::bail!("usage: le-mollet role set <account> admin|organizer|rider [--note X] | remove <account> | list"),
             }
             Ok(())
@@ -216,12 +218,15 @@ async fn main() -> anyhow::Result<()> {
             let dir = district_dir(&city);
             tokio::task::spawn_blocking(move || le_mollet::district::build(&dir, bbox)).await?
         }
-        Cmd::Ortho { course } => tokio::task::spawn_blocking(move || {
-            let head = std::fs::read(terrain_path(&course)).with_context(|| format!("{course}: build its terrain first"))?;
-            let f = |o: usize| f64::from_le_bytes(head[o..o + 8].try_into().unwrap());
-            let u = |o: usize| u32::from_le_bytes(head[o..o + 4].try_into().unwrap()) as usize;
-            le_mollet::ortho::build(&ortho_dir(&course), [f(8), f(16), f(24), f(32)], u(0), u(4))
-        }).await?,
+        Cmd::Ortho { course } => {
+            tokio::task::spawn_blocking(move || {
+                let head = std::fs::read(terrain_path(&course)).with_context(|| format!("{course}: build its terrain first"))?;
+                let f = |o: usize| f64::from_le_bytes(head[o..o + 8].try_into().unwrap());
+                let u = |o: usize| u32::from_le_bytes(head[o..o + 4].try_into().unwrap()) as usize;
+                le_mollet::ortho::build(&ortho_dir(&course), [f(8), f(16), f(24), f(32)], u(0), u(4))
+            })
+            .await?
+        }
         Cmd::Island { map } => {
             let out = format!("{}.city.json", map.strip_suffix(".map.json").context("map file must end in .map.json")?);
             let i = le_mollet::island::build(&map)?;
@@ -236,7 +241,9 @@ async fn main() -> anyhow::Result<()> {
             let start = parse_latlon(&start)?;
             let (mut city, terrain) = tokio::task::spawn_blocking(move || le_mollet::city::build(&name, relation, start)).await??;
             // Hand-picked start places survive a rebuild.
-            if let Ok(old) = le_mollet::city::City::load(&out) { city.starts = old.starts }
+            if let Ok(old) = le_mollet::city::City::load(&out) {
+                city.starts = old.starts
+            }
             std::fs::write(&out, serde_json::to_string(&city)?)?;
             std::fs::write(terrain_path(&out), terrain.to_bytes())?;
             let city_path = out.clone();
@@ -247,7 +254,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Cmd::Course { name, out, road, waypoints, relation, cell } => {
             let wps = waypoints.iter().map(|w| parse_latlon(w)).collect::<anyhow::Result<Vec<[f64; 2]>>>()?;
-            if relation.is_none() && wps.len() < 2 { anyhow::bail!("need a start and a finish waypoint, or --relation") }
+            if relation.is_none() && wps.len() < 2 {
+                anyhow::bail!("need a start and a finish waypoint, or --relation")
+            }
             let mut c = tokio::task::spawn_blocking(move || match relation {
                 Some(id) => Course::build_ring(&name, id, wps.first().copied()),
                 None => Course::build(&name, &wps, &road),
@@ -277,12 +286,7 @@ async fn trainer_console(filter: Option<String>) -> anyhow::Result<()> {
     tokio::spawn(async move {
         while let Some(s) = samples.next().await {
             let f = |v: Option<f32>| v.map_or("-".into(), |v| format!("{v:.1}"));
-            println!(
-                "power {:>4} W | cadence {:>5} rpm | speed {:>5} km/h",
-                s.power_w.map_or("-".into(), |p| p.to_string()),
-                f(s.cadence_rpm),
-                f(s.speed_kmh)
-            );
+            println!("power {:>4} W | cadence {:>5} rpm | speed {:>5} km/h", s.power_w.map_or("-".into(), |p| p.to_string()), f(s.cadence_rpm), f(s.speed_kmh));
         }
     });
 
@@ -323,13 +327,17 @@ async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &st
     };
     let auth = le_mollet::account::Auth::open(db).await?;
     let swept = auth.sweep().await;
-    if swept > 0 { le_mollet::audit::audit("sweep", &[("dropped", &swept.to_string())]) }
+    if swept > 0 {
+        le_mollet::audit::audit("sweep", &[("dropped", &swept.to_string())])
+    }
     let db = le_mollet::db::Db::open(db, &[courses, db_dir(db)])?;
     let app = Arc::new(web::App::new(courses, trainer, difficulty, db, auth, mode)?);
     if mode == web::Mode::Local && addr.starts_with("0.0.0.0:") {
         // The address other PCs on the network use; connecting a UDP socket sends nothing.
         let ip = std::net::UdpSocket::bind("0.0.0.0:0").and_then(|u| u.connect("192.0.2.1:9").and(u.local_addr()));
-        if let Ok(ip) = ip { eprintln!("LAN: other riders open http://{}:{}", ip.ip(), addr.rsplit(':').next().unwrap_or("8080")) }
+        if let Ok(ip) = ip {
+            eprintln!("LAN: other riders open http://{}:{}", ip.ip(), addr.rsplit(':').next().unwrap_or("8080"))
+        }
     }
     eprintln!("{} course(s) from {courses}/, {}", app.course_count(), if app.trainer.is_some() { "trainer mode" } else { "demo mode" });
     if let Some(t) = &app.trainer {
@@ -376,7 +384,9 @@ fn build_decor(course_path: &str) -> anyhow::Result<()> {
     std::fs::write(&tp, t.to_bytes())?;
     std::fs::write(course_path, serde_json::to_string(&c)?)?;
     let mut kinds = std::collections::BTreeMap::new();
-    for p in &c.props { *kinds.entry(p.k.as_str()).or_insert(0) += 1 }
+    for p in &c.props {
+        *kinds.entry(p.k.as_str()).or_insert(0) += 1
+    }
     println!("{course_path}: {} props {kinds:?}", c.props.len());
     Ok(())
 }

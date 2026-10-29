@@ -123,9 +123,7 @@ pub fn generate(seed: u64, length_m: f64, relief: Relief, name: &str) -> World {
     let mut rng = seed;
     let harmonics: Vec<(f64, f64, f64)> = (2..6).map(|k| (k as f64, 0.16 / k as f64 * (0.5 + unit(&mut rng)), unit(&mut rng) * TAU)).collect();
     let shape = |t: f64| 1.0 + harmonics.iter().map(|(k, a, p)| a * (k * t + p).sin()).sum::<f64>();
-    let ring = |scale: f64| -> Vec<[f64; 2]> {
-        (0..4000).map(|i| i as f64 / 4000.0 * TAU).map(|t| [scale * shape(t) * t.cos(), scale * shape(t) * t.sin()]).collect()
-    };
+    let ring = |scale: f64| -> Vec<[f64; 2]> { (0..4000).map(|i| i as f64 / 4000.0 * TAU).map(|t| [scale * shape(t) * t.cos(), scale * shape(t) * t.sin()]).collect() };
     let perimeter = |p: &[[f64; 2]]| (0..p.len()).map(|i| dist(p[i], p[(i + 1) % p.len()])).sum::<f64>();
     let mut scale = length_m / TAU;
     for _ in 0..3 {
@@ -173,15 +171,7 @@ pub fn generate(seed: u64, length_m: f64, relief: Relief, name: &str) -> World {
         })
         .collect();
     points.push(Point { d: total as f32, ..points[0] });
-    let course = Course {
-        name: name.into(),
-        attribution: "Monde généré par le-mollet.".into(),
-        waypoints: vec![],
-        roads: vec![],
-        looped: true,
-        points,
-        ..Default::default()
-    };
+    let course = Course { name: name.into(), attribution: "Monde généré par le-mollet.".into(), waypoints: vec![], roads: vec![], looped: true, points, ..Default::default() };
 
     // Terrain grid around the loop.
     let fold = |f: fn(f64, f64) -> f64, i: usize, init: f64| line.iter().map(|p| p[i]).fold(init, f);

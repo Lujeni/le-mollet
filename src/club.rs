@@ -55,9 +55,15 @@ impl Clubs {
     /// Found a club; the founder leaves their current one.
     pub fn create(&mut self, pid: &str, me: &str, name: &str, tag: &str, color: &str, code: String) -> Result<&Club, &'static str> {
         let name = name.trim();
-        if name.is_empty() || name.chars().count() > 30 { return Err("name: 1 to 30 characters") }
-        if !(2..=4).contains(&tag.len()) || !tag.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) { return Err("tag: 2 to 4 capitals or digits") }
-        if self.clubs.iter().any(|c| c.tag == tag) { return Err("tag taken") }
+        if name.is_empty() || name.chars().count() > 30 {
+            return Err("name: 1 to 30 characters");
+        }
+        if !(2..=4).contains(&tag.len()) || !tag.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) {
+            return Err("tag: 2 to 4 capitals or digits");
+        }
+        if self.clubs.iter().any(|c| c.tag == tag) {
+            return Err("tag taken");
+        }
         self.leave(pid);
         let member = Member { pid: pid.into(), name: me.into(), week: 0, km: 0.0 };
         self.clubs.push(Club { code, name: name.into(), tag: tag.into(), color: color.into(), members: vec![member] });
@@ -76,7 +82,9 @@ impl Clubs {
 
     /// Leave one's club; the last one out closes it.
     pub fn leave(&mut self, pid: &str) {
-        for c in &mut self.clubs { c.members.retain(|m| m.pid != pid) }
+        for c in &mut self.clubs {
+            c.members.retain(|m| m.pid != pid)
+        }
         self.clubs.retain(|c| !c.members.is_empty());
     }
 
@@ -86,7 +94,9 @@ impl Clubs {
         let Some(c) = self.clubs.iter_mut().find(|c| c.members.iter().any(|m| m.pid == pid)) else { return false };
         let name = name.strip_prefix(&format!("[{}] ", c.tag)).unwrap_or(name);
         let m = c.members.iter_mut().find(|m| m.pid == pid).unwrap();
-        if m.week != week { (m.week, m.km) = (week, 0.0) }
+        if m.week != week {
+            (m.week, m.km) = (week, 0.0)
+        }
         m.km += km;
         m.name = name.into(); // the profile may have been renamed
         true

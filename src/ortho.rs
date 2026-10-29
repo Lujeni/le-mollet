@@ -21,7 +21,9 @@ pub(crate) fn get_jpeg([south, west, north, east]: [f64; 4], w: usize, h: usize)
     );
     let mut jpg = vec![];
     ureq::get(&url).set("User-Agent", UA).call()?.into_reader().read_to_end(&mut jpg)?;
-    if !jpg.starts_with(&[0xFF, 0xD8]) { bail!("IGN aerial photo: not a JPEG ({} bytes)", jpg.len()) }
+    if !jpg.starts_with(&[0xFF, 0xD8]) {
+        bail!("IGN aerial photo: not a JPEG ({} bytes)", jpg.len())
+    }
     Ok(jpg)
 }
 

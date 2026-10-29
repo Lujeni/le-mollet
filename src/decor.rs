@@ -6,7 +6,7 @@
 
 use crate::city::Prop;
 use crate::course::{Course, UA, haversine_m, overpass, request_json};
-use crate::terrain::{BUILDING, GRASS, FOREST, ROAD, ROCK, Terrain, WATER};
+use crate::terrain::{BUILDING, FOREST, GRASS, ROAD, ROCK, Terrain, WATER};
 use anyhow::{Context, Result, bail};
 use std::collections::HashMap;
 
@@ -84,11 +84,15 @@ impl Photo {
                 let i = (y as usize * self.w + x as usize) * 3;
                 let p = [self.rgb[i] as f32, self.rgb[i + 1] as f32, self.rgb[i + 2] as f32];
                 let lum = 0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2];
-                for k in 0..3 { c[k] += p[k] }
+                for k in 0..3 {
+                    c[k] += p[k]
+                }
                 (l, l2, n) = (l + lum, l2 + lum * lum, n + 1.0);
             }
         }
-        if n == 0.0 { return ([0.0; 3], 0.0, 0.0) }
+        if n == 0.0 {
+            return ([0.0; 3], 0.0, 0.0);
+        }
         let l = l / n;
         (c.map(|v| v / n), l, (l2 / n - l * l).max(0.0).sqrt())
     }
@@ -119,7 +123,19 @@ pub fn is_crown([r, g, b]: [f32; 3], lum: f32, sd: f32) -> bool {
 /// Foliage of a crown, for the tree variant: green, dark green, olive, yellow, orange, red-brown.
 fn foliage([r, g, b]: [f32; 3]) -> u32 {
     let lum = 0.3 * r + 0.59 * g + 0.11 * b;
-    if r > g + 12.0 { 5 } else if r > g + 4.0 { 4 } else if r > g - 4.0 && r > b + 15.0 { 3 } else if lum < 55.0 { 1 } else if g - b < 6.0 { 2 } else { 0 }
+    if r > g + 12.0 {
+        5
+    } else if r > g + 4.0 {
+        4
+    } else if r > g - 4.0 && r > b + 15.0 {
+        3
+    } else if lum < 55.0 {
+        1
+    } else if g - b < 6.0 {
+        2
+    } else {
+        0
+    }
 }
 
 /// Distance from each cell to the course line, m (capped past `PROPS_M`).
@@ -136,7 +152,9 @@ fn road_distance(t: &Terrain, course: &Course) -> Vec<f32> {
                 for c in (gx as isize - reach).max(0)..(gx as isize + reach).min(t.w as isize) {
                     let d = (((c as f64 + 0.5 - gx) * cx).hypot((r as f64 + 0.5 - gy) * cz)) as f32;
                     let i = r as usize * t.w + c as usize;
-                    if d < dist[i] { dist[i] = d }
+                    if d < dist[i] {
+                        dist[i] = d
+                    }
                 }
             }
         }
@@ -173,7 +191,10 @@ pub fn build(course: &mut Course, t: &mut Terrain) -> Result<()> {
     let (cx, cz) = cell_m(t);
     // Small cells show the 1 m elevation model's noise as a maze of half-meter steps on flat ground:
     // smooth it over ~5 m, then carve the road again.
-    if cx < 3.0 { smooth_heights(t, 1.5); t.carve_road(course) }
+    if cx < 3.0 {
+        smooth_heights(t, 1.5);
+        t.carve_road(course)
+    }
     let dist = road_distance(t, course);
     let (north, south, west, east, tw, th) = (t.north, t.south, t.west, t.east, t.w as f64, t.h as f64);
     let geo = move |c: f64, r: f64| [north - r / th * (north - south), west + c / tw * (east - west)];
@@ -185,10 +206,14 @@ pub fn build(course: &mut Course, t: &mut Terrain) -> Result<()> {
         for c in 0..t.w {
             let i = r * t.w + c;
             let ground = [GRASS, FOREST, ROCK, CANOPY].contains(&t.cover[i]) || t.cover[i] >= MOSAIC0; // painted before: paint again
-            if !ground { continue }
+            if !ground {
+                continue;
+            }
             let (col, lum, _) = photo.stats(c as isize - 1, r as isize - 1, c as isize + 2, r as isize + 2);
             let woods = lum < 58.0 && col[1] >= col[0] - 2.0 && col[1] >= col[2] - 4.0;
-            t.cover[i] = if woods && dist[i] as f64 > TREES_M { CANOPY } else {
+            t.cover[i] = if woods && dist[i] as f64 > TREES_M {
+                CANOPY
+            } else {
                 let k = mosaic_index(col);
                 counts[k as usize] += 1;
                 MOSAIC0 + k
@@ -196,7 +221,9 @@ pub fn build(course: &mut Course, t: &mut Terrain) -> Result<()> {
         }
     }
     // A mosaic, not noise: each tile takes the color most of its 3x3 neighbors have, twice.
-    for _ in 0..2 { majority(t) }
+    for _ in 0..2 {
+        majority(t)
+    }
     eprintln!("decor: mosaic {counts:?}, canopy {}", t.cover.iter().filter(|&&c| c == CANOPY).count());
 
     // 2. OpenStreetMap pieces near the road.
@@ -205,7 +232,9 @@ pub fn build(course: &mut Course, t: &mut Terrain) -> Result<()> {
     let near = |p: [f64; 2]| {
         let (gx, gy) = t.grid(p[0], p[1]);
         let (c, r) = (gx as isize, gy as isize);
-        if c < 0 || r < 0 || c >= t.w as isize || r >= t.h as isize { return None }
+        if c < 0 || r < 0 || c >= t.w as isize || r >= t.h as isize {
+            return None;
+        }
         let i = r as usize * t.w + c as usize;
         let d = dist[i] as f64;
         (d > ROAD_CLEAR_M && d <= PROPS_M && t.cover[i] != WATER && t.cover[i] != ROAD).then_some((i, d))
@@ -213,25 +242,40 @@ pub fn build(course: &mut Course, t: &mut Terrain) -> Result<()> {
     let at = |k: &str, p: [f64; 2], yaw: f64, v: u32, i: usize| Prop { k: k.into(), lat: round(p[0], 1e6), lon: round(p[1], 1e6), e: t.heights[i], y: yaw.round() as f32, v };
     let mut paved = vec![];
     let osm = osm_features(t)?;
-    let kind = |f: &Feature| match f { Feature::Tree { .. } => "tree", Feature::Line { kind, .. } | Feature::Point { kind, .. } => kind, Feature::Mill { .. } => "windmill" };
+    let kind = |f: &Feature| match f {
+        Feature::Tree { .. } => "tree",
+        Feature::Line { kind, .. } | Feature::Point { kind, .. } => kind,
+        Feature::Mill { .. } => "windmill",
+    };
     let mut found = std::collections::BTreeMap::new();
-    for f in &osm { *found.entry(kind(f)).or_insert(0) += 1 }
+    for f in &osm {
+        *found.entry(kind(f)).or_insert(0) += 1
+    }
     eprintln!("decor: OpenStreetMap {found:?}");
     for f in &osm {
         match f {
             Feature::Tree { at: p, conifer, crown } => {
                 let Some((i, _)) = near(*p) else { continue };
                 let r = crown.unwrap_or(3.5).clamp(1.5, 7.0);
-                if !taken.free(*p, r, 0.6) { continue }
+                if !taken.free(*p, r, 0.6) {
+                    continue;
+                }
                 taken.add(*p, r);
                 props.push(at(if *conifer { "pine" } else { "oak" }, *p, yaw_of(p), size_class(r) * 8, i));
             }
             Feature::Line { kind, pts } => {
-                let (step, k) = match *kind { "tree_row" => (8.0, "oak"), "hedge" => (1.6, "hedge"), "wall" => (1.6, "lowwall"), _ => (2.4, "rail") };
+                let (step, k) = match *kind {
+                    "tree_row" => (8.0, "oak"),
+                    "hedge" => (1.6, "hedge"),
+                    "wall" => (1.6, "lowwall"),
+                    _ => (2.4, "rail"),
+                };
                 for (p, yaw) in along(pts, step) {
                     let Some((i, _)) = near(p) else { continue };
                     if k == "oak" {
-                        if !taken.free(p, 3.5, 0.6) { continue }
+                        if !taken.free(p, 3.5, 0.6) {
+                            continue;
+                        }
                         taken.add(p, 3.5);
                         props.push(at(k, p, yaw_of(&p), size_class(3.5) * 8, i));
                     } else {
@@ -261,7 +305,11 @@ pub fn build(course: &mut Course, t: &mut Terrain) -> Result<()> {
             }
         }
     }
-    for j in paved { if t.cover[j] == BUILDING { t.cover[j] = MOSAIC0 + 7 } }
+    for j in paved {
+        if t.cover[j] == BUILDING {
+            t.cover[j] = MOSAIC0 + 7
+        }
+    }
     let n_osm = props.len();
 
     // 3. Trees from the photo at 50 cm, within TREES_M of the road: crown cells, then pieces sized by
@@ -278,11 +326,15 @@ pub fn build(course: &mut Course, t: &mut Terrain) -> Result<()> {
     for r in 0..t.h {
         for c in 0..t.w {
             let i = r * t.w + c;
-            if dist[i] as f64 > TREES_M || dist[i] as f64 <= ROAD_CLEAR_M || [WATER, BUILDING, ROAD].contains(&t.cover[i]) { continue }
+            if dist[i] as f64 > TREES_M || dist[i] as f64 <= ROAD_CLEAR_M || [WATER, BUILDING, ROAD].contains(&t.cover[i]) {
+                continue;
+            }
             let p = geo(c as f64 + 0.5, r as f64 + 0.5);
             let (x, y) = px(p[0], p[1]);
             let (col, lum, sd) = fine.stats(x - half, y - half, x + half, y + half);
-            if is_crown(col, lum, sd) { crown[i] = 1 }
+            if is_crown(col, lum, sd) {
+                crown[i] = 1
+            }
             color[i] = col;
         }
     }
@@ -305,7 +357,9 @@ pub fn build(course: &mut Course, t: &mut Terrain) -> Result<()> {
         let jit = |s: u64| (unit(c as u64, r as u64, s) - 0.5) * 0.8;
         let p = geo(c as f64 + 0.5 + jit(1), r as f64 + 0.5 + jit(2));
         let radius = (depth[i] as f64 * cell + 1.0).clamp(1.5, 6.5);
-        if !taken.free(p, radius, 0.7) { continue }
+        if !taken.free(p, radius, 0.7) {
+            continue;
+        }
         taken.add(p, radius);
         props.push(at("oak", p, yaw_of(&p), size_class(radius) * 8 + foliage(color[i]), i));
     }
@@ -314,7 +368,9 @@ pub fn build(course: &mut Course, t: &mut Terrain) -> Result<()> {
     props.sort_by(|a, b| a.k.cmp(&b.k).then(a.lat.total_cmp(&b.lat)).then(a.lon.total_cmp(&b.lon)));
     course.props = props;
     const CREDIT: &str = " Décor : photo aérienne IGN BD ORTHO (Licence Ouverte Etalab 2.0) et OpenStreetMap.";
-    if !course.attribution.contains("BD ORTHO") { course.attribution.push_str(CREDIT) }
+    if !course.attribution.contains("BD ORTHO") {
+        course.attribution.push_str(CREDIT)
+    }
     Ok(())
 }
 
@@ -324,13 +380,19 @@ fn majority(t: &mut Terrain) {
     for r in 1..t.h - 1 {
         for c in 1..t.w - 1 {
             let i = r * t.w + c;
-            if src[i] < MOSAIC0 { continue }
+            if src[i] < MOSAIC0 {
+                continue;
+            }
             let mut n = [0u8; MOSAIC.len()];
             for j in [i - t.w - 1, i - t.w, i - t.w + 1, i - 1, i, i + 1, i + t.w - 1, i + t.w, i + t.w + 1] {
-                if src[j] >= MOSAIC0 { n[(src[j] - MOSAIC0) as usize] += 1 }
+                if src[j] >= MOSAIC0 {
+                    n[(src[j] - MOSAIC0) as usize] += 1
+                }
             }
             let (k, &most) = n.iter().enumerate().max_by_key(|&(_, v)| v).unwrap();
-            if most >= 5 { t.cover[i] = MOSAIC0 + k as u8 }
+            if most >= 5 {
+                t.cover[i] = MOSAIC0 + k as u8
+            }
         }
     }
 }
@@ -345,10 +407,13 @@ fn smooth_heights(t: &mut Terrain, sigma: f32) {
         let src = t.heights.clone();
         for line in 0..m {
             for i in 0..n {
-                let v: f32 = (-r..=r).zip(&k).map(|(o, kk)| {
-                    let j = (i + o).clamp(0, n - 1);
-                    kk * src[if along_x { (line * w + j) as usize } else { (j * w + line) as usize }]
-                }).sum();
+                let v: f32 = (-r..=r)
+                    .zip(&k)
+                    .map(|(o, kk)| {
+                        let j = (i + o).clamp(0, n - 1);
+                        kk * src[if along_x { (line * w + j) as usize } else { (j * w + line) as usize }]
+                    })
+                    .sum();
                 t.heights[if along_x { (line * w + i) as usize } else { (i * w + line) as usize }] = v / sum;
             }
         }
@@ -357,7 +422,12 @@ fn smooth_heights(t: &mut Terrain, sigma: f32) {
 
 /// Tree size class from its crown radius, m: 0 small to 3 large.
 fn size_class(r: f64) -> u32 {
-    match r { r if r < 2.5 => 0, r if r < 3.5 => 1, r if r < 4.8 => 2, _ => 3 }
+    match r {
+        r if r < 2.5 => 0,
+        r if r < 3.5 => 1,
+        r if r < 4.8 => 2,
+        _ => 3,
+    }
 }
 
 /// A fixed, varied heading for a piece at this place, degrees.
@@ -395,12 +465,17 @@ fn chamfer(mask: &[bool], w: usize, h: usize) -> Vec<f32> {
     let mut d: Vec<f32> = mask.iter().map(|&m| if m { f32::INFINITY } else { 0.0 }).collect();
     let pass = |d: &mut Vec<f32>, order: &mut dyn Iterator<Item = usize>, back: bool| {
         for i in order {
-            if d[i] == 0.0 { continue }
+            if d[i] == 0.0 {
+                continue;
+            }
             let (c, r) = ((i % w) as isize, (i / w) as isize);
             let s: isize = if back { 1 } else { -1 };
             for (dc, dr, cost) in [(s, 0, 3.0), (0, s, 3.0), (s, s, 4.0), (-s, s, 4.0)] {
                 let (nc, nr) = (c + dc, r + dr);
-                if nc < 0 || nr < 0 || nc >= w as isize || nr >= h as isize { d[i] = d[i].min(cost); continue }
+                if nc < 0 || nr < 0 || nc >= w as isize || nr >= h as isize {
+                    d[i] = d[i].min(cost);
+                    continue;
+                }
                 d[i] = d[i].min(d[nr as usize * w + nc as usize] + cost);
             }
         }
@@ -431,7 +506,10 @@ fn osm_features(t: &Terrain) -> Result<Vec<Feature>> {
         // A node's position, or the middle of a way's outline.
         let point = || match (el["lat"].as_f64(), el["lon"].as_f64()) {
             (Some(lat), Some(lon)) => Some([lat, lon]),
-            _ => { let g = line(); (!g.is_empty()).then(|| [g.iter().map(|p| p[0]).sum::<f64>() / g.len() as f64, g.iter().map(|p| p[1]).sum::<f64>() / g.len() as f64]) }
+            _ => {
+                let g = line();
+                (!g.is_empty()).then(|| [g.iter().map(|p| p[0]).sum::<f64>() / g.len() as f64, g.iter().map(|p| p[1]).sum::<f64>() / g.len() as f64])
+            }
         };
         let num = |k: &str| tag(k).trim_end_matches(" m").parse::<f64>().ok();
         let f = if tag("natural") == "tree" {
@@ -443,7 +521,14 @@ fn osm_features(t: &Terrain) -> Result<Vec<Feature>> {
         } else if tag("natural") == "tree_row" {
             Some(Feature::Line { kind: "tree_row", pts: line() })
         } else if !tag("barrier").is_empty() {
-            Some(Feature::Line { kind: match tag("barrier") { "hedge" => "hedge", "wall" => "wall", _ => "fence" }, pts: line() })
+            Some(Feature::Line {
+                kind: match tag("barrier") {
+                    "hedge" => "hedge",
+                    "wall" => "wall",
+                    _ => "fence",
+                },
+                pts: line(),
+            })
         } else if tag("amenity") == "bench" {
             point().map(|at| Feature::Point { kind: "bench", at })
         } else if tag("highway") == "street_lamp" {

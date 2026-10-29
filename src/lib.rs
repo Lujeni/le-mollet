@@ -3,20 +3,20 @@
 pub mod account;
 pub mod audit;
 pub mod auth;
+pub mod buildings;
+pub mod city;
 pub mod club;
+pub mod course;
 pub mod db;
 pub mod decor;
 pub mod dem;
+pub mod district;
 pub mod event;
 pub mod friend;
-pub mod buildings;
-pub mod city;
-pub mod course;
-pub mod district;
 pub mod island;
 pub mod mail;
-pub mod ortho;
 pub mod metrics;
+pub mod ortho;
 pub mod peloton;
 pub mod physics;
 pub mod probe;
@@ -59,10 +59,7 @@ impl Trainer {
     pub async fn connect(name_filter: Option<&str>, timeout: Duration) -> Result<Self> {
         let manager = Manager::new().await?;
         let adapter = manager.adapters().await?.into_iter().next().context("no Bluetooth adapter")?;
-        adapter
-            .start_scan(ScanFilter { services: vec![FTMS_SERVICE, CYCLING_POWER_SERVICE] })
-            .await
-            .context("start scan")?;
+        adapter.start_scan(ScanFilter { services: vec![FTMS_SERVICE, CYCLING_POWER_SERVICE] }).await.context("start scan")?;
 
         let filter = name_filter.map(str::to_lowercase);
         let deadline = tokio::time::Instant::now() + timeout;

@@ -61,7 +61,13 @@ fn text(b: &[u8]) -> Option<String> {
 }
 
 fn props(p: CharPropFlags) -> String {
-    let all = [(CharPropFlags::READ, "read"), (CharPropFlags::WRITE, "write"), (CharPropFlags::WRITE_WITHOUT_RESPONSE, "write-no-resp"), (CharPropFlags::NOTIFY, "notify"), (CharPropFlags::INDICATE, "indicate")];
+    let all = [
+        (CharPropFlags::READ, "read"),
+        (CharPropFlags::WRITE, "write"),
+        (CharPropFlags::WRITE_WITHOUT_RESPONSE, "write-no-resp"),
+        (CharPropFlags::NOTIFY, "notify"),
+        (CharPropFlags::INDICATE, "indicate"),
+    ];
     all.iter().filter(|(f, _)| p.contains(*f)).map(|(_, n)| *n).collect::<Vec<_>>().join(",")
 }
 
@@ -94,12 +100,20 @@ pub async fn run(target: Option<&str>, secs: u64, writes: &[(String, Vec<u8>)]) 
         let name = pr.local_name.clone().unwrap_or_default();
         let services: Vec<String> = pr.services.iter().map(|u| format!("{u} {}", known(u)).trim().to_owned()).collect();
         println!("- {:<24} {}  rssi {}", if name.is_empty() { "(no name)" } else { &name }, pr.address, pr.rssi.map_or("?".into(), |r| r.to_string()));
-        for s in services { println!("    service  {s}") }
-        for (id, data) in &pr.manufacturer_data { println!("    maker    0x{id:04x}: {}", hex(data)) }
-        for (u, data) in &pr.service_data { println!("    svc data {u}: {}", hex(data)) }
+        for s in services {
+            println!("    service  {s}")
+        }
+        for (id, data) in &pr.manufacturer_data {
+            println!("    maker    0x{id:04x}: {}", hex(data))
+        }
+        for (u, data) in &pr.service_data {
+            println!("    svc data {u}: {}", hex(data))
+        }
         if let Some(t) = target {
             let t = t.to_lowercase();
-            if picked.is_none() && (name.to_lowercase().contains(&t) || pr.address.to_string().to_lowercase() == t) { picked = Some(p.clone()) }
+            if picked.is_none() && (name.to_lowercase().contains(&t) || pr.address.to_string().to_lowercase() == t) {
+                picked = Some(p.clone())
+            }
         }
     }
     let Some(t) = target else {
@@ -111,8 +125,15 @@ pub async fn run(target: Option<&str>, secs: u64, writes: &[(String, Vec<u8>)]) 
     println!("\n== connecting to {t}");
     // BlueZ often drops the first try (a sleeping device, a stale link): three tries, like the trainer's.
     let mut tries = 1;
-    while let Err(e) = async { p.connect().await.context("connect")?; p.discover_services().await.context("discover services") }.await {
-        if tries == 3 { return Err(e.context("press a button to wake it, and close any other app using it")) }
+    while let Err(e) = async {
+        p.connect().await.context("connect")?;
+        p.discover_services().await.context("discover services")
+    }
+    .await
+    {
+        if tries == 3 {
+            return Err(e.context("press a button to wake it, and close any other app using it"));
+        }
         println!("try {tries} failed: {e:#}, again...");
         p.disconnect().await.ok();
         tokio::time::sleep(Duration::from_secs(2)).await;
@@ -130,16 +151,23 @@ pub async fn run(target: Option<&str>, secs: u64, writes: &[(String, Vec<u8>)]) 
                 }
             }
             println!();
-            if c.properties.intersects(CharPropFlags::NOTIFY | CharPropFlags::INDICATE) { listen.push(c.clone()) }
+            if c.properties.intersects(CharPropFlags::NOTIFY | CharPropFlags::INDICATE) {
+                listen.push(c.clone())
+            }
         }
     }
     for c in &listen {
-        if let Err(e) = p.subscribe(c).await { println!("subscribe {} failed: {e}", c.uuid) }
+        if let Err(e) = p.subscribe(c).await {
+            println!("subscribe {} failed: {e}", c.uuid)
+        }
     }
     let mut notes = p.notifications().await?;
     let chars: Vec<_> = p.characteristics().into_iter().collect();
     for (u, data) in writes {
-        let Some(c) = chars.iter().find(|c| c.uuid.to_string() == *u || c.uuid.to_string().starts_with(&format!("0000{u}-"))) else { println!("write: no characteristic {u}"); continue };
+        let Some(c) = chars.iter().find(|c| c.uuid.to_string() == *u || c.uuid.to_string().starts_with(&format!("0000{u}-"))) else {
+            println!("write: no characteristic {u}");
+            continue;
+        };
         let kind = if c.properties.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE) { WriteType::WithoutResponse } else { WriteType::WithResponse };
         match p.write(c, data, kind).await {
             Ok(()) => println!("wrote {} <- {}", c.uuid, hex(data)),

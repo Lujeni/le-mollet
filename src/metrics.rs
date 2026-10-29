@@ -96,7 +96,9 @@ pub fn observe(name: &'static str, l: &[(&str, &str)], v: f64) {
     let mut reg = REG.lock().unwrap();
     let h = reg.hists.entry(name).or_default().entry(labels(l)).or_insert_with(|| Hist { counts: vec![0; b.len()], ..Default::default() });
     for (i, le) in b.iter().enumerate() {
-        if v <= *le { h.counts[i] += 1 }
+        if v <= *le {
+            h.counts[i] += 1
+        }
     }
     (h.sum, h.n) = (h.sum + v, h.n + 1);
 }
@@ -156,6 +158,8 @@ mod tests {
         assert!(out.contains("le_mollet_clubs 3\n") && out.contains("le_mollet_riders_online{track=\"a\\\"b\"} 2\n"));
         // Every series has its HELP: nothing recorded under a name missing from DEFS.
         let reg = REG.lock().unwrap();
-        for name in reg.values.keys().chain(reg.hists.keys()) { assert!(DEFS.iter().any(|d| d.0 == *name), "{name} not in DEFS") }
+        for name in reg.values.keys().chain(reg.hists.keys()) {
+            assert!(DEFS.iter().any(|d| d.0 == *name), "{name} not in DEFS")
+        }
     }
 }

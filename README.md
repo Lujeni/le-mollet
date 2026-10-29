@@ -216,7 +216,7 @@ Contributions are welcome: bug reports, tested trainers, new climbs, code and do
 
 - Found a bug or have an idea? [Open an issue](https://github.com/Lujeni/le-mollet/issues/new/choose).
 - Own a smart trainer? Test it and add a row to [docs/hardware.md](docs/hardware.md).
-- Want to code? Run `cargo clippy --all-targets -- -D warnings` and `cargo test`, use
+- Want to code? Run `cargo fmt` and `cargo test` (what the CI checks), use
   [Conventional Commits](https://www.conventionalcommits.org), and open a pull request.
 
 Everything else is in the [contributing guide](docs/CONTRIBUTING.md).

@@ -28,7 +28,9 @@ pub fn air_density(alt_m: f32) -> f32 {
 /// Share of air drag saved riding `gap_m` behind another rider: ~30 % on the wheel, nothing past 12 m.
 /// ponytail: straight line from 1 m to 12 m, a curve from wind-tunnel data if it ever matters
 pub fn draft(gap_m: f32) -> f32 {
-    if !(0.0..12.0).contains(&gap_m) { return 0.0 }
+    if !(0.0..12.0).contains(&gap_m) {
+        return 0.0;
+    }
     0.3 * (1.0 - (gap_m - 1.0).max(0.0) / 11.0)
 }
 

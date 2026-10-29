@@ -77,7 +77,9 @@ impl Friends {
         // Rides an older server kept in the profile's row move to rows of their own.
         let old: Vec<String> = f.people.iter().filter(|(_, p)| !p.rides.is_empty()).map(|(k, _)| k.clone()).collect();
         for pid in &old {
-            for r in std::mem::take(&mut f.people.get_mut(pid).unwrap().rides) { let _ = f.add_ride(db, pid, r); }
+            for r in std::mem::take(&mut f.people.get_mut(pid).unwrap().rides) {
+                let _ = f.add_ride(db, pid, r);
+            }
         }
         f.save(db, &old.iter().map(String::as_str).collect::<Vec<_>>())?;
         Ok(f)
@@ -86,7 +88,9 @@ impl Friends {
     /// Store these profiles.
     pub fn save(&self, db: &Db, pids: &[&str]) -> Result<()> {
         for pid in pids {
-            if let Some(p) = self.people.get(*pid) { db.put("friends", pid, p)? }
+            if let Some(p) = self.people.get(*pid) {
+                db.put("friends", pid, p)?
+            }
         }
         Ok(())
     }
@@ -116,13 +120,25 @@ impl Friends {
     /// Ask a handle to be friends; if they had asked first, it is a yes. Returns the other's profile id.
     pub fn ask(&mut self, pid: &str, handle: &str) -> Result<String, &'static str> {
         let other = self.find(handle).ok_or("no one with this handle")?;
-        if other == pid { return Err("that's you") }
-        if !self.people.contains_key(pid) { return Err("no such profile") }
-        if self.people[pid].friends.contains(&other) { return Err("already friends") }
-        if self.people[pid].asked.contains(&other) { return self.accept(pid, handle) }
+        if other == pid {
+            return Err("that's you");
+        }
+        if !self.people.contains_key(pid) {
+            return Err("no such profile");
+        }
+        if self.people[pid].friends.contains(&other) {
+            return Err("already friends");
+        }
+        if self.people[pid].asked.contains(&other) {
+            return self.accept(pid, handle);
+        }
         let them = self.people.get_mut(&other).unwrap();
-        if them.asked.len() + them.friends.len() >= MAX_FRIENDS { return Err("too many friends") }
-        if !them.asked.iter().any(|a| a == pid) { them.asked.push(pid.into()) }
+        if them.asked.len() + them.friends.len() >= MAX_FRIENDS {
+            return Err("too many friends");
+        }
+        if !them.asked.iter().any(|a| a == pid) {
+            them.asked.push(pid.into())
+        }
         Ok(other)
     }
 
@@ -130,12 +146,16 @@ impl Friends {
     pub fn accept(&mut self, pid: &str, handle: &str) -> Result<String, &'static str> {
         let other = self.find(handle).ok_or("no one with this handle")?;
         let me = self.people.get_mut(pid).ok_or("no such profile")?;
-        if !me.asked.contains(&other) { return Err("no request from them") }
+        if !me.asked.contains(&other) {
+            return Err("no request from them");
+        }
         me.asked.retain(|a| *a != other);
         me.friends.push(other.clone());
         let them = self.people.get_mut(&other).unwrap();
         them.asked.retain(|a| a != pid);
-        if !them.friends.iter().any(|f| f == pid) { them.friends.push(pid.into()) }
+        if !them.friends.iter().any(|f| f == pid) {
+            them.friends.push(pid.into())
+        }
         Ok(other)
     }
 
@@ -161,7 +181,9 @@ impl Friends {
         p.kept.push((id, date));
         // Newest first by date (a backfill sends older rides after newer ones); ISO dates sort as text.
         p.kept.sort_by(|a, b| b.1.cmp(&a.1));
-        for (old, _) in p.kept.drain(MAX_RIDES.min(p.kept.len())..) { let _ = db.delete(&coll(pid), &old); }
+        for (old, _) in p.kept.drain(MAX_RIDES.min(p.kept.len())..) {
+            let _ = db.delete(&coll(pid), &old);
+        }
         Ok(())
     }
 
@@ -195,6 +217,28 @@ impl Friends {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn account_keys_and_clean_names() {
+        assert_eq!(account_key(42), "acct:42");
+        assert_eq!((account_of("acct:42"), account_of("a1b2-c3"), account_of("acct:x")), (Some(42), None, None));
+        let mut f = Friends::default();
+        assert_eq!(f.me("a", "  ", None, 1).name, "Cycliste");
+        assert_eq!(f.me("b", "Coach#1\u{7}", None, 2).name, "Coach1");
+        assert_eq!(f.me("c", &"x".repeat(40), None, 3).name.len(), 24);
+        assert_eq!(f.me("c", "Renamed", Some("FR".into()), 9).handle(), "Renamed#0003"); // a new name keeps the number
+        assert!(f.find("Renamed#3").is_some() && f.find("renamed # 0003").is_some() && f.find("Renamed#9999").is_none() && f.find("nohash").is_none());
+        // Too many friends: the 201st request is refused.
+        let mut g = Friends::default();
+        g.me("star", "Star", None, 1);
+        for i in 0..MAX_FRIENDS {
+            g.me(&format!("f{i}"), "Fan", None, i as u16);
+            g.ask(&format!("f{i}"), "Star#0001").unwrap();
+        }
+        g.me("late", "Late", None, 5000);
+        assert_eq!(g.ask("late", "Star#0001"), Err("too many friends"));
+        assert_eq!(g.ask("ghost", "Star#0001"), Err("no such profile"));
+    }
 
     #[test]
     fn handles_requests_and_rides() {

@@ -15,9 +15,25 @@ pub fn send(to: &str, subject: &str, text: &str, html: Option<&str>) -> anyhow::
     let from = std::env::var("LE_MOLLET_MAIL_FROM").unwrap_or_else(|_| "Le Mollet <no-reply@le-mollet.fr>".into());
     let m = Message::builder().from(from.parse()?).to(to.parse()?).subject(subject);
     let m = match html {
-        Some(html) => m.multipart(MultiPart::alternative().singlepart(SinglePart::builder().header(ContentType::TEXT_PLAIN).body(text.to_owned())).singlepart(SinglePart::builder().header(ContentType::TEXT_HTML).body(html.to_owned())))?,
+        Some(html) => m.multipart(
+            MultiPart::alternative()
+                .singlepart(SinglePart::builder().header(ContentType::TEXT_PLAIN).body(text.to_owned()))
+                .singlepart(SinglePart::builder().header(ContentType::TEXT_HTML).body(html.to_owned())),
+        )?,
         None => m.header(ContentType::TEXT_PLAIN).body(text.to_owned())?,
     };
     SmtpTransport::from_url(&url)?.build().send(&m)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn without_a_server_the_mail_is_printed() {
+        if std::env::var("LE_MOLLET_SMTP_URL").is_ok() {
+            return;
+        } // a developer's real relay: nothing to send
+        assert!(super::send("someone@example.org", "Test", "Hello", Some("<p>Hello</p>")).is_ok());
+        assert!(super::send("not an address", "Test", "Hello", None).is_ok()); // printed, never parsed
+    }
 }

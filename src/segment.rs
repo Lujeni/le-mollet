@@ -50,7 +50,9 @@ pub fn course_windows(c: &Course) -> Vec<Window> {
         let mut d = 0.0;
         while d + KOM_M < len {
             let gain = c.ele_at(d + KOM_M) - c.ele_at(d);
-            if gain > best { (best, at) = (gain, d) }
+            if gain > best {
+                (best, at) = (gain, d)
+            }
             d += 50.0;
         }
         // A KOM that overlaps the sprint would make one window hide the other: keep the sprint.
@@ -92,7 +94,9 @@ impl Timer {
                 self.running = None;
                 return Some((i, t - t0));
             }
-            if d < w.d0 { self.running = None }
+            if d < w.d0 {
+                self.running = None
+            }
         }
         if self.running.is_none() {
             self.running = windows.iter().position(|w| last < w.d0 && d >= w.d0 && d < w.d1).map(|i| (i, t));
@@ -154,12 +158,7 @@ impl Boards {
         list.sort_by(|a, b| a.time.total_cmp(&b.time));
         list.truncate(KEEP);
         let today: Vec<&Entry> = list.iter().filter(|o| o.date / 86_400 == day).collect();
-        Rank {
-            rank: list.iter().filter(|o| o.time < time).count() + 1,
-            of: list.len(),
-            today: today.iter().filter(|o| o.time < time).count() + 1,
-            of_today: today.len().max(1),
-        }
+        Rank { rank: list.iter().filter(|o| o.time < time).count() + 1, of: list.len(), today: today.iter().filter(|o| o.time < time).count() + 1, of_today: today.len().max(1) }
     }
 
     /// Wipe a segment's times (moderation). Returns whether it had any.
@@ -180,8 +179,38 @@ mod tests {
     use super::*;
     use crate::course::Point;
 
+    #[test]
+    fn boards_are_capped_reset_and_split_by_day() {
+        let mut b = Boards::default();
+        let e = |who: &str, time: f32, day: u64| Entry { who: who.into(), name: who.into(), color: "#fff".into(), time, date: 86_400 * day + 60 };
+        for i in 0..250 {
+            b.record("k", e(&format!("r{i}"), 1000.0 - i as f32, 10));
+        }
+        assert_eq!(b.0["k"].len(), 200); // the fastest 200 kept
+        assert_eq!(b.0["k"][0].who, "r249");
+        // Today's ranking is today's times only.
+        let r = b.record("k", e("new", 2000.0, 11));
+        assert_eq!((r.rank, r.of, r.today, r.of_today), (201, 200, 1, 1)); // too slow for the board, first of its day
+        let (all, today) = b.top("k", 3, 86_400 * 11 + 5);
+        assert_eq!((all.len(), today.len()), (3, 0)); // the slow new time was not kept
+        assert!(b.reset("k") && !b.reset("k") && b.top("k", 3, 0).0.is_empty());
+        // Kept in the database per segment.
+        let db = crate::db::Db::memory();
+        b.record("alpe:KOM", e("a", 3000.0, 10));
+        b.save(&db, "alpe:KOM").unwrap();
+        assert_eq!(Boards::load(&db).unwrap().0["alpe:KOM"][0].who, "a");
+        b.reset("alpe:KOM");
+        b.save(&db, "alpe:KOM").unwrap();
+        assert!(Boards::load(&db).unwrap().0.is_empty());
+    }
+
     fn course(len: f32, looped: bool, ele: impl Fn(f32) -> f32) -> Course {
-        let points = (0..=(len / 10.0) as usize).map(|i| { let d = i as f32 * 10.0; Point { d, lat: 0.0, lon: 0.0, ele: ele(d) } }).collect();
+        let points = (0..=(len / 10.0) as usize)
+            .map(|i| {
+                let d = i as f32 * 10.0;
+                Point { d, lat: 0.0, lon: 0.0, ele: ele(d) }
+            })
+            .collect();
         Course { name: "Col".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped, points, ..Default::default() }
     }
 
@@ -190,7 +219,15 @@ mod tests {
         let w = course_windows(&course(5000.0, false, |d| d * 0.08));
         assert_eq!((w.len(), w[0].kind, w[0].d1), (1, Kind::Kom, 5000.0));
         // A loop with a hill between 6 and 7.5 km.
-        let w = course_windows(&course(10_000.0, true, |d| if (6000.0..7500.0).contains(&d) { (d - 6000.0) * 0.06 } else if d >= 7500.0 { 90.0 - (d - 7500.0) * 0.036 } else { 0.0 }));
+        let w = course_windows(&course(10_000.0, true, |d| {
+            if (6000.0..7500.0).contains(&d) {
+                (d - 6000.0) * 0.06
+            } else if d >= 7500.0 {
+                90.0 - (d - 7500.0) * 0.036
+            } else {
+                0.0
+            }
+        }));
         assert_eq!(w.iter().map(|w| w.kind).collect::<Vec<_>>(), vec![Kind::Sprint, Kind::Kom]);
         assert!((w[1].d0 - 6000.0).abs() <= 50.0, "kom at {}", w[1].d0);
     }
@@ -202,7 +239,9 @@ mod tests {
         let mut done = None;
         for k in 0..300 {
             // 10 m/s, 1 s per update
-            if let Some(r) = t.update(&w, k as f32 * 10.0, k as f32) { done = Some(r) }
+            if let Some(r) = t.update(&w, k as f32 * 10.0, k as f32) {
+                done = Some(r)
+            }
         }
         assert_eq!(done, Some((0, 10.0)));
         // Teleported into the middle: not a start; teleported out of a running one: void.

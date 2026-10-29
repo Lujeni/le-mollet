@@ -3,8 +3,8 @@
 //! rider's weight and rank itself, checks each second of power for what no human or trainer does, and only
 //! lets rides it believes into leaderboards and race results. Kept in the database (src/db.rs).
 
-use crate::event::category;
 use crate::db::Db;
+use crate::event::category;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -92,14 +92,26 @@ impl Riders {
     /// Create or update a rider. The weight moves slowly (see `WEIGHT_STEP`); the FTP is free, it can only
     /// raise the rank, never lower it below what rides showed.
     pub fn register(&mut self, pid: &str, owner: Option<u64>, weight: f32, ftp: f32, now: u64) -> Result<&Rider, &'static str> {
-        if !(35.0..=150.0).contains(&weight) { return Err("weight: 35 to 150 kg") }
-        if !(50.0..=600.0).contains(&ftp) { return Err("ftp: 50 to 600 W") }
-        if !self.may_use(pid, owner) { return Err("this profile belongs to another account") }
+        if !(35.0..=150.0).contains(&weight) {
+            return Err("weight: 35 to 150 kg");
+        }
+        if !(50.0..=600.0).contains(&ftp) {
+            return Err("ftp: 50 to 600 W");
+        }
+        if !self.may_use(pid, owner) {
+            return Err("this profile belongs to another account");
+        }
         let r = self.riders.entry(pid.into()).or_insert_with(|| Rider { weight, anchor: weight, anchor_at: now, created: now, ftp, owner, seen: vec![], flags: vec![] });
-        if now >= r.anchor_at + 7 * DAY { (r.anchor, r.anchor_at) = (r.weight, now) }
-        if now >= r.created + DAY && (weight - r.anchor).abs() > WEIGHT_STEP + 1e-3 { return Err("weight: at most 2 kg a week") }
+        if now >= r.anchor_at + 7 * DAY {
+            (r.anchor, r.anchor_at) = (r.weight, now)
+        }
+        if now >= r.created + DAY && (weight - r.anchor).abs() > WEIGHT_STEP + 1e-3 {
+            return Err("weight: at most 2 kg a week");
+        }
         (r.weight, r.ftp) = (weight, ftp);
-        if now < r.created + DAY { (r.anchor, r.anchor_at) = (weight, now) }
+        if now < r.created + DAY {
+            (r.anchor, r.anchor_at) = (weight, now)
+        }
         r.owner = r.owner.or(owner);
         Ok(r)
     }
@@ -107,11 +119,15 @@ impl Riders {
     /// A ride is over: what it showed of the rider's FTP, and why it was flagged, if it was.
     pub fn ride_done(&mut self, pid: &str, seen_ftp: Option<f32>, flagged: Option<Flagged>, now: u64) {
         let Some(r) = self.riders.get_mut(pid) else { return };
-        if let Some(f) = seen_ftp { r.seen.push((now, f)) }
+        if let Some(f) = seen_ftp {
+            r.seen.push((now, f))
+        }
         r.seen.retain(|s| s.0 + SEEN_DAYS * DAY >= now);
         if let Some(f) = flagged {
             r.flags.push(f);
-            if r.flags.len() > 20 { r.flags.remove(0); }
+            if r.flags.len() > 20 {
+                r.flags.remove(0);
+            }
         }
     }
 }
@@ -154,40 +170,72 @@ impl Check {
     }
 
     fn flag(&mut self, why: &'static str) {
-        if !self.flags.contains(&why) { self.flags.push(why) }
+        if !self.flags.contains(&why) {
+            self.flags.push(why)
+        }
     }
 
     /// `dt` s of riding at `w` W. `measured`: from a trainer (the server's, or the browser's own), not the slider.
     pub fn tick(&mut self, w: f32, cadence: Option<f32>, measured: bool, dt: f32) {
-        if w > 0.0 && !measured { self.demo = true }
-        if cadence.is_some_and(|c| c > 0.0) { self.cadence_seen = true }
+        if w > 0.0 && !measured {
+            self.demo = true
+        }
+        if cadence.is_some_and(|c| c > 0.0) {
+            self.cadence_seen = true
+        }
         self.part = (self.part.0 + w * dt, self.part.1 + dt);
-        if self.part.1 + 1e-4 < 1.0 { return }
+        if self.part.1 + 1e-4 < 1.0 {
+            return;
+        }
         let s = self.part.0 / self.part.1;
         self.part = (0.0, 0.0);
         let last = self.secs.last().copied();
         self.secs.push(s);
         // A real trainer reads a few watts off every second; a typed number holds still.
-        if last.is_some_and(|l| (s - l).abs() > 1000.0) { self.flag("spike") }
-        if s > 50.0 && (s - self.flat.0).abs() < 0.01 { self.flat.1 += 1 } else { self.flat = (s, 1) }
-        if self.flat.1 >= 120 { self.flag("flat") }
-        if self.cadence_seen && s > 250.0 && cadence.is_none_or(|c| c <= 0.0) { self.no_cadence += 1 } else { self.no_cadence = 0 }
-        if self.no_cadence >= 30 { self.flag("no cadence") }
-        if s / self.kg > 25.0 { self.flag("1 s over 25 W/kg") }
+        if last.is_some_and(|l| (s - l).abs() > 1000.0) {
+            self.flag("spike")
+        }
+        if s > 50.0 && (s - self.flat.0).abs() < 0.01 {
+            self.flat.1 += 1
+        } else {
+            self.flat = (s, 1)
+        }
+        if self.flat.1 >= 120 {
+            self.flag("flat")
+        }
+        if self.cadence_seen && s > 250.0 && cadence.is_none_or(|c| c <= 0.0) {
+            self.no_cadence += 1
+        } else {
+            self.no_cadence = 0
+        }
+        if self.no_cadence >= 30 {
+            self.flag("no cadence")
+        }
+        if s / self.kg > 25.0 {
+            self.flag("1 s over 25 W/kg")
+        }
         // W′ balance (Skiba): above the FTP the reserve drains, below it refills. Far below empty is not human.
         if self.cp > 0.0 {
             self.wbal += if s > self.cp { -(s - self.cp) } else { (W_PRIME - self.wbal) * (self.cp - s) / W_PRIME };
-            if self.wbal < -0.5 * W_PRIME { self.flag("beyond W′") }
+            if self.wbal < -0.5 * W_PRIME {
+                self.flag("beyond W′")
+            }
         }
         if self.secs.len().is_multiple_of(60) {
-            if self.best(1200).is_some_and(|b| b / self.kg > 6.5) { self.flag("20 min over 6.5 W/kg") }
-            if self.best(300).is_some_and(|b| b / self.kg > 8.0) { self.flag("5 min over 8 W/kg") }
+            if self.best(1200).is_some_and(|b| b / self.kg > 6.5) {
+                self.flag("20 min over 6.5 W/kg")
+            }
+            if self.best(300).is_some_and(|b| b / self.kg > 8.0) {
+                self.flag("5 min over 8 W/kg")
+            }
         }
     }
 
     /// Best average power over `n` s, if the ride lasted that long.
     pub fn best(&self, n: usize) -> Option<f32> {
-        if n == 0 || self.secs.len() < n { return None }
+        if n == 0 || self.secs.len() < n {
+            return None;
+        }
         let mut sum: f32 = self.secs[..n].iter().sum();
         let mut best = sum;
         for i in n..self.secs.len() {
@@ -198,7 +246,13 @@ impl Check {
     }
 
     pub fn trust(&self) -> Trust {
-        if self.demo { Trust::Demo } else if self.flags.is_empty() { Trust::Device } else { Trust::Flagged }
+        if self.demo {
+            Trust::Demo
+        } else if self.flags.is_empty() {
+            Trust::Device
+        } else {
+            Trust::Flagged
+        }
     }
 
     pub fn why(&self) -> Vec<String> {
@@ -220,6 +274,40 @@ impl Check {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spikes_and_superhuman_watts_are_flagged() {
+        // A 1500 W jump from one second to the next: no trainer does that.
+        let mut c = Check::new(Some(260.0), 70.0);
+        for i in 0..100 {
+            c.tick(if i < 50 { 200.0 } else { 1700.0 } + (i % 3) as f32, Some(90.0), true, 0.1)
+        }
+        assert!(c.why().contains(&"spike".to_string()), "{:?}", c.why());
+        // 1800 W at 70 kg for a second: past 25 W/kg.
+        let mut c = Check::new(Some(260.0), 70.0);
+        for _ in 0..10 {
+            c.tick(1800.0, Some(90.0), true, 0.1)
+        }
+        assert_eq!(c.why(), ["1 s over 25 W/kg"]);
+        assert_eq!(c.trust(), Trust::Flagged);
+        // Best averages need the ride to last that long; a 6 min effort shows an FTP, a 2 min one does not count as 20.
+        let c = ride(|_| 400.0, 360, Some(90.0), 400.0);
+        assert!(c.best(0).is_none() && c.best(361).is_none() && (c.best(60).unwrap() - 400.0).abs() < 0.01);
+        assert!((c.effort_ftp(360).unwrap() - 380.0).abs() < 0.01); // 95 % of its best 6 min
+        assert_eq!(c.seen_ftp(), None); // shorter than 20 min
+        // 600 W held for 5 min at 70 kg: 8.6 W/kg, flagged at the minute mark.
+        let c = ride(|_| 600.0, 300, Some(100.0), 350.0);
+        assert!(c.why().contains(&"5 min over 8 W/kg".to_string()), "{:?}", c.why());
+        // Flags are kept for the moderators, the last 20 only.
+        let mut rs = Riders::default();
+        rs.register("a", None, 70.0, 250.0, 1_000 * DAY).unwrap();
+        for i in 0..25 {
+            rs.ride_done("a", None, Some(Flagged { at: i, track: "t".into(), name: "a".into(), why: vec!["flat".into()] }), 1_000 * DAY)
+        }
+        assert_eq!((rs.riders["a"].flags.len(), rs.riders["a"].flags[0].at), (20, 5));
+        assert_eq!(rs.register("a", None, 20.0, 250.0, 1_000 * DAY).unwrap_err(), "weight: 35 to 150 kg");
+        assert_eq!(rs.register("a", None, 70.0, 900.0, 1_000 * DAY).unwrap_err(), "ftp: 50 to 600 W");
+    }
 
     #[test]
     fn weight_moves_slowly_and_rank_never_drops_below_rides() {
@@ -246,7 +334,9 @@ mod tests {
 
     fn ride(watts: impl Fn(usize) -> f32, secs: usize, cad: Option<f32>, ftp: f32) -> Check {
         let mut c = Check::new(Some(ftp), 70.0);
-        for i in 0..secs * 10 { c.tick(watts(i / 10), cad, true, 0.1) }
+        for i in 0..secs * 10 {
+            c.tick(watts(i / 10), cad, true, 0.1)
+        }
         c
     }
 
@@ -265,7 +355,9 @@ mod tests {
         // Watts without legs.
         assert!(ride(|s| 300.0 + (s % 7) as f32, 60, None, 400.0).why().is_empty()); // no cadence sensor: fine
         let mut c = Check::new(Some(400.0), 70.0);
-        for i in 0..600 { c.tick(300.0 + (i % 7) as f32, Some(if i < 100 { 90.0 } else { 0.0 }), true, 0.1) }
+        for i in 0..600 {
+            c.tick(300.0 + (i % 7) as f32, Some(if i < 100 { 90.0 } else { 0.0 }), true, 0.1)
+        }
         assert_eq!(c.why(), ["no cadence"]);
         // The slider, or no profile: demo.
         let mut d = Check::new(Some(260.0), 70.0);

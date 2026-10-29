@@ -28,7 +28,11 @@ impl Auth {
         use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
         use std::str::FromStr;
         let memory = path == ":memory:";
-        let opts = SqliteConnectOptions::from_str(if memory { "sqlite::memory:" } else { path })?.create_if_missing(true).journal_mode(SqliteJournalMode::Wal).foreign_keys(true).busy_timeout(std::time::Duration::from_secs(5));
+        let opts = SqliteConnectOptions::from_str(if memory { "sqlite::memory:" } else { path })?
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal)
+            .foreign_keys(true)
+            .busy_timeout(std::time::Duration::from_secs(5));
         // One connection in memory (each would be its own database), a few on a file.
         let pool = SqlitePoolOptions::new().max_connections(if memory { 1 } else { 4 }).connect_with(opts).await?;
         let storage = SqliteStorage::new(pool.clone());
@@ -43,7 +47,10 @@ impl Auth {
     /// reads exactly), never 0.
     pub fn account_id(id: &UserId) -> u64 {
         let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-        for b in id.as_str().bytes() { h ^= b as u64; h = h.wrapping_mul(0x0100_0000_01b3) }
+        for b in id.as_str().bytes() {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x0100_0000_01b3)
+        }
         (h & ((1 << 53) - 1)).max(1)
     }
 
@@ -64,7 +71,10 @@ impl Auth {
     /// Names are unique, case aside: "Julien" and "julien" are one account (torii knows no names, hence the query).
     pub async fn by_name(&self, name: &str) -> Option<User> {
         let id: Option<String> = sqlx::query_scalar("SELECT id FROM users WHERE lower(name) = lower(?1)").bind(name.trim()).fetch_optional(&self.pool).await.ok().flatten();
-        match id { Some(id) => self.user(&UserId::new(&id)).await, None => None }
+        match id {
+            Some(id) => self.user(&UserId::new(&id)).await,
+            None => None,
+        }
     }
 
     // ponytail: a scan of the ids, for the CLI and a rare lookup; a column when accounts count in thousands
@@ -72,7 +82,9 @@ impl Auth {
         let ids: Vec<String> = sqlx::query_scalar("SELECT id FROM users").fetch_all(&self.pool).await.unwrap_or_default();
         for id in ids {
             let id = UserId::new(&id);
-            if Self::account_id(&id) == account { return self.user(&id).await }
+            if Self::account_id(&id) == account {
+                return self.user(&id).await;
+            }
         }
         None
     }
@@ -81,7 +93,9 @@ impl Auth {
     /// until a link is used; the link's token comes back for the mail (src/mail.rs).
     pub async fn signup_by_email(&self, email: &str) -> Result<(User, SecureToken), Error> {
         let email = email.trim().to_ascii_lowercase();
-        if !valid_email(&email) { return Err("email: not an address") }
+        if !valid_email(&email) {
+            return Err("email: not an address");
+        }
         match self.by_email(&email).await {
             Some(u) if Self::provisional(&u) => self.delete(&u.id).await?,
             Some(_) => return Err("email taken"),
@@ -92,13 +106,23 @@ impl Auth {
         for i in 0..5 {
             let n = if i == 0 { base.clone() } else { format!("{}-{:04}", &base[..base.len().min(19)], uuid::Uuid::new_v4().as_u128() % 10_000) };
             match self.by_name(&n).await {
-                Some(u) if Self::provisional(&u) => { self.delete(&u.id).await?; name = Some(n); break }
+                Some(u) if Self::provisional(&u) => {
+                    self.delete(&u.id).await?;
+                    name = Some(n);
+                    break;
+                }
                 Some(_) => continue,
-                None => { name = Some(n); break }
+                None => {
+                    name = Some(n);
+                    break;
+                }
             }
         }
         let name = name.ok_or("name taken")?;
-        let token = self.torii.magic_link().generate_token(&email).await.map_err(|e| { eprintln!("accounts: {e}"); "could not create the account" })?; // creates the user
+        let token = self.torii.magic_link().generate_token(&email).await.map_err(|e| {
+            eprintln!("accounts: {e}");
+            "could not create the account"
+        })?; // creates the user
         let mut user = self.user(&token.user_id).await.ok_or("could not create the account")?;
         user.name = Some(name);
         let user = self.repos.user().update(&user).await.map_err(|_| "could not save the account")?;
@@ -115,18 +139,31 @@ impl Auth {
     /// The link used, once, within its 15 minutes: a session, and the mailbox proven.
     pub async fn use_link(&self, token: &str, ip: Option<String>) -> Result<(User, Session), Error> {
         let (user, session) = self.torii.magic_link().authenticate(token, None, ip).await.map_err(|_| "link: expired or used")?;
-        if !user.is_email_verified() { self.torii.set_user_email_verified(&user.id).await.map_err(|_| "could not save the account")? }
+        if !user.is_email_verified() {
+            self.torii.set_user_email_verified(&user.id).await.map_err(|_| "could not save the account")?
+        }
         Ok((self.user(&user.id).await.unwrap_or(user), session))
     }
 
     /// At home: a name and a password (8 to 128 characters), signed in at once.
     pub async fn signup_password(&self, name: &str, password: &str, ip: Option<String>) -> Result<(User, Session), Error> {
         let name = name.trim();
-        if !valid_name(name) { return Err("name: 3 to 24 letters, digits, - or _") }
-        if password.chars().count() < 8 { return Err("password: 8 characters at least") }
-        if password.len() > 128 { return Err("password: 128 characters at most") }
-        if self.by_name(name).await.is_some() { return Err("name taken") }
-        let user = self.torii.password().register_with_name(&local_email(name), password, Some(name)).await.map_err(|e| { eprintln!("accounts: {e}"); "name taken" })?;
+        if !valid_name(name) {
+            return Err("name: 3 to 24 letters, digits, - or _");
+        }
+        if password.chars().count() < 8 {
+            return Err("password: 8 characters at least");
+        }
+        if password.len() > 128 {
+            return Err("password: 128 characters at most");
+        }
+        if self.by_name(name).await.is_some() {
+            return Err("name taken");
+        }
+        let user = self.torii.password().register_with_name(&local_email(name), password, Some(name)).await.map_err(|e| {
+            eprintln!("accounts: {e}");
+            "name taken"
+        })?;
         // Nobody's mailbox: verified from the start, so the account is never provisional.
         self.torii.set_user_email_verified(&user.id).await.map_err(|_| "could not save the account")?;
         let user = self.user(&user.id).await.unwrap_or(user);
@@ -142,14 +179,21 @@ impl Auth {
     /// The password checked, nothing else (the session it makes is dropped at once).
     pub async fn check_password(&self, user: &User, password: &str) -> bool {
         match self.torii.password().authenticate(&user.email, password, None, None).await {
-            Ok((_, s)) => { let _ = self.torii.delete_session(&s.token).await; true }
+            Ok((_, s)) => {
+                let _ = self.torii.delete_session(&s.token).await;
+                true
+            }
             Err(_) => false,
         }
     }
 
     pub async fn change_password(&self, id: &UserId, old: &str, new: &str) -> Result<(), Error> {
-        if new.chars().count() < 8 { return Err("password: 8 characters at least") }
-        if new.len() > 128 { return Err("password: 128 characters at most") }
+        if new.chars().count() < 8 {
+            return Err("password: 8 characters at least");
+        }
+        if new.len() > 128 {
+            return Err("password: 128 characters at most");
+        }
         self.torii.password().change_password(id, old, new).await.map_err(|_| "wrong name or password")
     }
 
@@ -185,8 +229,12 @@ impl Auth {
     /// A new name, unique still; the rest of the server reads names from the session's user, so nothing else moves.
     pub async fn rename(&self, user: &User, new: &str) -> Result<User, Error> {
         let new = new.trim();
-        if !valid_name(new) { return Err("name: 3 to 24 letters, digits, - or _") }
-        if self.by_name(new).await.is_some_and(|o| o.id != user.id) { return Err("name taken") }
+        if !valid_name(new) {
+            return Err("name: 3 to 24 letters, digits, - or _");
+        }
+        if self.by_name(new).await.is_some_and(|o| o.id != user.id) {
+            return Err("name taken");
+        }
         let u = User { name: Some(new.to_owned()), ..user.clone() };
         self.repos.user().update(&u).await.map_err(|_| "could not save the account")
     }
@@ -195,8 +243,12 @@ impl Auth {
     // ponytail: no link to the new address first; a verified flag reset would make the account provisional, see sweep
     pub async fn set_email(&self, user: &User, email: &str) -> Result<User, Error> {
         let email = email.trim().to_ascii_lowercase();
-        if !valid_email(&email) { return Err("email: not an address") }
-        if self.by_email(&email).await.is_some_and(|o| o.id != user.id) { return Err("email taken") }
+        if !valid_email(&email) {
+            return Err("email: not an address");
+        }
+        if self.by_email(&email).await.is_some_and(|o| o.id != user.id) {
+            return Err("email taken");
+        }
         let u = User { email, ..user.clone() };
         self.repos.user().update(&u).await.map_err(|_| "email taken")
     }
@@ -228,14 +280,30 @@ impl RepositoryProvider for Repos {
     type OAuth = <SqliteRepositoryProvider as RepositoryProvider>::OAuth;
     type Passkey = <SqliteRepositoryProvider as RepositoryProvider>::Passkey;
     type Token = Tokens;
-    fn user(&self) -> &Self::User { self.inner.user() }
-    fn session(&self) -> &Self::Session { self.inner.session() }
-    fn password(&self) -> &Self::Password { self.inner.password() }
-    fn oauth(&self) -> &Self::OAuth { self.inner.oauth() }
-    fn passkey(&self) -> &Self::Passkey { self.inner.passkey() }
-    fn token(&self) -> &Self::Token { &self.token }
-    async fn migrate(&self) -> Result<(), torii_core::Error> { self.inner.migrate().await }
-    async fn health_check(&self) -> Result<(), torii_core::Error> { self.inner.health_check().await }
+    fn user(&self) -> &Self::User {
+        self.inner.user()
+    }
+    fn session(&self) -> &Self::Session {
+        self.inner.session()
+    }
+    fn password(&self) -> &Self::Password {
+        self.inner.password()
+    }
+    fn oauth(&self) -> &Self::OAuth {
+        self.inner.oauth()
+    }
+    fn passkey(&self) -> &Self::Passkey {
+        self.inner.passkey()
+    }
+    fn token(&self) -> &Self::Token {
+        &self.token
+    }
+    async fn migrate(&self) -> Result<(), torii_core::Error> {
+        self.inner.migrate().await
+    }
+    async fn health_check(&self) -> Result<(), torii_core::Error> {
+        self.inner.health_check().await
+    }
 }
 
 /// Secure tokens (magic links, password resets) in SQLite: random, dated, spent once.
@@ -256,21 +324,39 @@ impl TokenRepository for Tokens {
         let token = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
         let expires = now + expires_in;
         sqlx::query("INSERT INTO tokens (user_id, token, purpose, expires_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)")
-            .bind(user_id.as_str()).bind(&token).bind(purpose.as_str()).bind(expires.timestamp()).bind(now.timestamp()).execute(&self.0).await.map_err(db_err)?;
+            .bind(user_id.as_str())
+            .bind(&token)
+            .bind(purpose.as_str())
+            .bind(expires.timestamp())
+            .bind(now.timestamp())
+            .execute(&self.0)
+            .await
+            .map_err(db_err)?;
         Ok(SecureToken::new(user_id.clone(), token, purpose, None, expires, now, now))
     }
 
     /// Spent as it is checked: one UPDATE, so two clicks at once cannot both win.
     async fn verify_token(&self, token: &str, purpose: TokenPurpose) -> Result<Option<SecureToken>, torii_core::Error> {
         let now = chrono::Utc::now();
-        let row: Option<(String, i64, i64)> = sqlx::query_as("UPDATE tokens SET used_at = ?1, updated_at = ?1 WHERE token = ?2 AND purpose = ?3 AND used_at IS NULL AND expires_at > ?1 RETURNING user_id, expires_at, created_at")
-            .bind(now.timestamp()).bind(token).bind(purpose.as_str()).fetch_optional(&self.0).await.map_err(db_err)?;
+        let row: Option<(String, i64, i64)> =
+            sqlx::query_as("UPDATE tokens SET used_at = ?1, updated_at = ?1 WHERE token = ?2 AND purpose = ?3 AND used_at IS NULL AND expires_at > ?1 RETURNING user_id, expires_at, created_at")
+                .bind(now.timestamp())
+                .bind(token)
+                .bind(purpose.as_str())
+                .fetch_optional(&self.0)
+                .await
+                .map_err(db_err)?;
         Ok(row.map(|(uid, exp, created)| SecureToken::new(UserId::new(&uid), token.to_owned(), purpose, Some(now), at(exp), at(created), now)))
     }
 
     async fn check_token(&self, token: &str, purpose: TokenPurpose) -> Result<bool, torii_core::Error> {
         let n: i64 = sqlx::query_scalar("SELECT count(*) FROM tokens WHERE token = ?1 AND purpose = ?2 AND used_at IS NULL AND expires_at > ?3")
-            .bind(token).bind(purpose.as_str()).bind(chrono::Utc::now().timestamp()).fetch_one(&self.0).await.map_err(db_err)?;
+            .bind(token)
+            .bind(purpose.as_str())
+            .bind(chrono::Utc::now().timestamp())
+            .fetch_one(&self.0)
+            .await
+            .map_err(db_err)?;
         Ok(n > 0)
     }
 
@@ -288,7 +374,13 @@ pub fn valid_name(name: &str) -> bool {
 /// `a@b.c`, 254 characters at most, no spaces: enough to send to, the mail server says the rest.
 pub fn valid_email(email: &str) -> bool {
     let Some((user, host)) = email.split_once('@') else { return false };
-    email.len() <= 254 && !user.is_empty() && host.contains('.') && !host.starts_with('.') && !host.ends_with('.') && !email.chars().any(|c| c.is_whitespace() || c.is_control()) && email.matches('@').count() == 1
+    email.len() <= 254
+        && !user.is_empty()
+        && host.contains('.')
+        && !host.starts_with('.')
+        && !host.ends_with('.')
+        && !email.chars().any(|c| c.is_whitespace() || c.is_control())
+        && email.matches('@').count() == 1
 }
 
 /// A name out of an e-mail, for a public server's sign-up (which asks for no name): the part before the @, kept to
@@ -296,7 +388,9 @@ pub fn valid_email(email: &str) -> bool {
 pub fn name_from(email: &str) -> String {
     let local = email.split('@').next().unwrap_or("");
     let mut n: String = local.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '-' }).take(24).collect();
-    while n.contains("--") { n = n.replace("--", "-") }
+    while n.contains("--") {
+        n = n.replace("--", "-")
+    }
     let n = n.trim_matches('-').to_owned();
     if n.len() < 3 { format!("rider-{}", &uuid::Uuid::new_v4().simple().to_string()[..4]) } else { n }
 }
@@ -328,7 +422,9 @@ static POW_KEY: std::sync::LazyLock<[u8; 32]> = std::sync::LazyLock::new(|| {
 fn sha(parts: &[&[u8]]) -> [u8; 32] {
     use sha2::Digest;
     let mut h = sha2::Sha256::new();
-    for p in parts { h.update(p) }
+    for p in parts {
+        h.update(p)
+    }
     h.finalize().into()
 }
 
@@ -350,12 +446,28 @@ pub fn pow_challenge(now: u64) -> String {
 pub fn pow_check(answer: &str, now: u64) -> Result<String, &'static str> {
     let (token, _) = answer.rsplit_once(':').ok_or("pow: missing")?;
     let (body, sig) = token.rsplit_once('.').ok_or("pow: malformed")?;
-    if pow_sig(body) != sig { return Err("pow: bad signature") }
+    if pow_sig(body) != sig {
+        return Err("pow: bad signature");
+    }
     let at: u64 = body.split('.').next().and_then(|t| t.parse().ok()).ok_or("pow: malformed")?;
-    if now.saturating_sub(at) > POW_SECS || at > now + 60 { return Err("pow: expired") }
+    if now.saturating_sub(at) > POW_SECS || at > now + 60 {
+        return Err("pow: expired");
+    }
     let d = sha(&[answer.as_bytes()]);
-    let zeros = d.iter().map(|b| b.leading_zeros()).scan(true, |go, z| { if !*go { return None } *go = z == 8; Some(z) }).sum::<u32>();
-    if zeros < POW_BITS { return Err("pow: wrong") }
+    let zeros = d
+        .iter()
+        .map(|b| b.leading_zeros())
+        .scan(true, |go, z| {
+            if !*go {
+                return None;
+            }
+            *go = z == 8;
+            Some(z)
+        })
+        .sum::<u32>();
+    if zeros < POW_BITS {
+        return Err("pow: wrong");
+    }
     Ok(token.to_owned())
 }
 
@@ -364,25 +476,43 @@ pub fn pow_check(answer: &str, now: u64) -> Result<String, &'static str> {
 pub fn link_mail(name: &str, url: &str) -> (String, String, String) {
     let site = url.split("/?").next().unwrap_or(url);
     let subject = "Ton lien pour rouler sur Le Mollet".to_owned();
-    let text = format!("Salut {name},\n\nQuelqu'un (toi, sans doute) a demandé à se connecter à ton compte Le Mollet sur {site}.\nVoici ton lien de connexion, valable 15 minutes et une seule fois :\n\n{url}\n\nSi ce n'est pas toi, ignore ce message : rien ne se passe sans ce lien.\n\nLe Mollet, le home trainer libre et gratuit\n{site}\n");
+    let text = format!(
+        "Salut {name},\n\nQuelqu'un (toi, sans doute) a demandé à se connecter à ton compte Le Mollet sur {site}.\nVoici ton lien de connexion, valable 15 minutes et une seule fois :\n\n{url}\n\nSi ce n'est pas toi, ignore ce message : rien ne se passe sans ce lien.\n\nLe Mollet, le home trainer libre et gratuit\n{site}\n"
+    );
     let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
     let (n, u, s) = (esc(name), esc(url), esc(site));
-    let html = format!(concat!(
-        "<!doctype html><html lang=\"fr\"><body style=\"font-family:Inter,Arial,sans-serif;color:#16161d;background:#fff8e7;padding:24px\">",
-        "<div style=\"max-width:520px;margin:0 auto;background:#fff;border:3px solid #16161d;border-radius:16px;padding:24px\">",
-        "<p style=\"font-size:22px;font-weight:700;margin:0 0 16px\">Salut {n},</p>",
-        "<p>Quelqu'un (toi, sans doute) a demandé à se connecter à ton compte Le Mollet sur <a href=\"{s}\" style=\"color:#16161d\">{s}</a>.</p>",
-        "<p style=\"margin:24px 0\"><a href=\"{u}\" style=\"display:inline-block;background:#ffcf1a;color:#16161d;font-weight:700;text-decoration:none;padding:12px 20px;border:3px solid #16161d;border-radius:12px\">Me connecter</a></p>",
-        "<p style=\"font-size:13px;color:#55556a\">Le lien vaut 15 minutes et une seule fois. Si le bouton ne marche pas, copie cette adresse :<br><span style=\"word-break:break-all\">{u}</span></p>",
-        "<p style=\"font-size:13px;color:#55556a\">Si ce n'est pas toi, ignore ce message : rien ne se passe sans ce lien.</p>",
-        "<p style=\"font-size:13px;color:#55556a;margin:24px 0 0\">Le Mollet, le home trainer libre et gratuit · <a href=\"{s}\" style=\"color:#55556a\">{s}</a></p>",
-        "</div></body></html>"), n = n, u = u, s = s);
+    let html = format!(
+        concat!(
+            "<!doctype html><html lang=\"fr\"><body style=\"font-family:Inter,Arial,sans-serif;color:#16161d;background:#fff8e7;padding:24px\">",
+            "<div style=\"max-width:520px;margin:0 auto;background:#fff;border:3px solid #16161d;border-radius:16px;padding:24px\">",
+            "<p style=\"font-size:22px;font-weight:700;margin:0 0 16px\">Salut {n},</p>",
+            "<p>Quelqu'un (toi, sans doute) a demandé à se connecter à ton compte Le Mollet sur <a href=\"{s}\" style=\"color:#16161d\">{s}</a>.</p>",
+            "<p style=\"margin:24px 0\"><a href=\"{u}\" style=\"display:inline-block;background:#ffcf1a;color:#16161d;font-weight:700;text-decoration:none;padding:12px 20px;border:3px solid #16161d;border-radius:12px\">Me connecter</a></p>",
+            "<p style=\"font-size:13px;color:#55556a\">Le lien vaut 15 minutes et une seule fois. Si le bouton ne marche pas, copie cette adresse :<br><span style=\"word-break:break-all\">{u}</span></p>",
+            "<p style=\"font-size:13px;color:#55556a\">Si ce n'est pas toi, ignore ce message : rien ne se passe sans ce lien.</p>",
+            "<p style=\"font-size:13px;color:#55556a;margin:24px 0 0\">Le Mollet, le home trainer libre et gratuit · <a href=\"{s}\" style=\"color:#55556a\">{s}</a></p>",
+            "</div></body></html>"
+        ),
+        n = n,
+        u = u,
+        s = s
+    );
     (subject, text, html)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn account_ids_fold_torii_ids_for_the_page() {
+        let a = UserId::new("usr_01HZX3M2Z9ABCDEFGHJKMNPQRS");
+        let b = UserId::new("usr_01HZX3M2Z9ABCDEFGHJKMNPQRT");
+        assert_eq!(Auth::account_id(&a), Auth::account_id(&a)); // the same id, every run, every server
+        assert_ne!(Auth::account_id(&a), Auth::account_id(&b));
+        assert!(Auth::account_id(&a) < 1 << 53 && Auth::account_id(&a) > 0); // what JavaScript reads exactly
+        assert!(valid_name("Ju-lien_2") && !valid_name("Ju") && !valid_name("Julien Thebault") && !valid_name(&"a".repeat(25)));
+    }
 
     #[tokio::test]
     async fn signs_up_by_email_then_by_link() {

@@ -84,23 +84,21 @@ impl Course {
     /// Road grade in % at distance `d`, over a 10 m baseline.
     pub fn grade_at(&self, d: f32) -> f32 {
         let (a, b) = ((d - 5.0).max(0.0), (d + 5.0).min(self.length()));
-        if b <= a { return 0.0 }
+        if b <= a {
+            return 0.0;
+        }
         (self.ele_at(b) - self.ele_at(a)) / (b - a) * 100.0
     }
 
     /// Average grade of each full kilometer, in %.
     pub fn km_grades(&self) -> Vec<f32> {
-        (0..(self.length() / 1000.0) as usize)
-            .map(|k| (self.ele_at((k + 1) as f32 * 1000.0) - self.ele_at(k as f32 * 1000.0)) / 10.0)
-            .collect()
+        (0..(self.length() / 1000.0) as usize).map(|k| (self.ele_at((k + 1) as f32 * 1000.0) - self.ele_at(k as f32 * 1000.0)) / 10.0).collect()
     }
 
     /// Steepest and most downhill grade over any `window` m stretch (10 m steps), in %.
     pub fn grade_extremes(&self, window: f32) -> (f32, f32) {
         let n = ((self.length() - window) / 10.0).max(0.0) as usize;
-        (0..=n)
-            .map(|i| (self.ele_at(i as f32 * 10.0 + window) - self.ele_at(i as f32 * 10.0)) / window * 100.0)
-            .fold((f32::MIN, f32::MAX), |(hi, lo), g| (hi.max(g), lo.min(g)))
+        (0..=n).map(|i| (self.ele_at(i as f32 * 10.0 + window) - self.ele_at(i as f32 * 10.0)) / window * 100.0).fold((f32::MIN, f32::MAX), |(hi, lo), g| (hi.max(g), lo.min(g)))
     }
 
     /// Cap the climb at `max` % per 10 m step, keeping the total: what a step has above the cap goes to the
@@ -113,19 +111,29 @@ impl Course {
         let cap: Vec<f32> = p.windows(2).map(|w| (w[1].d - w[0].d) * max / 100.0).collect();
         for i in 0..d.len() {
             let mut extra = d[i] - cap[i];
-            if extra <= 0.0 { continue }
+            if extra <= 0.0 {
+                continue;
+            }
             d[i] = cap[i];
             for r in (10..=d.len()).step_by(10) {
                 let near = i.saturating_sub(r)..(i + r + 1).min(d.len());
                 let room: f32 = near.clone().map(|j| (cap[j] - d[j]).max(0.0)).sum();
-                if room <= 0.0 { continue }
+                if room <= 0.0 {
+                    continue;
+                }
                 let share = (extra / room).min(1.0);
-                for j in near { d[j] += (cap[j] - d[j]).max(0.0) * share }
+                for j in near {
+                    d[j] += (cap[j] - d[j]).max(0.0) * share
+                }
                 extra -= room * share;
-                if extra <= 1e-4 { break }
+                if extra <= 1e-4 {
+                    break;
+                }
             }
         }
-        for i in 0..d.len() { p[i + 1].ele = p[i].ele + d[i] }
+        for i in 0..d.len() {
+            p[i + 1].ele = p[i].ele + d[i]
+        }
     }
 
     pub fn elevation_gain(&self) -> f32 {
@@ -140,7 +148,9 @@ impl Course {
 
     pub fn load(path: &str) -> Result<Self> {
         let c: Self = serde_json::from_str(&std::fs::read_to_string(path).with_context(|| format!("read {path}"))?)?;
-        if c.points.len() < 2 { bail!("{path}: course needs at least 2 points") }
+        if c.points.len() < 2 {
+            bail!("{path}: course needs at least 2 points")
+        }
         Ok(c)
     }
 
@@ -148,7 +158,9 @@ impl Course {
     /// (preferring `roads` refs, ignoring one-ways like a closed race road), resample
     /// every 10 m, sample IGN RGE ALTI elevation, smooth.
     pub fn build(name: &str, waypoints: &[[f64; 2]], roads: &[String]) -> Result<Self> {
-        if waypoints.len() < 2 { bail!("need at least start and finish waypoints") }
+        if waypoints.len() < 2 {
+            bail!("need at least start and finish waypoints")
+        }
         let line = route_osm(waypoints, roads)?;
         let samples = resample(&line, STEP_M);
         let (ele, dem) = elevations(&samples)?;
@@ -165,7 +177,10 @@ impl Course {
         let els = r["elements"].as_array().context("Overpass: no elements")?;
         let rel = els.iter().find(|e| e["type"] == "relation").with_context(|| format!("no relation {relation}"))?;
         let oneway: HashSet<i64> = els.iter().filter(|e| e["type"] == "way" && e["tags"]["oneway"] == "yes").filter_map(|e| e["id"].as_i64()).collect();
-        let ways: Vec<(i64, Vec<[f64; 2]>)> = rel["members"].as_array().into_iter().flatten()
+        let ways: Vec<(i64, Vec<[f64; 2]>)> = rel["members"]
+            .as_array()
+            .into_iter()
+            .flatten()
             .filter(|m| m["type"] == "way")
             .map(|m| (m["ref"].as_i64().unwrap_or(0), m["geometry"].as_array().into_iter().flatten().filter_map(|p| Some([p["lat"].as_f64()?, p["lon"].as_f64()?])).collect::<Vec<_>>()))
             .filter(|(_, g)| g.len() >= 2)
@@ -190,15 +205,14 @@ impl Course {
     /// `dem`: some elevations came from the Terrain Tiles (outside France), not IGN.
     fn from_samples(name: &str, samples: &[(f64, [f64; 2])], ele: Vec<f32>, dem: bool) -> Self {
         let round = |x: f64| (x * 1e6).round() / 1e6;
-        let points = samples
-            .iter()
-            .zip(ele)
-            .map(|(&(d, [lat, lon]), e)| Point { d: d as f32, lat: round(lat), lon: round(lon), ele: (e * 10.0).round() / 10.0 })
-            .collect();
+        let points = samples.iter().zip(ele).map(|(&(d, [lat, lon]), e)| Point { d: d as f32, lat: round(lat), lon: round(lon), ele: (e * 10.0).round() / 10.0 }).collect();
         Self {
             name: name.into(),
-            attribution: if dem { format!("Route © OpenStreetMap contributors (ODbL). {}", crate::dem::ATTRIBUTION) }
-                else { "Route © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).".into() },
+            attribution: if dem {
+                format!("Route © OpenStreetMap contributors (ODbL). {}", crate::dem::ATTRIBUTION)
+            } else {
+                "Route © OpenStreetMap contributors (ODbL). Elevation © IGN RGE ALTI (Licence Ouverte Etalab 2.0).".into()
+            },
             points,
             ..Default::default()
         }
@@ -209,7 +223,9 @@ impl Course {
 /// one-way members. Fails on a gap over 15 m between consecutive ways or between the end and the start.
 fn chain_ring(ways: &[(i64, Vec<[f64; 2]>)], oneway: &HashSet<i64>) -> Result<Vec<[f64; 2]>> {
     const GAP_M: f64 = 15.0;
-    if ways.len() < 2 { bail!("a ring needs at least 2 ways") }
+    if ways.len() < 2 {
+        bail!("a ring needs at least 2 ways")
+    }
     let mut ring: Vec<[f64; 2]> = vec![];
     let (mut with, mut against) = (0, 0);
     for (k, (id, g)) in ways.iter().enumerate() {
@@ -223,17 +239,25 @@ fn chain_ring(ways: &[(i64, Vec<[f64; 2]>)], oneway: &HashSet<i64>) -> Result<Ve
             }
         };
         let g: Vec<[f64; 2]> = if flip { g.iter().rev().copied().collect() } else { g.clone() };
-        if let Some(&end) = ring.last() && haversine_m(end, g[0]) > GAP_M {
+        if let Some(&end) = ring.last()
+            && haversine_m(end, g[0]) > GAP_M
+        {
             bail!("gap of {:.0} m before way {id} (member {k})", haversine_m(end, g[0]));
         }
-        if oneway.contains(id) { if flip { against += 1 } else { with += 1 } }
+        if oneway.contains(id) {
+            if flip { against += 1 } else { with += 1 }
+        }
         ring.extend(g.into_iter().skip(usize::from(!ring.is_empty())));
     }
     let (first, last) = (ring[0], ring[ring.len() - 1]);
-    if haversine_m(first, last) > GAP_M { bail!("not a closed ring: {:.0} m from the end back to the start", haversine_m(first, last)) }
+    if haversine_m(first, last) > GAP_M {
+        bail!("not a closed ring: {:.0} m from the end back to the start", haversine_m(first, last))
+    }
     ring.pop();
     ring.push(first);
-    if against > with { ring.reverse() }
+    if against > with {
+        ring.reverse()
+    }
     Ok(ring)
 }
 
@@ -245,11 +269,7 @@ fn elevations(samples: &[(f64, [f64; 2])]) -> Result<(Vec<f32>, bool)> {
     // ponytail: 100 points per GET keeps URLs short; ~15 requests for a 14 km climb
     for chunk in samples.chunks(100) {
         let join = |f: fn(&(f64, [f64; 2])) -> f64| chunk.iter().map(|s| format!("{:.6}", f(s))).collect::<Vec<_>>().join("|");
-        let url = format!(
-            "https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon={}&lat={}&resource=ign_rge_alti_wld&zonly=true",
-            join(|s| s.1[1]),
-            join(|s| s.1[0])
-        );
+        let url = format!("https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon={}&lat={}&resource=ign_rge_alti_wld&zonly=true", join(|s| s.1[1]), join(|s| s.1[0]));
         let r = request_json(|| ureq::get(&url).set("User-Agent", UA).call())?;
         for (z, s) in r["elevations"].as_array().context("IGN: no elevations")?.iter().zip(chunk) {
             let z = z.as_f64().context("IGN: bad elevation")?;
@@ -267,10 +287,7 @@ fn country_at([lat, lon]: [f64; 2]) -> Option<String> {
     r["elements"].as_array()?.iter().find_map(|e| e["tags"]["ISO3166-1"].as_str().map(str::to_owned))
 }
 
-const DRIVABLE: &[&str] = &[
-    "trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "road",
-    "trunk_link", "primary_link", "secondary_link", "tertiary_link",
-];
+const DRIVABLE: &[&str] = &["trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "road", "trunk_link", "primary_link", "secondary_link", "tertiary_link"];
 /// Cost multiplier for roads outside the requested refs: used only to bridge gaps.
 const OFF_ROAD_PENALTY: f64 = 10.0;
 
@@ -289,25 +306,24 @@ fn route_osm(waypoints: &[[f64; 2]], roads: &[String]) -> Result<Vec<[f64; 2]>> 
 
     let (mut graph, mut on_road, mut coords) = (Graph::new(), HashSet::new(), HashMap::new());
     for way in r["elements"].as_array().context("Overpass: no elements")? {
-        let wanted = roads.is_empty()
-            || way["tags"]["ref"].as_str().is_some_and(|r| r.split(';').any(|r| roads.iter().any(|x| x == r.trim())));
+        let wanted = roads.is_empty() || way["tags"]["ref"].as_str().is_some_and(|r| r.split(';').any(|r| roads.iter().any(|x| x == r.trim())));
         let ids = way["nodes"].as_array().context("Overpass: way without nodes")?;
         let geom = way["geometry"].as_array().context("Overpass: way without geometry")?;
-        let pts: Vec<(i64, [f64; 2])> = ids
-            .iter()
-            .zip(geom)
-            .filter_map(|(id, g)| Some((id.as_i64()?, [g["lat"].as_f64()?, g["lon"].as_f64()?])))
-            .collect();
+        let pts: Vec<(i64, [f64; 2])> = ids.iter().zip(geom).filter_map(|(id, g)| Some((id.as_i64()?, [g["lat"].as_f64()?, g["lon"].as_f64()?]))).collect();
         for p in pts.windows(2) {
             let ((a, pa), (b, pb)) = (p[0], p[1]);
             let cost = haversine_m(pa, pb) * if wanted { 1.0 } else { OFF_ROAD_PENALTY };
             graph.entry(a).or_default().push((b, cost));
             graph.entry(b).or_default().push((a, cost));
             coords.extend([(a, pa), (b, pb)]);
-            if wanted { on_road.extend([a, b]) }
+            if wanted {
+                on_road.extend([a, b])
+            }
         }
     }
-    if on_road.is_empty() { bail!("no road matching {roads:?} in the area") }
+    if on_road.is_empty() {
+        bail!("no road matching {roads:?} in the area")
+    }
 
     let snap = |wp: [f64; 2]| *on_road.iter().min_by(|a, b| haversine_m(coords[a], wp).total_cmp(&haversine_m(coords[b], wp))).unwrap();
     let mut path: Vec<i64> = vec![];
@@ -325,11 +341,15 @@ fn shortest_path(g: &Graph, from: i64, to: i64) -> Option<Vec<i64>> {
     while let Some(Reverse((d, u))) = heap.pop() {
         if u == to {
             let mut p = vec![to];
-            while let Some(&q) = prev.get(p.last().unwrap()) { p.push(q) }
+            while let Some(&q) = prev.get(p.last().unwrap()) {
+                p.push(q)
+            }
             p.reverse();
             return Some(p);
         }
-        if d > dist[&u] { continue }
+        if d > dist[&u] {
+            continue;
+        }
         for &(v, w) in g.get(&u).into_iter().flatten() {
             let nd = d + (w * 1000.0) as u64;
             if dist.get(&v).is_none_or(|&x| nd < x) {
@@ -464,7 +484,11 @@ mod tests {
     fn capping_spreads_a_wall_and_keeps_the_climb() {
         // 1 km at 5 %, with a 100 m wall at 30 % in the middle.
         let points = (0..=100)
-            .scan(0.0, |e, i| { let p = Point { d: i as f32 * 10.0, lat: 0.0, lon: 0.0, ele: *e }; *e += if (45..55).contains(&i) { 3.0 } else { 0.5 }; Some(p) })
+            .scan(0.0, |e, i| {
+                let p = Point { d: i as f32 * 10.0, lat: 0.0, lon: 0.0, ele: *e };
+                *e += if (45..55).contains(&i) { 3.0 } else { 0.5 };
+                Some(p)
+            })
             .collect();
         let mut c = Course { points, ..Default::default() };
         let top = c.points.last().unwrap().ele;
@@ -476,9 +500,7 @@ mod tests {
 
     #[test]
     fn grade_and_elevation() {
-        let points = (0..=10)
-            .map(|i| Point { d: i as f32 * 10.0, lat: 0.0, lon: 0.0, ele: i as f32 * 0.8 })
-            .collect();
+        let points = (0..=10).map(|i| Point { d: i as f32 * 10.0, lat: 0.0, lon: 0.0, ele: i as f32 * 0.8 }).collect();
         let c = Course { name: "8%".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points, ..Default::default() };
         assert!((c.grade_at(50.0) - 8.0).abs() < 1e-3);
         assert!((c.ele_at(55.0) - 4.4).abs() < 1e-3);

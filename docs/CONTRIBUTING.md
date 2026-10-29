@@ -40,8 +40,9 @@ editing them.
 ## Before opening a pull request
 
 ```sh
-cargo clippy --all-targets -- -D warnings   # what the CI runs: must stay clean
-cargo test
+cargo fmt -p le-mollet    # what the CI checks (rustfmt.toml: wide lines, small things on one line)
+cargo test -p le-mollet   # and runs
+cargo clippy -p le-mollet # advice, worth a look, not a gate
 ```
 
 - **Tests.** New logic comes with a unit test next to it (`#[cfg(test)] mod tests` in the same file). Pure code
@@ -74,8 +75,9 @@ Linux (x86_64, ARM), macOS (Apple Silicon, Intel) and Windows, packs each with t
 2. `git push && git push --tags`.
 3. Watch the Actions tab; the release appears under Releases when the five builds are done.
 
-Every push and pull request runs `.github/workflows/ci.yml`: `cargo clippy --all-targets -- -D warnings` and
-`cargo test`. The code is not run through rustfmt (its dense style is on purpose), so there is no format gate.
+Every push and pull request runs `.github/workflows/ci.yml`: `cargo fmt --check` (rustfmt.toml keeps the dense
+style: 200 columns, small things on one line) and `cargo test`, on the server crate. Clippy is advice, run
+locally: a gate on it moves with every toolchain.
 
 ## Commits and pull requests
 

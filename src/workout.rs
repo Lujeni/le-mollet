@@ -68,11 +68,14 @@ impl Workout {
     /// A workout sent by the page (an imported .zwo): steps as `secs-from-to` joined by dots, % of FTP, `x` for a
     /// free block.
     pub fn from_query(name: &str, steps: &str) -> Option<Self> {
-        let steps: Vec<Step> = steps.split('.').map(|s| {
-            let mut v = s.split('-').map(|p| if p == "x" { Ok(FREE) } else { p.parse::<f32>() });
-            let (secs, from, to) = (v.next()?.ok()?, v.next()?.ok()?, v.next()?.ok()?);
-            ((1.0..=36_000.0).contains(&secs) && from.is_finite() && to.is_finite()).then_some(Step { secs: secs as u32, from: from.clamp(FREE, 300.0), to: to.clamp(FREE, 300.0) })
-        }).collect::<Option<_>>()?;
+        let steps: Vec<Step> = steps
+            .split('.')
+            .map(|s| {
+                let mut v = s.split('-').map(|p| if p == "x" { Ok(FREE) } else { p.parse::<f32>() });
+                let (secs, from, to) = (v.next()?.ok()?, v.next()?.ok()?, v.next()?.ok()?);
+                ((1.0..=36_000.0).contains(&secs) && from.is_finite() && to.is_finite()).then_some(Step { secs: secs as u32, from: from.clamp(FREE, 300.0), to: to.clamp(FREE, 300.0) })
+            })
+            .collect::<Option<_>>()?;
         (!steps.is_empty() && steps.len() <= 500).then(|| Self { id: "custom".into(), name: name.into(), description: String::new(), steps })
     }
 }
@@ -84,36 +87,16 @@ fn w(id: &str, name: &str, description: &str, steps: Vec<Step>) -> Workout {
 /// Built-in sessions, classic structures expressed in % of FTP.
 pub fn builtin() -> Vec<Workout> {
     vec![
-        w(
-            "recup",
-            "Récup active",
-            "30 min très facile pour faire tourner les jambes.",
-            vec![ramp(5, 40.0, 55.0), steady(20, 55.0), ramp(5, 55.0, 40.0)],
-        ),
-        w(
-            "endurance",
-            "Endurance",
-            "1 h en zone 2, la base de tout.",
-            vec![ramp(10, 45.0, 65.0), steady(40, 68.0), ramp(10, 65.0, 45.0)],
-        ),
+        w("recup", "Récup active", "30 min très facile pour faire tourner les jambes.", vec![ramp(5, 40.0, 55.0), steady(20, 55.0), ramp(5, 55.0, 40.0)]),
+        w("endurance", "Endurance", "1 h en zone 2, la base de tout.", vec![ramp(10, 45.0, 65.0), steady(40, 68.0), ramp(10, 65.0, 45.0)]),
         w(
             "sweet-spot",
             "Sweet spot 3×10",
             "3 blocs de 10 min à 90 % : le meilleur rapport effort / progrès.",
             [vec![ramp(10, 45.0, 75.0)], repeat(3, &[steady(10, 90.0), steady(5, 55.0)]), vec![ramp(5, 55.0, 40.0)]].concat(),
         ),
-        w(
-            "seuil",
-            "Seuil 2×20",
-            "2 × 20 min au seuil pour repousser ta FTP.",
-            [vec![ramp(15, 45.0, 80.0)], repeat(2, &[steady(20, 98.0), steady(5, 55.0)]), vec![ramp(10, 55.0, 40.0)]].concat(),
-        ),
-        w(
-            "vo2max",
-            "VO2max 5×3",
-            "5 × 3 min à 118 % : court, intense, efficace.",
-            [vec![ramp(12, 45.0, 85.0)], repeat(5, &[steady(3, 118.0), steady(3, 50.0)]), vec![ramp(8, 55.0, 40.0)]].concat(),
-        ),
+        w("seuil", "Seuil 2×20", "2 × 20 min au seuil pour repousser ta FTP.", [vec![ramp(15, 45.0, 80.0)], repeat(2, &[steady(20, 98.0), steady(5, 55.0)]), vec![ramp(10, 55.0, 40.0)]].concat()),
+        w("vo2max", "VO2max 5×3", "5 × 3 min à 118 % : court, intense, efficace.", [vec![ramp(12, 45.0, 85.0)], repeat(5, &[steady(3, 118.0), steady(3, 50.0)]), vec![ramp(8, 55.0, 40.0)]].concat()),
         w(
             "test-ftp",
             "Test FTP 20 min",
@@ -126,6 +109,19 @@ pub fn builtin() -> Vec<Workout> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imported_workouts_are_bounded() {
+        let w = Workout::from_query("Big", "60-500-500").unwrap();
+        assert_eq!((w.steps[0].from, w.steps[0].to), (300.0, 300.0)); // clamped
+        assert!(Workout::from_query("x", "40000-50-50").is_none() && Workout::from_query("x", "0-50-50").is_none());
+        assert!(Workout::from_query("x", "60-nan-50").is_none() && Workout::from_query("x", "60-50-50-10").is_some()); // extra parts ignored
+        assert!(Workout::from_query("x", &vec!["60-50-50"; 501].join(".")).is_none() && Workout::from_query("x", &vec!["60-50-50"; 500].join(".")).is_some());
+        assert_eq!(Workout::from_query("x", "60-x-x").unwrap().steps[0].from, FREE);
+        let w = builtin();
+        assert!(w.iter().map(|w| w.id.as_str()).collect::<std::collections::HashSet<_>>().len() == w.len()); // ids unique
+        assert!(w.iter().all(|w| !w.steps.is_empty() && w.steps.iter().all(|s| s.secs > 0)));
+    }
 
     #[test]
     fn durations_and_targets() {

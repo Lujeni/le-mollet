@@ -9,13 +9,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
+  # Formatting is the one style gate (rustfmt.toml); clippy is advice, run locally, not a gate that moves with
+  # every toolchain.
+  fmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: rustfmt
+      - run: cargo fmt --check -p le-mollet
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
+      - run: cargo test -p le-mollet

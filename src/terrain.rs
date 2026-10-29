@@ -34,9 +34,13 @@ pub const PAVE: u8 = 6;
 /// a terrain file comes back as it was.
 pub fn delta_rows(mut b: Vec<u8>) -> Vec<u8> {
     let u = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
-    if b.len() < 40 { return b }
+    if b.len() < 40 {
+        return b;
+    }
     let (w, h) = (u(0), u(4));
-    if b.len() != 40 + w * h * 3 { return b }
+    if b.len() != 40 + w * h * 3 {
+        return b;
+    }
     for row in b[40..40 + w * h * 2].chunks_exact_mut(w * 2) {
         let mut prev = 0u16;
         for c in row.chunks_exact_mut(2) {
@@ -81,7 +85,9 @@ impl Terrain {
         let w = ((east - west) * kx / cell).round() as usize;
         let h = ((north - south) * 110_540.0 / cell).round() as usize;
         // ponytail: single WMS request, IGN accepts up to 4096 px a side; tile it for longer routes
-        if w > 4096 || h > 4096 { bail!("terrain {w}x{h} cells exceeds one IGN request (4096 max)") }
+        if w > 4096 || h > 4096 {
+            bail!("terrain {w}x{h} cells exceeds one IGN request (4096 max)")
+        }
         Ok(Self { w, h, west, south, east, north, heights: fetch_heights(west, south, east, north, w, h)?, cover: vec![GRASS; w * h] })
     }
 
@@ -99,11 +105,15 @@ impl Terrain {
 
     /// The terrain written by `to_bytes`.
     pub fn from_bytes(b: &[u8]) -> Result<Self> {
-        if b.len() < 40 { bail!("terrain file too short") }
+        if b.len() < 40 {
+            bail!("terrain file too short")
+        }
         let u = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
         let f = |o: usize| f64::from_le_bytes(b[o..o + 8].try_into().unwrap());
         let (w, h) = (u(0), u(4));
-        if b.len() != 40 + w * h * 3 { bail!("terrain file: {} bytes for {w}x{h} cells", b.len()) }
+        if b.len() != 40 + w * h * 3 {
+            bail!("terrain file: {} bytes for {w}x{h} cells", b.len())
+        }
         let heights = b[40..40 + w * h * 2].chunks_exact(2).map(|e| u16::from_le_bytes([e[0], e[1]]) as f32 / 10.0).collect();
         Ok(Self { w, h, west: f(8), south: f(16), east: f(24), north: f(32), heights, cover: b[40 + w * h * 2..].to_vec() })
     }
@@ -149,9 +159,7 @@ impl Terrain {
                 ("bare_rock" | "scree", _) => ROCK,
                 _ => FOREST,
             };
-            let ring = |g: &serde_json::Value| -> Ring {
-                g.as_array().into_iter().flatten().filter_map(|p| Some(self.grid(p["lat"].as_f64()?, p["lon"].as_f64()?))).collect()
-            };
+            let ring = |g: &serde_json::Value| -> Ring { g.as_array().into_iter().flatten().filter_map(|p| Some(self.grid(p["lat"].as_f64()?, p["lon"].as_f64()?))).collect() };
             // Relations: even-odd fill over all member edges handles holes without assembling rings.
             let rings = match el["type"].as_str() {
                 Some("way") => vec![ring(&el["geometry"])],
@@ -181,10 +189,14 @@ impl Terrain {
                 let (gx, gy) = self.grid(lat, lon);
                 for r in (gy as isize - reach)..=(gy as isize + reach) {
                     for c in (gx as isize - reach)..=(gx as isize + reach) {
-                        if r < 0 || c < 0 || r as usize >= self.h || c as usize >= self.w { continue }
+                        if r < 0 || c < 0 || r as usize >= self.h || c as usize >= self.w {
+                            continue;
+                        }
                         let d = (((c as f64 + 0.5 - gx) * cell_x).powi(2) + ((r as f64 + 0.5 - gy) * cell_z).powi(2)).sqrt();
                         let cell = &mut best[r as usize * self.w + c as usize];
-                        if d < cell.0 { *cell = (d, ele) }
+                        if d < cell.0 {
+                            *cell = (d, ele)
+                        }
                     }
                 }
             }
@@ -212,14 +224,23 @@ pub(crate) fn fetch_heights(west: f64, south: f64, east: f64, north: f64, w: usi
     let ign = || -> Result<Vec<f32>> {
         let mut raw = Vec::with_capacity(w * h * 4);
         ureq::get(&url).set("User-Agent", UA).call()?.into_reader().read_to_end(&mut raw)?;
-        if raw.len() != w * h * 4 { bail!("IGN elevation grid: got {} bytes, expected {}", raw.len(), w * h * 4) }
+        if raw.len() != w * h * 4 {
+            bail!("IGN elevation grid: got {} bytes, expected {}", raw.len(), w * h * 4)
+        }
         Ok(raw.chunks_exact(4).map(|b| f32::from_le_bytes(b.try_into().unwrap())).collect())
     };
     // Outside France (or across a border), IGN has no data: the Terrain Tiles fill those cells (src/dem.rs).
-    let mut v = ign().unwrap_or_else(|e| { eprintln!("IGN elevation grid unavailable ({e}): Terrain Tiles instead"); vec![f32::MIN; w * h] });
+    let mut v = ign().unwrap_or_else(|e| {
+        eprintln!("IGN elevation grid unavailable ({e}): Terrain Tiles instead");
+        vec![f32::MIN; w * h]
+    });
     if v.iter().any(|&e| e < -1000.0) {
         let tiles = crate::dem::grid(west, south, east, north, w, h)?;
-        for (e, t) in v.iter_mut().zip(tiles) { if *e < -1000.0 { *e = t } }
+        for (e, t) in v.iter_mut().zip(tiles) {
+            if *e < -1000.0 {
+                *e = t
+            }
+        }
     }
     Ok(v)
 }
@@ -228,14 +249,12 @@ pub(crate) fn fetch_heights(west: f64, south: f64, east: f64, north: f64, w: usi
 pub(crate) fn fill_even_odd(rings: &[Ring], w: usize, h: usize, mut set: impl FnMut(usize, usize)) {
     let edges: Vec<_> = rings.iter().flat_map(|r| r.windows(2).map(|e| (e[0], e[1]))).collect();
     let (lo, hi) = edges.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), (a, b)| (lo.min(a.1).min(b.1), hi.max(a.1).max(b.1)));
-    if edges.is_empty() { return }
+    if edges.is_empty() {
+        return;
+    }
     for r in (lo.floor().max(0.0) as usize)..(hi.ceil().min(h as f64) as usize) {
         let y = r as f64 + 0.5;
-        let mut xs: Vec<f64> = edges
-            .iter()
-            .filter(|(a, b)| (a.1 <= y) != (b.1 <= y))
-            .map(|(a, b)| a.0 + (y - a.1) / (b.1 - a.1) * (b.0 - a.0))
-            .collect();
+        let mut xs: Vec<f64> = edges.iter().filter(|(a, b)| (a.1 <= y) != (b.1 <= y)).map(|(a, b)| a.0 + (y - a.1) / (b.1 - a.1) * (b.0 - a.0)).collect();
         xs.sort_by(f64::total_cmp);
         for pair in xs.chunks_exact(2) {
             let (from, to) = ((pair[0] - 0.5).ceil().max(0.0) as usize, ((pair[1] - 0.5).floor() + 1.0).min(w as f64).max(0.0) as usize);

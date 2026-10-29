@@ -17,7 +17,9 @@ pub struct Db(Mutex<Connection>);
 /// the other tasks to another thread meanwhile; outside a runtime (the CLI, tests) it just runs.
 fn timed<T>(op: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
     let r = tokio::task::block_in_place(|| crate::metrics::time("le_mollet_db_seconds", &[("op", op)], f));
-    if r.is_err() { crate::metrics::inc("le_mollet_db_errors_total", &[("op", op)]) }
+    if r.is_err() {
+        crate::metrics::inc("le_mollet_db_errors_total", &[("op", op)])
+    }
     r
 }
 
@@ -43,7 +45,9 @@ impl Db {
         #[cfg(unix)]
         std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
         let db = Self(Mutex::new(c));
-        for dir in dirs { db.import(dir)? }
+        for dir in dirs {
+            db.import(dir)?
+        }
         Ok(db)
     }
 
@@ -58,9 +62,14 @@ impl Db {
         for (coll, file, field, key) in IMPORT {
             let path = Path::new(dir).join(file);
             let Ok(text) = std::fs::read_to_string(&path) else { continue };
-            if !self.is_empty(coll)? { continue }
+            if !self.is_empty(coll)? {
+                continue;
+            }
             let mut v: serde_json::Value = serde_json::from_str(&text).with_context(|| format!("{}: not JSON, left as is", path.display()))?;
-            let v = match field { Some(f) => v[f].take(), None => v };
+            let v = match field {
+                Some(f) => v[f].take(),
+                None => v,
+            };
             let rows: Vec<(String, serde_json::Value)> = match (v, key) {
                 (serde_json::Value::Array(a), Some(k)) => a.into_iter().map(|x| (x[k].as_str().unwrap_or_default().to_owned(), x)).collect(),
                 (serde_json::Value::Object(o), _) => o.into_iter().collect(),

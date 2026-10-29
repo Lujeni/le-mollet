@@ -28,32 +28,76 @@ pub enum Profile {
 
 impl Profile {
     pub fn label(self) -> &'static str {
-        match self { Profile::Grimpeur => "grimpeur", Profile::Sprinteur => "sprinteur", Profile::Rouleur => "rouleur", Profile::Puncheur => "puncheur" }
+        match self {
+            Profile::Grimpeur => "grimpeur",
+            Profile::Sprinteur => "sprinteur",
+            Profile::Rouleur => "rouleur",
+            Profile::Puncheur => "puncheur",
+        }
     }
 
     /// Share of the FTP this rider sustains on a road of `grade` %, relative to a plain rider.
     fn on(self, grade: f32) -> f32 {
         match self {
-            Profile::Grimpeur => if grade > 3.0 { 1.08 } else if grade < 1.0 { 0.95 } else { 1.0 },
-            Profile::Sprinteur => if grade > 3.0 { 0.9 } else { 1.03 },
-            Profile::Rouleur => if grade < 2.0 { 1.05 } else { 0.98 },
-            Profile::Puncheur => if grade > 5.0 { 1.1 } else { 1.0 },
+            Profile::Grimpeur => {
+                if grade > 3.0 {
+                    1.08
+                } else if grade < 1.0 {
+                    0.95
+                } else {
+                    1.0
+                }
+            }
+            Profile::Sprinteur => {
+                if grade > 3.0 {
+                    0.9
+                } else {
+                    1.03
+                }
+            }
+            Profile::Rouleur => {
+                if grade < 2.0 {
+                    1.05
+                } else {
+                    0.98
+                }
+            }
+            Profile::Puncheur => {
+                if grade > 5.0 {
+                    1.1
+                } else {
+                    1.0
+                }
+            }
         }
     }
 
     /// Sprint power, times the FTP.
     fn sprint(self) -> f32 {
-        match self { Profile::Sprinteur => 2.6, Profile::Puncheur => 2.1, Profile::Rouleur => 1.9, Profile::Grimpeur => 1.7 }
+        match self {
+            Profile::Sprinteur => 2.6,
+            Profile::Puncheur => 2.1,
+            Profile::Rouleur => 1.9,
+            Profile::Grimpeur => 1.7,
+        }
     }
 
     /// Anaerobic reserve W′, J.
     fn wprime(self) -> f32 {
-        match self { Profile::Sprinteur => 26_000.0, Profile::Puncheur => 24_000.0, Profile::Rouleur => 20_000.0, Profile::Grimpeur => 18_000.0 }
+        match self {
+            Profile::Sprinteur => 26_000.0,
+            Profile::Puncheur => 24_000.0,
+            Profile::Rouleur => 20_000.0,
+            Profile::Grimpeur => 18_000.0,
+        }
     }
 }
 
 const FIRST: [&str; 20] = ["Léa", "Nino", "Camille", "Sacha", "Inès", "Louis", "Maëlle", "Tom", "Zoé", "Hugo", "Jade", "Eliott", "Lina", "Gabin", "Anna", "Marius", "Chloé", "Noé", "Romy", "Basile"];
-const LAST: [&str; 20] = ["Morel", "Garcia", "Petit", "Roux", "Fontaine", "Lemaire", "Dubois", "Girard", "Blanc", "Perrin", "Leroy", "Marchand", "Renard", "Vidal", "Lambert", "Bonnet", "Caron", "Gauthier", "Aubert", "Masson"];
+const LAST: [&str; 20] = [
+    "Morel", "Garcia", "Petit", "Roux", "Fontaine", "Lemaire", "Dubois", "Girard", "Blanc", "Perrin", "Leroy", "Marchand", "Renard", "Vidal", "Lambert", "Bonnet", "Caron", "Gauthier", "Aubert",
+    "Masson",
+];
 /// Teams: a name and a jersey colour, in Lego's palette.
 pub const TEAMS: [(&str, &str); 4] = [("Brique Rouge", "#c91a09"), ("Bleu Azur", "#0055bf"), ("Vert Sapin", "#237841"), ("Orange Vif", "#fe8a18")];
 const COUNTRIES: [&str; 8] = ["FR", "FR", "FR", "BE", "ES", "IT", "NL", "CH"];
@@ -81,7 +125,9 @@ fn seed_of(s: &str) -> u64 {
 /// the humans' level), their names and teams come from the race id. Does nothing for group rides or a race
 /// that has its bots already.
 pub fn enroll(e: &mut Event, n: usize) {
-    if e.kind != Kind::Race || e.entrants.iter().any(|x| x.bot) { return }
+    if e.kind != Kind::Race || e.entrants.iter().any(|x| x.bot) {
+        return;
+    }
     let mut rng = Rng(seed_of(&e.id));
     // The rank's W/kg band; several ranks: the whole span; none: around the humans, else Or.
     let band = |c: char| crate::event::TIERS.iter().position(|t| t.0 == c).map(|i| (crate::event::TIERS[i].1, if i == 0 { crate::event::TIERS[0].1 + 0.6 } else { crate::event::TIERS[i - 1].1 }));
@@ -129,7 +175,20 @@ impl Bot {
     fn from(x: &Entrant, rng: &mut Rng) -> Self {
         let profile = rng.pick(&[Profile::Grimpeur, Profile::Sprinteur, Profile::Rouleur, Profile::Puncheur]);
         let mass = 58.0 + rng.next() * 26.0;
-        Self { pid: x.pid.clone(), name: x.name.clone(), country: rng.pick(&COUNTRIES), team: (rng.next() * TEAMS.len() as f32) as usize % TEAMS.len(), profile, mass, ftp: x.wkg * mass, wprime: profile.wprime(), wbal: profile.wprime(), role: Role::Bunch, attack_until: 0.0, finished: None }
+        Self {
+            pid: x.pid.clone(),
+            name: x.name.clone(),
+            country: rng.pick(&COUNTRIES),
+            team: (rng.next() * TEAMS.len() as f32) as usize % TEAMS.len(),
+            profile,
+            mass,
+            ftp: x.wkg * mass,
+            wprime: profile.wprime(),
+            wbal: profile.wprime(),
+            role: Role::Bunch,
+            attack_until: 0.0,
+            finished: None,
+        }
     }
 
     pub fn color(&self) -> &'static str {
@@ -145,7 +204,11 @@ impl Bot {
     /// drains above the FTP and refills below, and an empty reserve brings the rider back to a pace it holds.
     fn power(&mut self, intensity: f32, grade: f32, dt: f32) -> f32 {
         let mut w = self.ftp * intensity * self.profile.on(grade);
-        if self.wbal <= 0.0 { w = w.min(self.ftp * 0.9) } else if self.wbal < 0.25 * self.wprime { w = w.min(self.ftp * 1.02) }
+        if self.wbal <= 0.0 {
+            w = w.min(self.ftp * 0.9)
+        } else if self.wbal < 0.25 * self.wprime {
+            w = w.min(self.ftp * 1.02)
+        }
         self.wbal += if w > self.ftp { -(w - self.ftp) * dt } else { (self.wprime - self.wbal) * (self.ftp - w) / self.wprime * dt };
         self.wbal = self.wbal.min(self.wprime);
         w
@@ -183,9 +246,16 @@ impl Race {
         let mut bots: Vec<Bot> = e.entrants.iter().filter(|x| x.bot).map(|x| Bot::from(x, &mut rng)).collect();
         // The break: three or four, rouleurs and puncheurs first.
         let mut order: Vec<usize> = (0..bots.len()).collect();
-        order.sort_by_key(|&i| match bots[i].profile { Profile::Rouleur => 0, Profile::Puncheur => 1, Profile::Grimpeur => 2, Profile::Sprinteur => 3 });
+        order.sort_by_key(|&i| match bots[i].profile {
+            Profile::Rouleur => 0,
+            Profile::Puncheur => 1,
+            Profile::Grimpeur => 2,
+            Profile::Sprinteur => 3,
+        });
         let n_break = if bots.len() >= 10 { 4 } else { (bots.len() / 3).max(1) };
-        for &i in order.iter().take(n_break) { bots[i].role = Role::Break }
+        for &i in order.iter().take(n_break) {
+            bots[i].role = Role::Break
+        }
         let names: Vec<&str> = bots.iter().filter(|b| b.role == Role::Break).map(|b| b.name.as_str()).collect();
         let radio = vec![format!("{} coureurs au départ. Attention à l'échappée : {} ont l'air décidés.", bots.len() + 1, names.join(", "))];
         Self { bots, race_m, t: 0.0, chasing: false, sprint_called: false, radio, last_gap_said: 0.0, attacks_left: 3 }
@@ -208,7 +278,11 @@ impl Race {
         // The plan of the day, by race fraction.
         if !self.chasing && (gap > 350.0 || human_lead > 60.0 || done > 0.55) && done > 0.15 {
             self.chasing = true;
-            self.radio.push(if human_lead > 60.0 { "Le peloton réagit : il chasse derrière toi !".into() } else { format!("Le peloton s'organise, la chasse est lancée à {} km de l'arrivée.", ((1.0 - done) * self.race_m / 1000.0).round()) });
+            self.radio.push(if human_lead > 60.0 {
+                "Le peloton réagit : il chasse derrière toi !".into()
+            } else {
+                format!("Le peloton s'organise, la chasse est lancée à {} km de l'arrivée.", ((1.0 - done) * self.race_m / 1000.0).round())
+            });
         }
         if gap > 0.0 && (gap - self.last_gap_said).abs() > if self.last_gap_said == 0.0 { 60.0 } else { 120.0 } && done < 0.95 {
             self.last_gap_said = gap;
@@ -218,25 +292,53 @@ impl Race {
         for (i, b) in self.bots.iter_mut().enumerate() {
             let v = views[i];
             let left = v.race_m - v.ridden;
-            if b.finished.is_some() { out.push(0.0); continue }
+            if b.finished.is_some() {
+                out.push(0.0);
+                continue;
+            }
             let frac = v.ridden / v.race_m.max(1.0);
             let mut intensity = match b.role {
                 Role::Break if frac < 0.04 => 1.2f32, // the jump
-                Role::Break => if self.chasing { 1.02 } else { 0.97 },
+                Role::Break => {
+                    if self.chasing {
+                        1.02
+                    } else {
+                        0.97
+                    }
+                }
                 Role::Bunch if frac < 0.04 => 0.85,
-                Role::Bunch => if self.chasing { 0.96 } else { 0.78 },
+                Role::Bunch => {
+                    if self.chasing {
+                        0.96
+                    } else {
+                        0.78
+                    }
+                }
             };
             // Late attacks: puncheurs and climbers go on a rise in the last 3 km, when they have the legs.
-            if self.attacks_left > 0 && left < 3000.0 && left > 700.0 && b.attack_until == 0.0 && matches!(b.profile, Profile::Puncheur | Profile::Grimpeur) && v.grade > 1.5 && b.reserve() > 0.5 && seed_of(&b.pid) % 7 == (t as u64 / 5) % 7 {
+            if self.attacks_left > 0
+                && left < 3000.0
+                && left > 700.0
+                && b.attack_until == 0.0
+                && matches!(b.profile, Profile::Puncheur | Profile::Grimpeur)
+                && v.grade > 1.5
+                && b.reserve() > 0.5
+                && seed_of(&b.pid) % 7 == (t as u64 / 5) % 7
+            {
                 b.attack_until = t + 40.0;
                 self.attacks_left -= 1;
                 self.radio.push(format!("Attaque de {} ({}) à {:.1} km !", b.name, b.profile.label(), left / 1000.0));
             }
-            if b.attack_until > t { intensity = intensity.max(1.3) }
+            if b.attack_until > t {
+                intensity = intensity.max(1.3)
+            }
             // The sprint: everyone opens up in the last 600 m, the sprinters most.
             if left < 600.0 {
                 intensity = intensity.max(b.profile.sprint() * if left < 250.0 { 1.0 } else { 0.7 });
-                if !self.sprint_called { self.sprint_called = true; self.radio.push("Sprint lancé !".into()) }
+                if !self.sprint_called {
+                    self.sprint_called = true;
+                    self.radio.push("Sprint lancé !".into())
+                }
             } else if left < 2000.0 && b.profile == Profile::Sprinteur {
                 intensity = intensity.min(0.95); // sit in, save it
             }
@@ -249,7 +351,9 @@ impl Race {
     pub fn finish(&mut self, i: usize, time: f32) {
         if self.bots[i].finished.is_none() {
             self.bots[i].finished = Some(time);
-            if self.bots.iter().filter(|b| b.finished.is_some()).count() == 1 { self.radio.push(format!("{} passe la ligne en premier des coureurs du serveur, {}.", self.bots[i].name, hms(time))) }
+            if self.bots.iter().filter(|b| b.finished.is_some()).count() == 1 {
+                self.radio.push(format!("{} passe la ligne en premier des coureurs du serveur, {}.", self.bots[i].name, hms(time)))
+            }
         }
     }
 
@@ -277,7 +381,22 @@ mod tests {
     use crate::ride::Ride;
 
     fn race(cats: &str) -> Event {
-        let mut e = Event { id: "auto-1-P".into(), kind: Kind::Race, name: "Test".into(), track: "flat".into(), start: 0, laps: 1, pace: 0.0, keep: 0, cats: cats.into(), club: None, by: "auto".into(), by_name: "le-mollet".into(), entrants: vec![], results: vec![] };
+        let mut e = Event {
+            id: "auto-1-P".into(),
+            kind: Kind::Race,
+            name: "Test".into(),
+            track: "flat".into(),
+            start: 0,
+            laps: 1,
+            pace: 0.0,
+            keep: 0,
+            cats: cats.into(),
+            club: None,
+            by: "auto".into(),
+            by_name: "le-mollet".into(),
+            entrants: vec![],
+            results: vec![],
+        };
         enroll(&mut e, FIELD);
         e
     }
@@ -313,8 +432,12 @@ mod tests {
                 rd.draft = if ahead.iter().any(|&d| d > rd.distance && d - rd.distance <= 25.0) { 0.3 } else { 0.0 };
                 rd.power = powers[i];
                 rd.tick(&course, DT);
-                if rd.ridden >= 10_000.0 { r.finish(i, t) }
-                if r.bots[i].profile == Profile::Sprinteur && rd.ridden > 9_800.0 { sprinter_max = sprinter_max.max(rd.power / r.bots[i].ftp) }
+                if rd.ridden >= 10_000.0 {
+                    r.finish(i, t)
+                }
+                if r.bots[i].profile == Profile::Sprinteur && rd.ridden > 9_800.0 {
+                    sprinter_max = sprinter_max.max(rd.power / r.bots[i].ftp)
+                }
             }
             max_gap = max_gap.max(r.gap(&views));
             assert!(r.bots.iter().all(|b| b.wbal >= -1.0), "a bot went past its reserve");

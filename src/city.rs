@@ -104,7 +104,9 @@ const LOOKAHEAD_M: f32 = 40.0;
 impl City {
     pub fn load(path: &str) -> Result<Self> {
         let mut c: Self = serde_json::from_str(&std::fs::read_to_string(path).with_context(|| format!("read {path}"))?)?;
-        if c.streets.is_empty() { bail!("{path}: city without streets") }
+        if c.streets.is_empty() {
+            bail!("{path}: city without streets")
+        }
         c.link();
         Ok(c)
     }
@@ -127,7 +129,9 @@ impl City {
     /// Points of a street in riding order.
     fn walk(&self, street: usize, forward: bool) -> Vec<[f64; 3]> {
         let mut p = self.streets[street].pts.clone();
-        if !forward { p.reverse() }
+        if !forward {
+            p.reverse()
+        }
         p
     }
 
@@ -153,7 +157,9 @@ impl City {
             .collect();
         let back = |e: &Exit| from.is_some_and(|(s, f)| e.street == s && e.forward != f);
         let mut out: Vec<Exit> = all.iter().filter(|e| !back(e)).cloned().collect();
-        if out.is_empty() { out = all }
+        if out.is_empty() {
+            out = all
+        }
         out.sort_by(|a, b| b.turn.total_cmp(&a.turn));
         out
     }
@@ -229,7 +235,9 @@ impl Route {
         let p = &mut self.course.points;
         for q in city.walk(street, forward) {
             let d = p.last().map_or(0.0, |l| l.d + haversine_m([l.lat, l.lon], [q[0], q[1]]) as f32);
-            if p.last().is_some_and(|l| d - l.d < 0.5) { continue } // the shared junction point
+            if p.last().is_some_and(|l| d - l.d < 0.5) {
+                continue;
+            } // the shared junction point
             p.push(Point { d, lat: q[0], lon: q[1], ele: q[2] as f32 });
         }
         self.legs.push((street, forward, d0, self.course.length()));
@@ -293,7 +301,12 @@ pub fn build(name: &str, relation: u64, start: [f64; 2]) -> Result<(City, Terrai
     t.paint_land_cover()?;
 
     // Split ways at junctions: nodes shared by several ways, plus way ends.
-    struct Way { nodes: Vec<(i64, [f64; 2])>, name: String, half: f64, deck: bool }
+    struct Way {
+        nodes: Vec<(i64, [f64; 2])>,
+        name: String,
+        half: f64,
+        deck: bool,
+    }
     let ways: Vec<Way> = els[1..]
         .iter()
         .filter_map(|w| {
@@ -325,7 +338,9 @@ pub fn build(name: &str, relation: u64, start: [f64; 2]) -> Result<(City, Terrai
     let mut parent: HashMap<i64, i64> = HashMap::new();
     fn root(p: &mut HashMap<i64, i64>, x: i64) -> i64 {
         let up = *p.entry(x).or_insert(x);
-        if up == x { return x }
+        if up == x {
+            return x;
+        }
         let r = root(p, up);
         p.insert(x, r);
         r
@@ -343,7 +358,9 @@ pub fn build(name: &str, relation: u64, start: [f64; 2]) -> Result<(City, Terrai
     let mut ids: HashMap<i64, u32> = HashMap::new();
     let mut streets = vec![];
     for (a, b, way, line) in raw {
-        if a == b || root(&mut parent, a) != main { continue }
+        if a == b || root(&mut parent, a) != main {
+            continue;
+        }
         let samples = resample(&line, STEP_M);
         let ele: Vec<f32> = if way.deck {
             let (e0, e1) = (t.ele_at(line[0][0], line[0][1]), t.ele_at(line[line.len() - 1][0], line[line.len() - 1][1]));
@@ -394,11 +411,17 @@ fn paint_street(t: &mut Terrain, pts: &[[f64; 3]], half: f64, deck: bool) {
             let (gx, gy) = t.grid(lat, lon);
             for r in (gy as isize - reach)..=(gy as isize + reach) {
                 for c in (gx as isize - reach)..=(gx as isize + reach) {
-                    if r < 0 || c < 0 || r as usize >= t.h || c as usize >= t.w { continue }
-                    if ((c as f64 + 0.5 - gx) * cx).hypot((r as f64 + 0.5 - gy) * cz) > half { continue }
+                    if r < 0 || c < 0 || r as usize >= t.h || c as usize >= t.w {
+                        continue;
+                    }
+                    if ((c as f64 + 0.5 - gx) * cx).hypot((r as f64 + 0.5 - gy) * cz) > half {
+                        continue;
+                    }
                     let i = r as usize * t.w + c as usize;
                     t.cover[i] = terrain::ROAD;
-                    if deck { t.heights[i] = ele as f32 - 0.3 }
+                    if deck {
+                        t.heights[i] = ele as f32 - 0.3
+                    }
                 }
             }
         }
@@ -411,12 +434,7 @@ mod tests {
 
     /// A plus-shaped crossing: junction 0 in the middle, arms to 1 (east), 2 (north), 3 (west), 4 (south).
     fn plus() -> City {
-        let arm = |b: u32, dlat: f64, dlon: f64| Street {
-            a: 0,
-            b,
-            name: format!("arm{b}"),
-            pts: (0..=10).map(|i| [48.85 + dlat * i as f64 / 10.0, 2.35 + dlon * i as f64 / 10.0, 35.0]).collect(),
-        };
+        let arm = |b: u32, dlat: f64, dlon: f64| Street { a: 0, b, name: format!("arm{b}"), pts: (0..=10).map(|i| [48.85 + dlat * i as f64 / 10.0, 2.35 + dlon * i as f64 / 10.0, 35.0]).collect() };
         let mut c = City {
             name: "Plus".into(),
             attribution: String::new(),
@@ -472,7 +490,9 @@ mod tests {
         let (mut r, mut ride) = (Route::start(&c), crate::ride::Ride::new(80.0));
         ride.power = 250.0;
         for i in 0..6000 {
-            if i % 400 == 0 { r.next = [Turn::Left, Turn::Right, Turn::Straight][i / 400 % 3] }
+            if i % 400 == 0 {
+                r.next = [Turn::Left, Turn::Right, Turn::Straight][i / 400 % 3]
+            }
             r.extend(&c, ride.distance);
             ride.tick(&r.course, 0.1);
             assert!(!ride.finished, "finished at tick {i}");

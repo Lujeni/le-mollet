@@ -21,11 +21,15 @@ const ORTHO_MAX_PX: usize = 4096;
 
 /// Fetch everything for `[south, west, north, east]` into `dir`.
 pub fn build(dir: &str, [south, west, north, east]: [f64; 4]) -> Result<()> {
-    if south >= north || west >= east { bail!("bbox must be south,west,north,east") }
+    if south >= north || west >= east {
+        bail!("bbox must be south,west,north,east")
+    }
     let kx = ((south + north) / 2.0).to_radians().cos() * 111_320.0;
     let (wm, hm) = ((east - west) * kx, (north - south) * 110_540.0);
     let (w, h) = ((wm / DEM_M).round() as usize, (hm / DEM_M).round() as usize);
-    if w > 4096 || h > 4096 { bail!("district {wm:.0}x{hm:.0} m is too big for one 1 m elevation request") }
+    if w > 4096 || h > 4096 {
+        bail!("district {wm:.0}x{hm:.0} m is too big for one 1 m elevation request")
+    }
     std::fs::create_dir_all(dir)?;
 
     let dem = fetch_heights(west, south, east, north, w, h)?;
@@ -38,7 +42,9 @@ pub fn build(dir: &str, [south, west, north, east]: [f64; 4]) -> Result<()> {
     );
     let mut jpg = vec![];
     ureq::get(&url).set("User-Agent", UA).call()?.into_reader().read_to_end(&mut jpg)?;
-    if !jpg.starts_with(&[0xFF, 0xD8]) { bail!("IGN aerial photo: not a JPEG ({} bytes)", jpg.len()) }
+    if !jpg.starts_with(&[0xFF, 0xD8]) {
+        bail!("IGN aerial photo: not a JPEG ({} bytes)", jpg.len())
+    }
     std::fs::write(format!("{dir}/ortho.jpg"), &jpg)?;
 
     let q = format!("[out:json][timeout:90];node[natural=tree]({south},{west},{north},{east});out;");
@@ -75,11 +81,23 @@ fn streets_and_surfaces([south, west, north, east]: [f64; 4], w: usize, h: usize
         let tag = |k: &str| el["tags"][k].as_str().unwrap_or("");
         if el["type"] == "node" {
             let p = json!([el["lat"], el["lon"]]);
-            if tag("highway") == "crossing" { crossings.push(p) } else { lamps.push(p) }
+            if tag("highway") == "crossing" {
+                crossings.push(p)
+            } else {
+                lamps.push(p)
+            }
             continue;
         }
         let hw = tag("highway");
-        let code = if tag("natural") == "water" { 2 } else if !tag("leisure").is_empty() { 3 } else if tag("area") == "yes" && hw == "pedestrian" || tag("place") == "square" { 1 } else { 255 };
+        let code = if tag("natural") == "water" {
+            2
+        } else if !tag("leisure").is_empty() {
+            3
+        } else if tag("area") == "yes" && hw == "pedestrian" || tag("place") == "square" {
+            1
+        } else {
+            255
+        };
         if code != 255 {
             let rings = match el["type"].as_str() {
                 Some("way") => vec![ring(&el["geometry"])],

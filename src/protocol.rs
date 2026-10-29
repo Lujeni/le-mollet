@@ -61,14 +61,22 @@ pub fn parse_indoor_bike_data(b: &[u8]) -> Option<Sample> {
         s.speed_kmh = Some(u16_at(b, i)? as f32 / 100.0);
         i += 2;
     }
-    if flags & (1 << 1) != 0 { i += 2 } // average speed
+    if flags & (1 << 1) != 0 {
+        i += 2
+    } // average speed
     if flags & (1 << 2) != 0 {
         s.cadence_rpm = Some(u16_at(b, i)? as f32 / 2.0);
         i += 2;
     }
-    if flags & (1 << 3) != 0 { i += 2 } // average cadence
-    if flags & (1 << 4) != 0 { i += 3 } // total distance (u24)
-    if flags & (1 << 5) != 0 { i += 2 } // resistance level
+    if flags & (1 << 3) != 0 {
+        i += 2
+    } // average cadence
+    if flags & (1 << 4) != 0 {
+        i += 3
+    } // total distance (u24)
+    if flags & (1 << 5) != 0 {
+        i += 2
+    } // resistance level
     if flags & (1 << 6) != 0 {
         s.power_w = Some(u16_at(b, i)? as i16);
     }
@@ -115,8 +123,12 @@ impl CpsDecoder {
         let flags = u16_at(b, 0)?;
         let mut s = Sample { power_w: Some(u16_at(b, 2)? as i16), ..Default::default() };
         let mut i = 4;
-        if flags & 1 != 0 { i += 1 } // pedal power balance
-        if flags & (1 << 2) != 0 { i += 2 } // accumulated torque
+        if flags & 1 != 0 {
+            i += 1
+        } // pedal power balance
+        if flags & (1 << 2) != 0 {
+            i += 2
+        } // accumulated torque
         if flags & (1 << 4) != 0 {
             let (revs, t) = (u32_at(b, i)?, u16_at(b, i + 4)?);
             i += 6;

@@ -237,7 +237,9 @@ pub fn build(path: &str) -> Result<Island> {
         for_cells_near(&river.pts, river.width / 2.0 + BANK_M, w, h, cell, |i, d| {
             let k = 1.0 - smoothstep(river.width / 2.0, river.width / 2.0 + BANK_M, d);
             height[i] -= river.depth * k;
-            if d <= river.width / 2.0 { cover[i] = terrain::WATER }
+            if d <= river.width / 2.0 {
+                cover[i] = terrain::WATER
+            }
         });
     }
 
@@ -273,20 +275,27 @@ pub fn build(path: &str) -> Result<Island> {
             let raw: Vec<f32> = pts.iter().map(|&p| lerp_at(&height, p).max(1.0) as f32).collect();
             let sm = smooth(&raw, 6.0);
             let mut walked = 0.0;
-            pts.iter().enumerate().map(|(i, _)| {
-                if i > 0 { walked += dist(pts[i - 1], pts[i]) }
-                // Pin both ends to their junction so roads meet at the same height.
-                let (ka, kb) = (1.0 - smoothstep(0.0, END_BLEND_M, walked), 1.0 - smoothstep(0.0, END_BLEND_M, total - walked));
-                let e = sm[i] as f64;
-                e + (ea - e) * ka + (eb - e) * kb * (1.0 - ka)
-            }).collect()
+            pts.iter()
+                .enumerate()
+                .map(|(i, _)| {
+                    if i > 0 {
+                        walked += dist(pts[i - 1], pts[i])
+                    }
+                    // Pin both ends to their junction so roads meet at the same height.
+                    let (ka, kb) = (1.0 - smoothstep(0.0, END_BLEND_M, walked), 1.0 - smoothstep(0.0, END_BLEND_M, total - walked));
+                    let e = sm[i] as f64;
+                    e + (ea - e) * ka + (eb - e) * kb * (1.0 - ka)
+                })
+                .collect()
         };
         let ele = if road.bridge { ele } else { cap_grade(ele, &pts) };
         lines.push((pts, ele, road));
     }
     // Carve: flat road surface, banks blending back into the ground; roads paint over everything.
     for (pts, ele, road) in &lines {
-        if road.bridge { continue }
+        if road.bridge {
+            continue;
+        }
         carve(pts, ele, road.half, &mut height, &mut cover, (w, h, cell));
     }
 
@@ -303,7 +312,14 @@ pub fn build(path: &str) -> Result<Island> {
             a: id_of(&road.from),
             b: id_of(&road.to),
             name: road.name.clone(),
-            pts: pts.iter().zip(ele).map(|(&p, &e)| { let g = geo(p); [round(g[0], 1e6), round(g[1], 1e6), round(e + SEA, 10.0)] }).collect(),
+            pts: pts
+                .iter()
+                .zip(ele)
+                .map(|(&p, &e)| {
+                    let g = geo(p);
+                    [round(g[0], 1e6), round(g[1], 1e6), round(e + SEA, 10.0)]
+                })
+                .collect(),
         });
     }
     for g in graded {
@@ -337,29 +353,30 @@ pub fn build(path: &str) -> Result<Island> {
             k += 1;
             let p = [x0 + unit(n as u64, k, 1) * (x1 - x0), z0 + unit(n as u64, k, 2) * (z1 - z0)];
             let (c, r) = ((p[0] / cell) as usize, (p[1] / cell) as usize);
-            if c >= w || r >= h || !inside(&poly, p) { continue }
-            if matches!(cover[r * w + c], terrain::WATER | terrain::ROAD | LAVA) { continue }
+            if c >= w || r >= h || !inside(&poly, p) {
+                continue;
+            }
+            if matches!(cover[r * w + c], terrain::WATER | terrain::ROAD | LAVA) {
+                continue;
+            }
             put(&s.k, p, unit(n as u64, k, 3) * 360.0, (unit(n as u64, k, 4) * s.variants.max(1) as f64) as u32, false, &height);
             placed += 1;
         }
     }
 
     let start = map.nodes.get(&map.start).with_context(|| format!("no start node {}", map.start))?;
-    let terrain = Terrain {
-        w,
-        h,
-        west: LON0,
-        east: LON0 + map.size[0] / kx,
-        north: LAT0,
-        south: LAT0 - map.size[1] / kz,
-        heights: height.iter().map(|&e| (e + SEA).max(0.0) as f32).collect(),
-        cover,
-    };
-    let starts = map.starts.iter().map(|s| Ok(Start { name: s.name.clone(), at: geo(*map.nodes.get(&s.node).with_context(|| format!("start {}: no node {}", s.name, s.node))?) })).collect::<Result<Vec<_>>>()?;
+    let terrain = Terrain { w, h, west: LON0, east: LON0 + map.size[0] / kx, north: LAT0, south: LAT0 - map.size[1] / kz, heights: height.iter().map(|&e| (e + SEA).max(0.0) as f32).collect(), cover };
+    let starts = map
+        .starts
+        .iter()
+        .map(|s| Ok(Start { name: s.name.clone(), at: geo(*map.nodes.get(&s.node).with_context(|| format!("start {}: no node {}", s.name, s.node))?) }))
+        .collect::<Result<Vec<_>>>()?;
     let mut city = City::island(map.name, "Île dessinée à la main pour le-mollet.".into(), geo(*start), starts, streets, props);
     (city.preview, city.preview_w) = preview(&terrain.cover, w, h, 20);
     for d in &map.segments {
-        if !city.streets.iter().any(|s| s.name == d.street) { bail!("segment {}: no road {}", d.name, d.street) }
+        if !city.streets.iter().any(|s| s.name == d.street) {
+            bail!("segment {}: no road {}", d.name, d.street)
+        }
     }
     city.segments = map.segments;
     Ok(Island { city, terrain })
@@ -396,16 +413,24 @@ fn apply_relief(rel: &Relief, height: &mut [f64], cover: &mut [u8], w: usize, h:
                 let p = [(c as f64 + 0.5) * cell, (rr as f64 + 0.5) * cell];
                 let d = dist(p, *at);
                 let i = rr * w + c;
-                if d >= *r { continue }
+                if d >= *r {
+                    continue;
+                }
                 let slope = if d > *crater { top * (r * r - d * d) / (r * r - crater * crater) } else { top - depth * smoothstep(0.0, 18.0, crater - d) };
                 height[i] += slope;
-                if d < crater - 10.0 { cover[i] = LAVA } else if d < r * 0.75 { cover[i] = BASALT }
+                if d < crater - 10.0 {
+                    cover[i] = LAVA
+                } else if d < r * 0.75 {
+                    cover[i] = BASALT
+                }
             }
         }
         Relief::Hill { at, r, h: top } => {
             for (c, rr) in cells(*at, *r) {
                 let d = dist([(c as f64 + 0.5) * cell, (rr as f64 + 0.5) * cell], *at);
-                if d < *r { height[rr * w + c] += top * 0.5 * (1.0 + (std::f64::consts::PI * d / r).cos()) }
+                if d < *r {
+                    height[rr * w + c] += top * 0.5 * (1.0 + (std::f64::consts::PI * d / r).cos())
+                }
             }
         }
         Relief::Plateau { poly, h: top, edge } => {
@@ -451,16 +476,23 @@ fn carve(pts: &[Xz], ele: &[f64], half: f64, height: &mut [f64], cover: &mut [u8
                 let p = [(c as f64 + 0.5) * cell, (r as f64 + 0.5) * cell];
                 let (d, t) = seg_dist(p, a, b);
                 let k = r * w + c;
-                if d < best_d[k] { best_d[k] = d; best_e[k] = ele[i] + (ele[i + 1] - ele[i]) * t }
+                if d < best_d[k] {
+                    best_d[k] = d;
+                    best_e[k] = ele[i] + (ele[i + 1] - ele[i]) * t
+                }
             }
         }
     }
     for k in 0..w * h {
         let d = best_d[k];
-        if d >= reach { continue }
+        if d >= reach {
+            continue;
+        }
         let bank = smoothstep(half, reach, d);
         height[k] = best_e[k] + (height[k] - best_e[k]) * bank;
-        if d <= half { cover[k] = terrain::ROAD }
+        if d <= half {
+            cover[k] = terrain::ROAD
+        }
     }
 }
 
@@ -469,16 +501,20 @@ fn spiral(from: Xz, s: &Spiral) -> Vec<Xz> {
     let (r0, a0) = (dist(from, s.center), (from[1] - s.center[1]).atan2(from[0] - s.center[0]));
     let dir = if s.ccw { -1.0 } else { 1.0 }; // z points south: +angle turns clockwise seen from above
     let n = (s.turns * 360.0) as usize;
-    (0..=n).map(|i| {
-        let t = i as f64 / n as f64;
-        let (r, a) = (r0 + (s.r1 - r0) * t, a0 + dir * t * s.turns * std::f64::consts::TAU);
-        [s.center[0] + r * a.cos(), s.center[1] + r * a.sin()]
-    }).collect()
+    (0..=n)
+        .map(|i| {
+            let t = i as f64 / n as f64;
+            let (r, a) = (r0 + (s.r1 - r0) * t, a0 + dir * t * s.turns * std::f64::consts::TAU);
+            [s.center[0] + r * a.cos(), s.center[1] + r * a.sin()]
+        })
+        .collect()
 }
 
 /// Smooth curve through hand-placed points (centripetal enough for road bends at this spacing).
 fn catmull_rom(p: &[Xz]) -> Vec<Xz> {
-    if p.len() < 3 { return p.to_vec() }
+    if p.len() < 3 {
+        return p.to_vec();
+    }
     let mut out = vec![];
     for i in 0..p.len() - 1 {
         let (p0, p1, p2, p3) = (p[i.saturating_sub(1)], p[i], p[i + 1], p[(i + 2).min(p.len() - 1)]);
@@ -507,13 +543,19 @@ fn resample_xz(line: &[Xz], step: f64) -> Vec<Xz> {
         walked += seg;
     }
     let last = *line.last().unwrap();
-    if dist(*out.last().unwrap(), last) > 1.0 { out.push(last) } else { *out.last_mut().unwrap() = last }
+    if dist(*out.last().unwrap(), last) > 1.0 {
+        out.push(last)
+    } else {
+        *out.last_mut().unwrap() = last
+    }
     out
 }
 
 fn closed(p: &[Xz]) -> Vec<Xz> {
     let mut v = p.to_vec();
-    if v.first() != v.last() { v.push(v[0]) }
+    if v.first() != v.last() {
+        v.push(v[0])
+    }
     v
 }
 
@@ -541,7 +583,9 @@ fn inside(poly: &[Xz], p: Xz) -> bool {
     let mut odd = false;
     for s in poly.windows(2) {
         let (a, b) = (s[0], s[1]);
-        if (a[1] > p[1]) != (b[1] > p[1]) && p[0] < a[0] + (p[1] - a[1]) / (b[1] - a[1]) * (b[0] - a[0]) { odd = !odd }
+        if (a[1] > p[1]) != (b[1] > p[1]) && p[0] < a[0] + (p[1] - a[1]) / (b[1] - a[1]) * (b[0] - a[0]) {
+            odd = !odd
+        }
     }
     odd
 }
@@ -565,7 +609,9 @@ fn for_cells_near(line: &[Xz], reach: f64, w: usize, h: usize, cell: f64, mut f:
         }
     }
     for (i, &d) in best.iter().enumerate() {
-        if d < reach { f(i, d) }
+        if d < reach {
+            f(i, d)
+        }
     }
 }
 

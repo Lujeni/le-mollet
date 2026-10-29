@@ -63,18 +63,17 @@
 //! are never sent to other riders.
 
 use le_mollet::Trainer;
-use le_mollet::auth::{Identity, Perm, Role, Roles};
-use le_mollet::club::{self, Clubs};
-use le_mollet::friend::{self, Friends};
-use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
-use le_mollet::peloton::{self, View};
 use le_mollet::account::{self, Auth};
 use le_mollet::audit::audit;
-use torii::{User, UserId};
+use le_mollet::auth::{Identity, Perm, Role, Roles};
 use le_mollet::city::{City, Exit, Route, Turn};
+use le_mollet::club::{self, Clubs};
 use le_mollet::course::{Course, Point};
-use le_mollet::metrics;
 use le_mollet::db::Db;
+use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
+use le_mollet::friend::{self, Friends};
+use le_mollet::metrics;
+use le_mollet::peloton::{self, View};
 use le_mollet::physics;
 use le_mollet::ride::Ride;
 use le_mollet::rider::{self, Check, Flagged, Riders, Trust};
@@ -90,6 +89,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use torii::{User, UserId};
 
 const PAGE: &str = include_str!("../web/index.html");
 const AUDIO: &[(&str, &[u8])] = &[
@@ -119,7 +119,8 @@ const VENDOR: &[(&str, &str, &str, &[u8])] = &[
     ("/fonts/silkscreen-700-latin.woff2", "font/woff2", "6", include_bytes!("../web/fonts/silkscreen-700-latin.woff2")),
     ("/fonts/silkscreen-700-latin-ext.woff2", "font/woff2", "6", include_bytes!("../web/fonts/silkscreen-700-latin-ext.woff2")),
 ];
-static VENDOR_GZ: std::sync::LazyLock<HashMap<&'static str, Arc<Vec<u8>>>> = std::sync::LazyLock::new(|| VENDOR.iter().filter(|v| v.1 == "text/javascript").map(|v| (v.0, Arc::new(gzip(v.3)))).collect()); // woff2 is already compressed
+static VENDOR_GZ: std::sync::LazyLock<HashMap<&'static str, Arc<Vec<u8>>>> =
+    std::sync::LazyLock::new(|| VENDOR.iter().filter(|v| v.1 == "text/javascript").map(|v| (v.0, Arc::new(gzip(v.3)))).collect()); // woff2 is already compressed
 static PAGE_GZ: std::sync::LazyLock<Arc<Vec<u8>>> = std::sync::LazyLock::new(|| Arc::new(gzip(PAGE.as_bytes())));
 static PAGE_TAG: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
     let mut h = Fnv::default();
@@ -130,16 +131,24 @@ static PAGE_TAG: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
 /// FNV-1a, 64 bits: a fingerprint for cache tags, not a security hash.
 struct Fnv(u64);
 impl Default for Fnv {
-    fn default() -> Self { Self(0xcbf2_9ce4_8422_2325) }
+    fn default() -> Self {
+        Self(0xcbf2_9ce4_8422_2325)
+    }
 }
 impl Fnv {
     fn add(&mut self, b: &[u8]) {
-        for x in b { self.0 = (self.0 ^ *x as u64).wrapping_mul(0x0100_0000_01b3) }
+        for x in b {
+            self.0 = (self.0 ^ *x as u64).wrapping_mul(0x0100_0000_01b3)
+        }
     }
-    fn hex(&self) -> String { format!("{:016x}", self.0) }
+    fn hex(&self) -> String {
+        format!("{:016x}", self.0)
+    }
 }
 
-fn gzip(raw: &[u8]) -> Vec<u8> { gzip_level(raw, flate2::Compression::fast()) }
+fn gzip(raw: &[u8]) -> Vec<u8> {
+    gzip_level(raw, flate2::Compression::fast())
+}
 
 fn gzip_level(raw: &[u8], level: flate2::Compression) -> Vec<u8> {
     use std::io::Write;
@@ -212,7 +221,20 @@ impl Track {
     fn new(id: String, course: Course, terrain: Option<Vec<u8>>, relief: Option<Relief>) -> anyhow::Result<Self> {
         let json = serde_json::to_string(&course)?;
         let terrain = terrain.map(le_mollet::terrain::delta_rows); // kept in its wire form: the header and cover read the same
-        Ok(Self { id, course, json, terrain, relief, city: None, buildings: None, district: HashMap::new(), ortho: HashMap::new(), riders: Mutex::new(HashMap::new()), tag: Default::default(), gz: Default::default() })
+        Ok(Self {
+            id,
+            course,
+            json,
+            terrain,
+            relief,
+            city: None,
+            buildings: None,
+            district: HashMap::new(),
+            ortho: HashMap::new(),
+            riders: Mutex::new(HashMap::new()),
+            tag: Default::default(),
+            gz: Default::default(),
+        })
     }
 
     /// Changes when any of its files does: a cache may keep a URL carrying it for good.
@@ -220,17 +242,24 @@ impl Track {
         self.tag.get_or_init(|| {
             let mut h = Fnv::default();
             h.add(self.json.as_bytes());
-            for b in [&self.terrain, &self.buildings].into_iter().flatten() { h.add(b) }
+            for b in [&self.terrain, &self.buildings].into_iter().flatten() {
+                h.add(b)
+            }
             let mut files: Vec<(&str, &Vec<u8>)> = self.ortho.iter().map(|(k, v)| (k.as_str(), v)).chain(self.district.iter().map(|(k, v)| (*k, v))).collect();
             files.sort_by_key(|f| f.0);
-            for (k, v) in files { h.add(k.as_bytes()); h.add(v) }
+            for (k, v) in files {
+                h.add(k.as_bytes());
+                h.add(v)
+            }
             h.hex()
         })
     }
 
     /// One of its files gzipped, once (`course`, `terrain`, `buildings`).
     fn gz(&self, key: &'static str, raw: &[u8]) -> Arc<Vec<u8>> {
-        if let Some(z) = self.gz.lock().unwrap_or_else(|e| e.into_inner()).get(key) { return z.clone() }
+        if let Some(z) = self.gz.lock().unwrap_or_else(|e| e.into_inner()).get(key) {
+            return z.clone();
+        }
         // Default level, not fast: on row-difference terrain it is a quarter smaller (Ventoux 5.6 -> 4.0 MB), once per file.
         let z = Arc::new(tokio::task::block_in_place(|| gzip_level(raw, flate2::Compression::default()))); // outside the lock, off the async threads: a big terrain takes a moment
         self.gz.lock().unwrap_or_else(|e| e.into_inner()).insert(key, z.clone());
@@ -258,8 +287,12 @@ impl Track {
                 self.ortho.insert(name, b);
             }
         }
-        if !self.ortho.contains_key("meta.json") { self.ortho.clear() }
-        if self.buildings.is_none() { self.buildings = std::fs::read(crate::buildings_path(path)).ok() }
+        if !self.ortho.contains_key("meta.json") {
+            self.ortho.clear()
+        }
+        if self.buildings.is_none() {
+            self.buildings = std::fs::read(crate::buildings_path(path)).ok()
+        }
         self
     }
 
@@ -270,7 +303,9 @@ impl Track {
                 self.district.insert(f, b);
             }
         }
-        if self.district.len() < DISTRICT_FILES.len() { self.district.clear() }
+        if self.district.len() < DISTRICT_FILES.len() {
+            self.district.clear()
+        }
         self
     }
 
@@ -287,7 +322,14 @@ impl Track {
         let profile: Vec<f32> = (0..60).map(|i| c.ele_at(c.length() * i as f32 / 59.0).round()).collect();
         // A loop's shape seen from above, 80 `[lat, lon]`, for the Free cards.
         let n = c.points.len();
-        let outline: Option<Vec<[f64; 2]>> = (c.looped && n > 1).then(|| (0..80).map(|i| { let p = &c.points[i * (n - 1) / 79]; [p.lat, p.lon] }).collect());
+        let outline: Option<Vec<[f64; 2]>> = (c.looped && n > 1).then(|| {
+            (0..80)
+                .map(|i| {
+                    let p = &c.points[i * (n - 1) / 79];
+                    [p.lat, p.lon]
+                })
+                .collect()
+        });
         json!({
             "outline": outline,
             "id": self.id, "name": c.name, "country": c.country, "length": c.length(), "gain": c.elevation_gain().round(), "profile": profile,
@@ -399,7 +441,19 @@ impl App {
     pub fn new(dir: &str, trainer: Option<Trainer>, difficulty: f32, db: Db, auth: Auth, mode: Mode) -> anyhow::Result<Self> {
         Roles::load(&db)?; // broken roles stop the server now, not at the first admin call
         let mut paths: Vec<_> = std::fs::read_dir(dir)
-            .map(|rd| rd.filter_map(|e| Some(e.ok()?.path())).filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".city.json") && !p.to_string_lossy().ends_with(".map.json") && !p.ends_with("leaderboards.json") && !p.ends_with("clubs.json") && !p.ends_with("events.json") && !p.ends_with("riders.json")).collect())
+            .map(|rd| {
+                rd.filter_map(|e| Some(e.ok()?.path()))
+                    .filter(|p| {
+                        p.extension().is_some_and(|x| x == "json")
+                            && !p.to_string_lossy().ends_with(".city.json")
+                            && !p.to_string_lossy().ends_with(".map.json")
+                            && !p.ends_with("leaderboards.json")
+                            && !p.ends_with("clubs.json")
+                            && !p.ends_with("events.json")
+                            && !p.ends_with("riders.json")
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         paths.sort();
         let mut tracks = vec![];
@@ -485,7 +539,9 @@ impl App {
             },
             None => Identity::ANONYMOUS,
         };
-        if owner { who.role = Role::Admin }
+        if owner {
+            who.role = Role::Admin
+        }
         who
     }
 
@@ -497,7 +553,13 @@ impl App {
     /// The `Set-Cookie` value for a session torii just opened (`account::SESSION_DAYS`).
     fn cookie_for(&self, session: &torii::Session) -> String {
         // Cloud sits behind https; LE_MOLLET_PUBLIC_URL=http://... says otherwise (a test on a LAN).
-        let secure = if self.mode == Mode::Cloud && !std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("http://")) || std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("https://")) { "; Secure" } else { "" };
+        let secure = if self.mode == Mode::Cloud && !std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("http://"))
+            || std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("https://"))
+        {
+            "; Secure"
+        } else {
+            ""
+        };
         format!("{SESSION_COOKIE}={}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}{secure}", session.token.as_str(), account::SESSION_DAYS * 86_400)
     }
 
@@ -507,40 +569,65 @@ impl App {
         let (to, name) = (u.email.clone(), u.name.clone().unwrap_or_default());
         let base = std::env::var("LE_MOLLET_PUBLIC_URL").unwrap_or_else(|_| format!("http://{}", header(req, "host").unwrap_or("localhost:8080")));
         let (subject, text, html) = account::link_mail(&name, &format!("{}/?link={token}", base.trim_end_matches('/')));
-        tokio::task::spawn_blocking(move || {
-            match le_mollet::mail::send(&to, &subject, &text, Some(&html)) {
-                Ok(()) => { metrics::inc("le_mollet_mails_total", &[("result", "sent")]); audit("mail.sent", &[("to", &to), ("name", &name)]) }
-                Err(e) => { metrics::inc("le_mollet_mails_total", &[("result", "failed")]); audit("mail.failed", &[("to", &to), ("name", &name), ("error", &format!("{e:#}"))]) }
+        tokio::task::spawn_blocking(move || match le_mollet::mail::send(&to, &subject, &text, Some(&html)) {
+            Ok(()) => {
+                metrics::inc("le_mollet_mails_total", &[("result", "sent")]);
+                audit("mail.sent", &[("to", &to), ("name", &name)])
+            }
+            Err(e) => {
+                metrics::inc("le_mollet_mails_total", &[("result", "failed")]);
+                audit("mail.failed", &[("to", &to), ("name", &name), ("error", &format!("{e:#}"))])
             }
         });
     }
 
     fn role_of(&self, account: u64) -> Role {
         let mut roles = self.roles.lock().unwrap_or_else(|e| e.into_inner());
-        if roles.1.elapsed() > ROLES_TTL && let Ok(r) = Roles::load(&self.db) { *roles = (r, std::time::Instant::now()) }
+        if roles.1.elapsed() > ROLES_TTL
+            && let Ok(r) = Roles::load(&self.db)
+        {
+            *roles = (r, std::time::Instant::now())
+        }
         roles.0.role_of(account)
     }
 
     /// Whether `client` may do `what` again: `max` times per `window`. Old windows are dropped as they are met.
     fn allow(&self, what: &str, client: &str, max: u32, window: Duration) -> bool {
         let mut limits = self.limits.lock().unwrap_or_else(|e| e.into_inner());
-        if limits.len() > 10_000 { limits.retain(|_, (_, t)| t.elapsed() < window) }
+        if limits.len() > 10_000 {
+            limits.retain(|_, (_, t)| t.elapsed() < window)
+        }
         let e = limits.entry(format!("{what}:{client}")).or_insert((max, std::time::Instant::now()));
-        if e.1.elapsed() > window { *e = (max, std::time::Instant::now()) }
-        if e.0 == 0 { return false }
+        if e.1.elapsed() > window {
+            *e = (max, std::time::Instant::now())
+        }
+        if e.0 == 0 {
+            return false;
+        }
         e.0 -= 1;
         true
     }
 
     /// `/metrics`: the registry (src/metrics.rs), plus what is read off the server's state now.
-    fn metrics(&self, signed_in: usize) -> String { // `signed_in`: torii's live sessions, counted by the caller (`Auth::signed_in`)
+    fn metrics(&self, signed_in: usize) -> String {
+        // `signed_in`: torii's live sessions, counted by the caller (`Auth::signed_in`)
         let now = unix_now();
         let mut g: Vec<metrics::Gauge> = vec![];
         let mut types: std::collections::BTreeMap<&str, f64> = Default::default();
         for t in self.tracks.read().unwrap().iter() {
             let riders = t.riders.lock().unwrap_or_else(|e| e.into_inner()).values().filter(|p| !p.bot).count();
             g.push(("le_mollet_riders_online", vec![("track", t.id.clone())], riders as f64));
-            *types.entry(if t.city.is_some() { "city" } else if t.relief.is_some() { "world" } else if t.course.looped { "loop" } else { "climb" }).or_default() += 1.0;
+            *types
+                .entry(if t.city.is_some() {
+                    "city"
+                } else if t.relief.is_some() {
+                    "world"
+                } else if t.course.looped {
+                    "loop"
+                } else {
+                    "climb"
+                })
+                .or_default() += 1.0;
         }
         g.extend(types.into_iter().map(|(k, n)| ("le_mollet_tracks", vec![("type", k.to_owned())], n)));
         {
@@ -596,23 +683,38 @@ impl App {
         let pids: Vec<String> = {
             let mut riders = self.riders.lock().unwrap_or_else(|e| e.into_inner());
             let pids: Vec<String> = riders.riders.iter().filter(|(_, r)| r.owner == Some(account)).map(|(k, _)| k.clone()).collect();
-            for p in &pids { riders.riders.remove(p); if let Err(e) = self.db.delete("riders", p) { eprintln!("riders: {e}") } }
+            for p in &pids {
+                riders.riders.remove(p);
+                if let Err(e) = self.db.delete("riders", p) {
+                    eprintln!("riders: {e}")
+                }
+            }
             pids
         };
         if !pids.is_empty() {
             let mut clubs = self.clubs.lock().unwrap_or_else(|e| e.into_inner());
-            for p in &pids { clubs.leave(p) }
-            if let Err(e) = clubs.save(&self.db) { eprintln!("clubs: {e}") }
+            for p in &pids {
+                clubs.leave(p)
+            }
+            if let Err(e) = clubs.save(&self.db) {
+                eprintln!("clubs: {e}")
+            }
         }
         // Friendships: the profiles' (at home) and the account's own (signed in).
         let mut friends = self.friends.lock().unwrap_or_else(|e| e.into_inner());
         for p in pids.iter().chain(std::iter::once(&friend::account_key(account))) {
             let handles: Vec<String> = friends.people.get(p).map(|me| me.friends.iter().chain(&me.asked).filter_map(|k| friends.people.get(k)).map(|o| o.handle()).collect()).unwrap_or_default();
-            for h in handles { let _ = friends.remove(p, &h); }
+            for h in handles {
+                let _ = friends.remove(p, &h);
+            }
             let others: Vec<String> = friends.sent(p);
-            for h in others { let _ = friends.remove(p, &h); }
+            for h in others {
+                let _ = friends.remove(p, &h);
+            }
             friends.people.remove(p);
-            if let Err(e) = self.db.delete("friends", p) { eprintln!("friends: {e}") }
+            if let Err(e) = self.db.delete("friends", p) {
+                eprintln!("friends: {e}")
+            }
         }
     }
 
@@ -636,14 +738,22 @@ pub async fn serve(addr: &str, app: Arc<App>) -> anyhow::Result<()> {
         {
             let mut conns = app.conns.lock().unwrap_or_else(|e| e.into_inner());
             let n = conns.entry(peer.ip()).or_insert(0);
-            if *n >= MAX_CONNS_PER_IP { metrics::inc("le_mollet_rejected_total", &[("reason", "too_many_connections")]); continue }
+            if *n >= MAX_CONNS_PER_IP {
+                metrics::inc("le_mollet_rejected_total", &[("reason", "too_many_connections")]);
+                continue;
+            }
             *n += 1;
         }
         tokio::spawn(async move {
             let _ = handle(sock, app.clone()).await; // client gone: nothing to do
             drop(slot);
             let mut conns = app.conns.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(n) = conns.get_mut(&peer.ip()) { *n -= 1; if *n == 0 { conns.remove(&peer.ip()); } }
+            if let Some(n) = conns.get_mut(&peer.ip()) {
+                *n -= 1;
+                if *n == 0 {
+                    conns.remove(&peer.ip());
+                }
+            }
         });
     }
 }
@@ -653,7 +763,12 @@ pub async fn serve(addr: &str, app: Arc<App>) -> anyhow::Result<()> {
 fn client_ip(req: &str, peer: Option<std::net::IpAddr>, mode: Mode) -> String {
     // The last address is the one our proxy appended; anything before it the client may have written itself
     // (a made-up one would dodge the budgets and the password lock). An address, or nothing.
-    if mode == Mode::Cloud && peer.is_some_and(|p| p.is_loopback()) && let Some(ip) = header(req, "x-forwarded-for").and_then(|h| h.rsplit(',').next()).and_then(|s| s.trim().parse::<std::net::IpAddr>().ok()) { return ip.to_string() }
+    if mode == Mode::Cloud
+        && peer.is_some_and(|p| p.is_loopback())
+        && let Some(ip) = header(req, "x-forwarded-for").and_then(|h| h.rsplit(',').next()).and_then(|s| s.trim().parse::<std::net::IpAddr>().ok())
+    {
+        return ip.to_string();
+    }
     peer.map_or_else(|| "?".into(), |p| p.to_string())
 }
 
@@ -663,7 +778,11 @@ fn client_ip(req: &str, peer: Option<std::net::IpAddr>, mode: Mode) -> String {
 fn host_ok(req: &str) -> bool {
     let Some(host) = header(req, "host") else { return true }; // HTTP/1.0 tools
     let name = host.trim_start_matches('[').split([']', ':']).next().unwrap_or("").to_ascii_lowercase();
-    name.is_empty() || name == "localhost" || name.ends_with(".local") || name.ends_with(".localhost") || name.parse::<std::net::IpAddr>().is_ok()
+    name.is_empty()
+        || name == "localhost"
+        || name.ends_with(".local")
+        || name.ends_with(".localhost")
+        || name.parse::<std::net::IpAddr>().is_ok()
         || std::env::var("LE_MOLLET_PUBLIC_URL").ok().and_then(|u| u.split("://").nth(1).map(|h| h.split(['/', ':']).next().unwrap_or("").to_ascii_lowercase())).is_some_and(|h| h == name)
         || std::env::var("LE_MOLLET_HOSTS").is_ok_and(|hs| hs.split(',').any(|h| h.trim().eq_ignore_ascii_case(&name)))
 }
@@ -698,8 +817,29 @@ fn public_id(sid: u64) -> u64 {
 
 /// Calls that change something: POST only (`/rider` with a weight too). Steering one's own ride stays GET: it
 /// needs the ride's session, which only its page knows.
-const POST_ONLY: [&str; 21] = ["/worlds/new", "/event/create", "/event/join", "/event/leave", "/event/delete", "/club/create", "/club/join", "/club/leave",
-    "/friend/ask", "/friend/accept", "/friend/remove", "/friend/ride", "/friend/unride", "/auth/logout", "/auth/password", "/auth/delete", "/auth/email", "/auth/name", "/auth/link", "/auth/link/use", "/admin/segments/reset"];
+const POST_ONLY: [&str; 21] = [
+    "/worlds/new",
+    "/event/create",
+    "/event/join",
+    "/event/leave",
+    "/event/delete",
+    "/club/create",
+    "/club/join",
+    "/club/leave",
+    "/friend/ask",
+    "/friend/accept",
+    "/friend/remove",
+    "/friend/ride",
+    "/friend/unride",
+    "/auth/logout",
+    "/auth/password",
+    "/auth/delete",
+    "/auth/email",
+    "/auth/name",
+    "/auth/link",
+    "/auth/link/use",
+    "/admin/segments/reset",
+];
 
 /// Emotes a rider can send.
 const EMOTES: [&str; 5] = ["rideon", "wave", "fire", "laugh", "party"];
@@ -754,12 +894,21 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         while let Some(end) = buf[..n].windows(4).position(|w| w == b"\r\n\r\n") {
             let head = String::from_utf8_lossy(&buf[..end]);
             let want = header(&head, "content-length").and_then(|l| l.parse::<usize>().ok()).unwrap_or(0);
-            if n >= (end + 4 + want).min(buf.len()) { break }
-            match sock.read(&mut buf[n..]).await? { 0 => break, k => n += k }
+            if n >= (end + 4 + want).min(buf.len()) {
+                break;
+            }
+            match sock.read(&mut buf[n..]).await? {
+                0 => break,
+                k => n += k,
+            }
         }
         Ok::<_, std::io::Error>(n)
-    }).await;
-    let Ok(Ok(n)) = read else { metrics::inc("le_mollet_rejected_total", &[("reason", "slow_request")]); return Ok(()) };
+    })
+    .await;
+    let Ok(Ok(n)) = read else {
+        metrics::inc("le_mollet_rejected_total", &[("reason", "slow_request")]);
+        return Ok(());
+    };
     let req = String::from_utf8_lossy(&buf[..n]);
     if !host_ok(&req) {
         metrics::inc("le_mollet_rejected_total", &[("reason", "host")]);
@@ -777,7 +926,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             Some(t) => header(&req, "authorization").is_some_and(|h| h.strip_prefix("Bearer ").is_some_and(|b| same_secret(b, t))),
             None => app.mode == Mode::Local,
         };
-        if !ok { return reply(&mut sock, "404 Not Found", "text/plain", b"not found").await }
+        if !ok {
+            return reply(&mut sock, "404 Not Found", "text/plain", b"not found").await;
+        }
         return reply(&mut sock, "200 OK", "text/plain; version=0.0.4", app.metrics(app.auth.signed_in().await).as_bytes()).await;
     }
     // What changes something is asked with POST: a link, a prefetch or an old browser without `Sec-Fetch-Site` cannot do it.
@@ -820,7 +971,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     }
     // A ride is steered only by whoever opened it: opening the stream claims the session, the other calls need it.
     let owner: Owner = (peer, who.account);
-    if matches!(path, "/power" | "/seek" | "/turn" | "/powerup" | "/pause" | "/emote" | "/events") && let Some(sid) = session {
+    if matches!(path, "/power" | "/seek" | "/turn" | "/powerup" | "/pause" | "/emote" | "/events")
+        && let Some(sid) = session
+    {
         let mine = {
             let owners = app.owners.lock().unwrap_or_else(|e| e.into_inner());
             // The stream only claims the ride once it is sure to open (below): a claim left by a refused call would stay for good.
@@ -841,7 +994,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await;
     }
     // Cloud: a profile the server does not know yet cannot act (the page registers it on `/rider` first).
-    if app.mode == Mode::Cloud && (path.starts_with("/club") || path.starts_with("/event/") || path.starts_with("/friend")) && pid.is_some_and(|p| !app.riders.lock().unwrap_or_else(|e| e.into_inner()).riders.contains_key(p)) {
+    if app.mode == Mode::Cloud
+        && (path.starts_with("/club") || path.starts_with("/event/") || path.starts_with("/friend"))
+        && pid.is_some_and(|p| !app.riders.lock().unwrap_or_else(|e| e.into_inner()).riders.contains_key(p))
+    {
         return reply(&mut sock, "403 Forbidden", "text/plain", b"unknown rider").await;
     }
     // Cloud: names come from the account, so nobody appears as someone else.
@@ -870,8 +1026,14 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/courses", _) => reply(&mut sock, "200 OK", "application/json", app.list_json.as_bytes()).await,
         ("/whoami", _) => {
             // `devices`: the account's live sessions, for its settings.
-            let me = match &who.user { Some(id) => app.auth.user(&UserId::new(id)).await, None => None };
-            let devices = match &me { Some(u) => Some(app.auth.devices(&u.id).await), None => None };
+            let me = match &who.user {
+                Some(id) => app.auth.user(&UserId::new(id)).await,
+                None => None,
+            };
+            let devices = match &me {
+                Some(u) => Some(app.auth.devices(&u.id).await),
+                None => None,
+            };
             let body = json!({ "role": who.role, "name": who.name, "account": who.account, "perms": who.role.perms(), "mode": app.mode, "devices": devices, "email": me.as_ref().and_then(account::public_email) }).to_string();
             reply(&mut sock, "200 OK", "application/json", body.as_bytes()).await
         }
@@ -879,7 +1041,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         // Sign up, sign in. A public server has no passwords: a sign-up is an e-mail, and a link goes to it
         // (`/auth/link` for the next ones); at home a name and a password, signed in at once.
         ("/auth/signup" | "/auth/login", _) if req.starts_with("POST ") => {
-            if app.mode == Mode::Cloud && path == "/auth/login" { return reply(&mut sock, "400 Bad Request", "text/plain", b"no passwords here: sign in by e-mail").await }
+            if app.mode == Mode::Cloud && path == "/auth/login" {
+                return reply(&mut sock, "400 Bad Request", "text/plain", b"no passwords here: sign in by e-mail").await;
+            }
             let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
             let (name, password) = (param(form, "name").map(decode).unwrap_or_default().trim().to_owned(), param(form, "password").map(decode).unwrap_or_default());
             let email = param(form, "email").map(decode).unwrap_or_default().trim().to_ascii_lowercase();
@@ -896,9 +1060,13 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     return reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await;
                 }
                 if app.mode == Mode::Cloud {
-                    if email.is_empty() { return reply(&mut sock, "400 Bad Request", "text/plain", b"email: required").await }
+                    if email.is_empty() {
+                        return reply(&mut sock, "400 Bad Request", "text/plain", b"email: required").await;
+                    }
                     let swept = app.auth.sweep().await; // yesterday's sign-ups that never answered go first
-                    if swept > 0 { audit("sweep", &[("dropped", &swept.to_string())]) }
+                    if swept > 0 {
+                        audit("sweep", &[("dropped", &swept.to_string())])
+                    }
                     return match app.auth.signup_by_email(&email).await {
                         Ok((u, token)) => {
                             metrics::inc("le_mollet_signins_total", &[("result", "signup")]);
@@ -912,7 +1080,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                             audit("signup.existing", &[("email", &email), ("ip", &client)]);
                             reply(&mut sock, "202 Accepted", "text/plain", b"link sent").await
                         }
-                        Err(e) => { audit("signup.refused", &[("email", &email), ("reason", e), ("ip", &client)]); reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await }
+                        Err(e) => {
+                            audit("signup.refused", &[("email", &email), ("reason", e), ("ip", &client)]);
+                            reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await
+                        }
                     };
                 }
             }
@@ -924,7 +1095,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 fails.retain(|_, (_, t)| t.elapsed().as_secs() < 900);
                 fails.get(&key).is_some_and(|(n, _)| *n >= 5)
             };
-            let res = if locked { Err("too many tries: wait 15 minutes") } else if path == "/auth/signup" {
+            let res = if locked {
+                Err("too many tries: wait 15 minutes")
+            } else if path == "/auth/signup" {
                 app.auth.signup_password(&name, &password, Some(client.clone())).await
             } else {
                 app.auth.login_password(&name, &password, Some(client.clone())).await
@@ -932,7 +1105,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             match res {
                 Ok((u, session)) => {
                     metrics::inc("le_mollet_signins_total", &[("result", if path == "/auth/signup" { "signup" } else { "ok" })]);
-                    audit(if path == "/auth/signup" { "signup" } else { "signin" }, &[("via", "password"), ("account", &Auth::account_id(&u.id).to_string()), ("name", u.name.as_deref().unwrap_or("")), ("ip", &client)]);
+                    audit(
+                        if path == "/auth/signup" { "signup" } else { "signin" },
+                        &[("via", "password"), ("account", &Auth::account_id(&u.id).to_string()), ("name", u.name.as_deref().unwrap_or("")), ("ip", &client)],
+                    );
                     app.login_fails.lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
                     signed_in(&mut sock, &app, &u, &session).await
                 }
@@ -940,7 +1116,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     if e == "wrong name or password" {
                         let mut fails = app.login_fails.lock().unwrap_or_else(|e| e.into_inner());
                         let f = fails.entry(key).or_insert((0, std::time::Instant::now()));
-                        if f.1.elapsed().as_secs() >= 900 { *f = (0, std::time::Instant::now()) }
+                        if f.1.elapsed().as_secs() >= 900 {
+                            *f = (0, std::time::Instant::now())
+                        }
                         f.0 += 1;
                     }
                     metrics::inc("le_mollet_signins_total", &[("result", if locked { "locked" } else { "refused" })]);
@@ -954,7 +1132,13 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/auth/link", _) if req.starts_with("POST ") => {
             let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
             let email = param(form, "email").map(decode).unwrap_or_default();
-            let known = match app.auth.link(&email).await { Some((u, token)) => { app.mail_link(&u, &token.token, &req); true } None => false };
+            let known = match app.auth.link(&email).await {
+                Some((u, token)) => {
+                    app.mail_link(&u, &token.token, &req);
+                    true
+                }
+                None => false,
+            };
             audit("link.sent", &[("email", &email.trim().to_ascii_lowercase()), ("known", if known { "true" } else { "false" }), ("ip", &client)]);
             reply(&mut sock, "202 Accepted", "text/plain", b"link sent").await
         }
@@ -977,8 +1161,16 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/auth/logout", _) => {
             // `all=1`: every browser of the account, not only this one.
             match (cookie(&req, SESSION_COOKIE), &who.user, param(query, "all")) {
-                (_, Some(id), Some("1")) => { app.auth.sign_out_all(&UserId::new(id)).await; audit("signout", &[("account", &who.account.unwrap_or(0).to_string()), ("all", "true")]) }
-                (Some(c), ..) => { app.auth.sign_out(c).await; if let Some(a) = who.account { audit("signout", &[("account", &a.to_string())]) } }
+                (_, Some(id), Some("1")) => {
+                    app.auth.sign_out_all(&UserId::new(id)).await;
+                    audit("signout", &[("account", &who.account.unwrap_or(0).to_string()), ("all", "true")])
+                }
+                (Some(c), ..) => {
+                    app.auth.sign_out(c).await;
+                    if let Some(a) = who.account {
+                        audit("signout", &[("account", &a.to_string())])
+                    }
+                }
                 _ => {}
             }
             redirect(&mut sock, "/", Some(CLEAR_COOKIE)).await
@@ -987,8 +1179,13 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         // session (from the mailbox) vouches. A new password signs the other browsers out; the account gone takes
         // its sessions and the profiles it owns.
         ("/auth/password" | "/auth/delete" | "/auth/name" | "/auth/email", _) if req.starts_with("POST ") => {
-            if app.mode == Mode::Cloud && path == "/auth/password" { return reply(&mut sock, "400 Bad Request", "text/plain", b"no passwords here: sign in by e-mail").await }
-            let me = match &who.user { Some(id) => app.auth.user(&UserId::new(id)).await, None => None };
+            if app.mode == Mode::Cloud && path == "/auth/password" {
+                return reply(&mut sock, "400 Bad Request", "text/plain", b"no passwords here: sign in by e-mail").await;
+            }
+            let me = match &who.user {
+                Some(id) => app.auth.user(&UserId::new(id)).await,
+                None => None,
+            };
             let Some((me, account)) = me.zip(who.account) else { return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await };
             let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
             let field = |k: &str| param(form, k).map(decode).unwrap_or_default();
@@ -1018,7 +1215,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     // The other browsers out, this one on a fresh session.
                     app.auth.sign_out_all(&me.id).await;
                     match app.auth.new_session(&me.id, Some(client.clone())).await {
-                        Ok(session) => { let cookie = app.cookie_for(&session); reply_with_cookie(&mut sock, "204 No Content", &cookie, "").await }
+                        Ok(session) => {
+                            let cookie = app.cookie_for(&session);
+                            reply_with_cookie(&mut sock, "204 No Content", &cookie, "").await
+                        }
                         Err(_) => redirect(&mut sock, "/", Some(CLEAR_COOKIE)).await,
                     }
                 }
@@ -1035,10 +1235,14 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let done = {
                 let mut boards = app.boards.lock().unwrap_or_else(|e| e.into_inner());
                 let done = boards.reset(&format!("{}:{name}", t.id));
-                if done && let Err(e) = boards.save(&app.db, &format!("{}:{name}", t.id)) { eprintln!("leaderboards: {e}") }
+                if done && let Err(e) = boards.save(&app.db, &format!("{}:{name}", t.id)) {
+                    eprintln!("leaderboards: {e}")
+                }
                 done
             };
-            if done { eprintln!("{} reset the leaderboard {}:{name}", who.name.as_deref().unwrap_or("?"), t.id) }
+            if done {
+                eprintln!("{} reset the leaderboard {}:{name}", who.name.as_deref().unwrap_or("?"), t.id)
+            }
             reply(&mut sock, if done { "204 No Content" } else { "404 Not Found" }, "text/plain", b"").await
         }
         ("/rider", _) => {
@@ -1048,14 +1252,20 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let (status, body) = {
                 let mut riders = app.riders.lock().unwrap_or_else(|e| e.into_inner());
                 let res = match (num("weight"), num("ftp")) {
-                    (Some(_), Some(_)) if who.account.is_some() && !riders.riders.contains_key(pid) && riders.riders.values().filter(|r| r.owner == who.account).count() >= 20 => Err("too many profiles on this account"),
+                    (Some(_), Some(_)) if who.account.is_some() && !riders.riders.contains_key(pid) && riders.riders.values().filter(|r| r.owner == who.account).count() >= 20 => {
+                        Err("too many profiles on this account")
+                    }
                     (Some(w), Some(f)) => riders.register(pid, who.account, w, f, now).cloned(),
                     _ => riders.riders.get(pid).cloned().ok_or("no such rider"),
                 };
                 let view = |r: &rider::Rider| json!({ "weight": r.weight, "ftp": r.ftp, "seen_ftp": r.seen_ftp(now), "rank": r.rank(now).to_string(), "wkg": r.wkg(now), "flags": r.flags.len() });
                 match res {
                     Ok(r) => {
-                        if num("weight").is_some() && let Err(e) = riders.save(&app.db, pid) { eprintln!("riders: {e}") }
+                        if num("weight").is_some()
+                            && let Err(e) = riders.save(&app.db, pid)
+                        {
+                            eprintln!("riders: {e}")
+                        }
                         ("200 OK", view(&r))
                     }
                     // Refused: what the server keeps, so the page can put it back.
@@ -1083,11 +1293,29 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 (me.emote, me.emote_at) = (Some(e), Some(now));
                 metrics::inc("le_mollet_emotes_total", &[("e", e)]);
                 let from = me.name.clone();
-                if e == "rideon" && let Some(o) = to.and_then(|to| riders.values_mut().find(|p| p.id == to)) {
+                if e == "rideon"
+                    && let Some(o) = to.and_then(|to| riders.values_mut().find(|p| p.id == to))
+                {
                     // One Ride On every 5 s per sender, ten waiting at most per recipient: no flooding a screen.
-                    let fresh = { let mut r = app.rideons.lock().unwrap_or_else(|e| e.into_inner()); let ok = r.get(&sid).is_none_or(|t| t.elapsed().as_secs() >= 5); if ok { r.insert(sid, now); } ok };
-                    if o.bot { (o.emote, o.emote_at) = (Some("wave"), Some(now)) } // pace partners wave back
-                    else if fresh { let mut inbox = app.inbox.lock().unwrap_or_else(|e| e.into_inner()); let q = inbox.entry(o.sid).or_default(); if q.len() < 10 { q.push(Notice { from, e }) } }
+                    let fresh = {
+                        let mut r = app.rideons.lock().unwrap_or_else(|e| e.into_inner());
+                        let ok = r.get(&sid).is_none_or(|t| t.elapsed().as_secs() >= 5);
+                        if ok {
+                            r.insert(sid, now);
+                        }
+                        ok
+                    };
+                    if o.bot {
+                        (o.emote, o.emote_at) = (Some("wave"), Some(now))
+                    }
+                    // pace partners wave back
+                    else if fresh {
+                        let mut inbox = app.inbox.lock().unwrap_or_else(|e| e.into_inner());
+                        let q = inbox.entry(o.sid).or_default();
+                        if q.len() < 10 {
+                            q.push(Notice { from, e })
+                        }
+                    }
                 }
                 true
             });
@@ -1098,13 +1326,17 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 Some(c) => c.segments.iter().map(|s| (s.name.clone(), s.kind)).collect(),
                 None => segment::course_windows(&t.course).into_iter().map(|w| (w.name, w.kind)).collect(),
             };
-            let body = { // the lock must be gone before the await below
+            let body = {
+                // the lock must be gone before the await below
                 let (now, boards) = (unix_now(), app.boards.lock().unwrap_or_else(|e| e.into_inner()));
-                let list: Vec<_> = defs.iter().map(|(name, kind)| {
-                    let (all, today) = boards.top(&format!("{}:{name}", t.id), 10, now);
-                    let public = |l: Vec<Entry>| l.into_iter().map(|e| json!({ "name": e.name, "color": e.color, "time": e.time, "date": e.date })).collect::<Vec<_>>();
-                    json!({ "name": name, "kind": kind, "all": public(all), "today": public(today) })
-                }).collect();
+                let list: Vec<_> = defs
+                    .iter()
+                    .map(|(name, kind)| {
+                        let (all, today) = boards.top(&format!("{}:{name}", t.id), 10, now);
+                        let public = |l: Vec<Entry>| l.into_iter().map(|e| json!({ "name": e.name, "color": e.color, "time": e.time, "date": e.date })).collect::<Vec<_>>();
+                        json!({ "name": name, "kind": kind, "all": public(all), "today": public(today) })
+                    })
+                    .collect();
                 serde_json::to_string(&list).unwrap_or_default()
             };
             reply(&mut sock, "200 OK", "application/json", body.as_bytes()).await
@@ -1145,7 +1377,11 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         },
         ("/district", Some(t)) => match param(query, "f").and_then(|f| t.district.get(f)) {
             Some(b) => {
-                let ctype = match param(query, "f") { Some("ortho.jpg") => "image/jpeg", Some(f) if f.ends_with(".json") => "application/json", _ => "application/octet-stream" };
+                let ctype = match param(query, "f") {
+                    Some("ortho.jpg") => "image/jpeg",
+                    Some(f) if f.ends_with(".json") => "application/json",
+                    _ => "application/octet-stream",
+                };
                 reply_static(&mut sock, &req, query, ctype, b, None, t.tag()).await
             }
             None => reply(&mut sock, "404 Not Found", "text/plain", b"no such district file").await,
@@ -1162,15 +1398,13 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and w in 0..=2000").await,
             }
         }
-        ("/seek", _) if app.trainer.is_none() => {
-            match (session, param(query, "d").and_then(|d| d.parse::<f32>().ok()).filter(|d| d.is_finite() && *d >= 0.0)) {
-                (Some(s), Some(d)) => {
-                    app.demo_seek.lock().unwrap_or_else(|e| e.into_inner()).insert(s, d);
-                    reply(&mut sock, "204 No Content", "text/plain", b"").await
-                }
-                _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and d >= 0").await,
+        ("/seek", _) if app.trainer.is_none() => match (session, param(query, "d").and_then(|d| d.parse::<f32>().ok()).filter(|d| d.is_finite() && *d >= 0.0)) {
+            (Some(s), Some(d)) => {
+                app.demo_seek.lock().unwrap_or_else(|e| e.into_inner()).insert(s, d);
+                reply(&mut sock, "204 No Content", "text/plain", b"").await
             }
-        }
+            _ => reply(&mut sock, "400 Bad Request", "text/plain", b"need session and d >= 0").await,
+        },
         ("/turn", _) => match (session, param(query, "dir").and_then(Turn::parse)) {
             (Some(s), Some(t)) => {
                 app.turns.lock().unwrap_or_else(|e| e.into_inner()).insert(s, t);
@@ -1194,22 +1428,40 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 let mut events = app.events.lock().unwrap_or_else(|e| e.into_inner());
                 // Races by rank on every half hour and group rides on the quarter hours between, on the short courses
                 // in turn (loops, climbs up to 15 km).
-                let short: Vec<_> = app.tracks.read().unwrap().iter().filter(|t| t.city.is_none() && t.relief.is_none() && (t.course.looped || t.course.length() <= 15_000.0))
-                    .map(|t| (t.id.clone(), t.course.name.clone(), t.course.length(), t.course.looped)).collect();
+                let short: Vec<_> = app
+                    .tracks
+                    .read()
+                    .unwrap()
+                    .iter()
+                    .filter(|t| t.city.is_none() && t.relief.is_none() && (t.course.looped || t.course.length() <= 15_000.0))
+                    .map(|t| (t.id.clone(), t.course.name.clone(), t.course.length(), t.course.looped))
+                    .collect();
                 if events.schedule(now, &short) {
-                    for e in events.events.iter_mut() { peloton::enroll(e, peloton::FIELD) }
-                    if let Err(e) = events.save(&app.db) { eprintln!("events: {e}") }
+                    for e in events.events.iter_mut() {
+                        peloton::enroll(e, peloton::FIELD)
+                    }
+                    if let Err(e) = events.save(&app.db) {
+                        eprintln!("events: {e}")
+                    }
                 }
                 let changed = match p {
                     "/event/list" => return Ok(json!({ "now": now, "events": events_for(&events.current(now), pid.as_deref()) })),
                     "/event/create" => {
                         let pid = pid.clone().ok_or("need pid")?;
                         // A club ride: the founder of the profile's club may schedule it; anything else needs manage_events.
-                        let club = (param(query, "club") == Some("1")).then(|| app.clubs.lock().unwrap_or_else(|e| e.into_inner()).of(&pid).filter(|c| c.members[0].pid == pid).map(|c| c.tag.clone())).flatten();
-                        if !who.can(Perm::ManageEvents) && club.is_none() { return Err("needs manage_events, or to found a club for a club ride") }
-                        let kind = match param(query, "kind") { Some("race") => EventKind::Race, _ => EventKind::Group };
+                        let club = (param(query, "club") == Some("1"))
+                            .then(|| app.clubs.lock().unwrap_or_else(|e| e.into_inner()).of(&pid).filter(|c| c.members[0].pid == pid).map(|c| c.tag.clone()))
+                            .flatten();
+                        if !who.can(Perm::ManageEvents) && club.is_none() {
+                            return Err("needs manage_events, or to found a club for a club ride");
+                        }
+                        let kind = match param(query, "kind") {
+                            Some("race") => EventKind::Race,
+                            _ => EventKind::Group,
+                        };
                         let track = app.track(param(query, "track").unwrap_or("")).filter(|t| t.city.is_none()).ok_or("no such course")?;
-                        let start = param(query, "start").and_then(|s| s.parse::<u64>().ok()).filter(|&s| s.saturating_add(60) >= now && s < now + 60 * 86_400).ok_or("start: a time in the next 60 days")?;
+                        let start =
+                            param(query, "start").and_then(|s| s.parse::<u64>().ok()).filter(|&s| s.saturating_add(60) >= now && s < now + 60 * 86_400).ok_or("start: a time in the next 60 days")?;
                         let name = text("name");
                         metrics::inc("le_mollet_events_created_total", &[("kind", if kind == EventKind::Race { "race" } else { "group" }), ("by", if club.is_some() { "club" } else { "organizer" })]);
                         events.events.push(Event {
@@ -1221,35 +1473,51 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                             laps: if track.course.looped { param(query, "laps").and_then(|l| l.parse().ok()).unwrap_or(3u32).clamp(1, 50) } else { 1 },
                             pace: param(query, "pace").and_then(|p| p.parse().ok()).unwrap_or(2.5f32).clamp(1.0, 5.0),
                             keep: 0,
-                            cats: { let mut c: Vec<char> = text("cats").chars().filter(|c| TIERS.iter().any(|t| t.0 == *c)).collect(); c.sort(); c.dedup(); c.into_iter().collect() },
+                            cats: {
+                                let mut c: Vec<char> = text("cats").chars().filter(|c| TIERS.iter().any(|t| t.0 == *c)).collect();
+                                c.sort();
+                                c.dedup();
+                                c.into_iter().collect()
+                            },
                             club,
                             by: pid,
                             by_name: me_name.clone().unwrap_or_else(|| text("me")),
                             entrants: vec![],
                             results: vec![],
                         });
-                        if let Some(e) = events.events.last_mut() { peloton::enroll(e, peloton::FIELD) }
+                        if let Some(e) = events.events.last_mut() {
+                            peloton::enroll(e, peloton::FIELD)
+                        }
                         true
                     }
                     "/event/join" => {
                         // The rank the server knows, never the page's word.
                         let wkg = app.riders.lock().unwrap_or_else(|e| e.into_inner()).riders.get(pid.as_deref().unwrap_or("")).map(|r| r.wkg(now)).ok_or("unknown rider")?;
-                        if events.get(param(query, "id").unwrap_or("")).is_some_and(|e| e.entrants.len() >= 500) { return Err("the event is full") }
+                        if events.get(param(query, "id").unwrap_or("")).is_some_and(|e| e.entrants.len() >= 500) {
+                            return Err("the event is full");
+                        }
                         let e = events.join(param(query, "id").unwrap_or(""), pid.as_deref().ok_or("need pid")?, &me_name.clone().unwrap_or_else(|| text("me")), wkg, now)?;
                         metrics::inc("le_mollet_event_signups_total", &[("kind", if e.kind == EventKind::Race { "race" } else { "group" })]);
                         true
                     }
-                    "/event/leave" => { events.leave(param(query, "id").unwrap_or(""), pid.as_deref().ok_or("need pid")?); true }
+                    "/event/leave" => {
+                        events.leave(param(query, "id").unwrap_or(""), pid.as_deref().ok_or("need pid")?);
+                        true
+                    }
                     "/event/delete" => {
                         let id = param(query, "id").unwrap_or("");
                         let mine = events.get(id).is_some_and(|e| Some(&e.by) == pid.as_ref());
-                        if !mine && !who.can(Perm::ManageEvents) { return Err("only its organizer can cancel it") }
+                        if !mine && !who.can(Perm::ManageEvents) {
+                            return Err("only its organizer can cancel it");
+                        }
                         events.events.retain(|e| e.id != id);
                         true
                     }
                     _ => return Err("not found"),
                 };
-                if changed && let Err(e) = events.save(&app.db) { eprintln!("events: {e}") }
+                if changed && let Err(e) = events.save(&app.db) {
+                    eprintln!("events: {e}")
+                }
                 Ok(json!({ "now": now, "events": events_for(&events.current(now), pid.as_deref()) }))
             })();
             match res {
@@ -1273,12 +1541,17 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                         clubs.create(pid, &me, &text("name"), &text("tag").to_uppercase(), &color, code).map(|c| Some(c.clone()))
                     }
                     "/club/join" => clubs.join(&text("code"), pid, &me).cloned().map(Some).ok_or("no club with this code"),
-                    "/club/leave" => { clubs.leave(pid); Ok(None) }
+                    "/club/leave" => {
+                        clubs.leave(pid);
+                        Ok(None)
+                    }
                     _ => Err("not found"),
                 };
                 if res.is_ok() && p != "/club" {
                     metrics::inc("le_mollet_club_actions_total", &[("action", p.trim_start_matches("/club/"))]);
-                    if let Err(e) = clubs.save(&app.db) { eprintln!("clubs: {e}") }
+                    if let Err(e) = clubs.save(&app.db) {
+                        eprintln!("clubs: {e}")
+                    }
                 }
                 res
             };
@@ -1286,12 +1559,17 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 Ok(mut c) => {
                     let wk = club::week(unix_now());
                     if let Some(c) = c.as_mut() {
-                        for m in &mut c.members { if m.week != wk { m.km = 0.0 } } // last week's count
+                        for m in &mut c.members {
+                            if m.week != wk {
+                                m.km = 0.0
+                            }
+                        } // last week's count
                         c.members.sort_by(|a, b| b.km.total_cmp(&a.km));
                     }
                     let mut v = json!(c);
                     // get_mut, not v["members"]: indexing null would turn "no club" into an object
-                    for m in v.get_mut("members").and_then(|m| m.as_array_mut()).into_iter().flatten() { // no profile ids for the others
+                    for m in v.get_mut("members").and_then(|m| m.as_array_mut()).into_iter().flatten() {
+                        // no profile ids for the others
                         m["me"] = json!(m["pid"].as_str() == Some(pid));
                         m.as_object_mut().map(|o| o.remove("pid"));
                     }
@@ -1325,14 +1603,23 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     "/friend/view" => friends.view(pid, &handle).map(|_| vec![]).ok_or("not your friend"),
                     "/friend/ride" if req.starts_with("POST ") => {
                         let body = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
-                        serde_json::from_str::<serde_json::Value>(body).map_err(|_| "ride: bad JSON")
+                        serde_json::from_str::<serde_json::Value>(body)
+                            .map_err(|_| "ride: bad JSON")
                             .and_then(|r| if r.is_object() { Ok(r) } else { Err("ride: not an object") })
-                            .and_then(|r| friends.add_ride(&app.db, pid, r)).map(|_| vec![pid.to_owned()])
+                            .and_then(|r| friends.add_ride(&app.db, pid, r))
+                            .map(|_| vec![pid.to_owned()])
                     }
-                    "/friend/unride" => { friends.drop_ride(&app.db, pid, &param(query, "id").map(decode).unwrap_or_default()); Ok(vec![pid.to_owned()]) }
+                    "/friend/unride" => {
+                        friends.drop_ride(&app.db, pid, &param(query, "id").map(decode).unwrap_or_default());
+                        Ok(vec![pid.to_owned()])
+                    }
                     _ => Err("not found"),
                 };
-                if let Ok(changed) = &res && let Err(e) = friends.save(&app.db, &changed.iter().map(String::as_str).collect::<Vec<_>>()) { eprintln!("friends: {e}") }
+                if let Ok(changed) = &res
+                    && let Err(e) = friends.save(&app.db, &changed.iter().map(String::as_str).collect::<Vec<_>>())
+                {
+                    eprintln!("friends: {e}")
+                }
                 res
             };
             if let Err(e) = res {
@@ -1343,14 +1630,23 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 let friends = app.friends.lock().unwrap_or_else(|e| e.into_inner());
                 let riders = app.riders.lock().unwrap_or_else(|e| e.into_inner());
                 let now = unix_now();
-                let card = |k: &str| friends.people.get(k).map(|p| {
-                    // The rider behind the key: the profile, or any profile of the account.
-                    let r = riders.riders.get(k).or_else(|| friend::account_of(k).and_then(|a| riders.riders.values().find(|r| r.owner == Some(a))));
-                    json!({ "handle": p.handle(), "name": p.name, "country": p.country, "last": p.kept.first().map(|r| &r.1), "rides": p.kept.len(),
+                let card = |k: &str| {
+                    friends.people.get(k).map(|p| {
+                        // The rider behind the key: the profile, or any profile of the account.
+                        let r = riders.riders.get(k).or_else(|| friend::account_of(k).and_then(|a| riders.riders.values().find(|r| r.owner == Some(a))));
+                        json!({ "handle": p.handle(), "name": p.name, "country": p.country, "last": p.kept.first().map(|r| &r.1), "rides": p.kept.len(),
                         "weight": r.map(|r| r.weight), "ftp": r.map(|r| r.ftp), "rank": r.map(|r| r.rank(now).to_string()) })
-                });
+                    })
+                };
                 match (p, friends.people.get(pid)) {
-                    ("/friend/view", _) => friends.view(pid, &handle).map(|(k, _)| { let mut v = card(&k).unwrap(); v["rides"] = json!(Friends::rides(&app.db, &k)); v }).unwrap_or_default(),
+                    ("/friend/view", _) => friends
+                        .view(pid, &handle)
+                        .map(|(k, _)| {
+                            let mut v = card(&k).unwrap();
+                            v["rides"] = json!(Friends::rides(&app.db, &k));
+                            v
+                        })
+                        .unwrap_or_default(),
                     (_, Some(me)) => json!({ "handle": me.handle(), "friends": me.friends.iter().filter_map(|k| card(k)).collect::<Vec<_>>(),
                         "asked": me.asked.iter().filter_map(|k| card(k)).collect::<Vec<_>>(), "sent": friends.sent(pid) }),
                     _ => json!(null),
@@ -1362,7 +1658,11 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             (Some(s), Some(on)) => {
                 {
                     let mut p = app.paused.lock().unwrap_or_else(|e| e.into_inner());
-                    if on == "1" { p.insert(s) } else { p.remove(&s) };
+                    if on == "1" {
+                        p.insert(s)
+                    } else {
+                        p.remove(&s)
+                    };
                 }
                 reply(&mut sock, "204 No Content", "text/plain", b"").await
             }
@@ -1381,10 +1681,14 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let claimed = {
                 let mut owners = app.owners.lock().unwrap_or_else(|e| e.into_inner());
                 let mine = owners.get(&sid).is_none_or(|o| *o == owner);
-                if mine { owners.insert(sid, owner); }
+                if mine {
+                    owners.insert(sid, owner);
+                }
                 mine
             };
-            if !claimed { return reply(&mut sock, "403 Forbidden", "text/plain", b"not your ride").await }
+            if !claimed {
+                return reply(&mut sock, "403 Forbidden", "text/plain", b"not your ride").await;
+            }
             // Weight and FTP from the server's record of the profile, never from the query (docs/security.md).
             // A workout, alone on a flat road, races nobody: the page's mass does.
             let known = pid.filter(|_| track.is_some()).and_then(|p| app.riders.lock().unwrap_or_else(|e| e.into_inner()).riders.get(p).cloned());
@@ -1399,9 +1703,13 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let event = param(query, "event").and_then(|id| app.events.lock().unwrap_or_else(|e| e.into_inner()).get(id).cloned()).filter(|e| track.as_ref().is_some_and(|t| t.id == e.track));
             if let Some(t) = &track {
                 let mut p = presence(query, sid);
-                if let Some(n) = &me_name { // the account's name, with the club's tag the server knows
+                if let Some(n) = &me_name {
+                    // the account's name, with the club's tag the server knows
                     let tag = pid.and_then(|p| app.clubs.lock().unwrap_or_else(|e| e.into_inner()).of(p).map(|c| c.tag.clone()));
-                    p.name = match tag { Some(t) => format!("[{t}] {n}"), None => n.clone() };
+                    p.name = match tag {
+                        Some(t) => format!("[{t}] {n}"),
+                        None => n.clone(),
+                    };
                 }
                 t.riders.lock().unwrap_or_else(|e| e.into_inner()).insert(sid, Presence { event: event.as_ref().map(|e| e.id.clone()), ..p });
             }
@@ -1409,7 +1717,13 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let kind = match (&plan, &game, &event, &track) {
                 (Some(_), ..) => "workout",
                 (_, Some(_), ..) => "zombie",
-                (_, _, Some(e), _) => if e.kind == EventKind::Race { "race" } else { "group" },
+                (_, _, Some(e), _) => {
+                    if e.kind == EventKind::Race {
+                        "race"
+                    } else {
+                        "group"
+                    }
+                }
                 (.., Some(t)) if t.city.is_some() => "city",
                 (.., Some(t)) if t.relief.is_some() => "world",
                 (.., Some(t)) if t.course.looped => "loop",
@@ -1421,25 +1735,43 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let res = ride_session(&mut sock, &app, track.as_deref(), plan, game, (sid, start, event), (&mut ride, &mut check)).await;
             metrics::add("le_mollet_streams_open", &[], -1.0);
             if ride.elapsed > 0.0 {
-                let trust = match check.trust() { Trust::Demo => "demo", Trust::Flagged => "flagged", Trust::Device => "device" };
+                let trust = match check.trust() {
+                    Trust::Demo => "demo",
+                    Trust::Flagged => "flagged",
+                    Trust::Device => "device",
+                };
                 metrics::inc("le_mollet_rides_total", &[("kind", kind), ("trust", trust)]);
                 metrics::add("le_mollet_ride_seconds_total", &[("kind", kind)], ride.elapsed as f64);
                 metrics::add("le_mollet_ride_km_total", &[("kind", kind)], ride.ridden as f64 / 1000.0);
                 metrics::add("le_mollet_ride_kj_total", &[("kind", kind)], ride.energy_kj as f64);
-                if check.trust() == Trust::Flagged { for w in check.why() { metrics::inc("le_mollet_fair_flags_total", &[("why", rider::FLAGS.iter().find(|f| **f == w).copied().unwrap_or("other"))]) } }
+                if check.trust() == Trust::Flagged {
+                    for w in check.why() {
+                        metrics::inc("le_mollet_fair_flags_total", &[("why", rider::FLAGS.iter().find(|f| **f == w).copied().unwrap_or("other"))])
+                    }
+                }
             }
-            if let (Some(r), Some(t)) = (&known, &track) && ride.ridden >= 100.0 {
+            if let (Some(r), Some(t)) = (&known, &track)
+                && ride.ridden >= 100.0
+            {
                 let now = unix_now();
                 let seen = [check.seen_ftp(), check.race_ftp].into_iter().flatten().reduce(f32::max);
                 let flagged = (check.trust() == Trust::Flagged).then(|| Flagged { at: now, track: t.id.clone(), name: presence(query, sid).name, why: check.why() });
-                if let Some(f) = &flagged { eprintln!("fair play: {} flagged on {}: {}", f.name, f.track, f.why.join(", ")) }
+                if let Some(f) = &flagged {
+                    eprintln!("fair play: {} flagged on {}: {}", f.name, f.track, f.why.join(", "))
+                }
                 let mut riders = app.riders.lock().unwrap_or_else(|e| e.into_inner());
                 riders.ride_done(pid.unwrap_or(""), seen.filter(|s| *s > r.ftp_now(now)), flagged, now);
-                if let Err(e) = riders.save(&app.db, pid.unwrap_or("")) { eprintln!("riders: {e}") }
+                if let Err(e) = riders.save(&app.db, pid.unwrap_or("")) {
+                    eprintln!("riders: {e}")
+                }
             }
             if let Some(me) = track.as_ref().and_then(|t| t.riders.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid)).filter(|p| !p.pid.is_empty() && ride.ridden >= 100.0) {
                 let mut clubs = app.clubs.lock().unwrap_or_else(|e| e.into_inner());
-                if clubs.add_km(&me.pid, &me.name, ride.ridden / 1000.0, club::week(unix_now())) && let Err(e) = clubs.save(&app.db) { eprintln!("clubs: {e}") }
+                if clubs.add_km(&me.pid, &me.name, ride.ridden / 1000.0, club::week(unix_now()))
+                    && let Err(e) = clubs.save(&app.db)
+                {
+                    eprintln!("clubs: {e}")
+                }
             }
             app.sensors.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid);
             app.paused.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid);
@@ -1472,11 +1804,15 @@ fn nearest<'a>(riders: impl Iterator<Item = &'a Presence>, distance: f32, pos: O
         v.select_nth_unstable_by(max, |a, b| a.0.total_cmp(&b.0));
         v.truncate(max);
     }
-    v.into_iter().map(|(_, p)| {
-        let mut c = p.clone();
-        if c.emote_at.is_none_or(|t| t.elapsed().as_secs() >= EMOTE_SECS) { c.emote = None }
-        c
-    }).collect()
+    v.into_iter()
+        .map(|(_, p)| {
+            let mut c = p.clone();
+            if c.emote_at.is_none_or(|t| t.elapsed().as_secs() >= EMOTE_SECS) {
+                c.emote = None
+            }
+            c
+        })
+        .collect()
 }
 
 /// One SSE frame: the ride, plus the workout progress when training or the zombie game, plus the other riders.
@@ -1540,8 +1876,18 @@ struct Other<'a> {
 impl<'a> Other<'a> {
     fn new(p: &'a Presence, full: bool) -> Self {
         Self {
-            id: p.id, distance: p.distance, speed_kmh: p.speed_kmh, power: p.power, wkg: p.wkg, pos: p.pos, emote: p.emote,
-            name: full.then_some(p.name.as_str()), color: full.then_some(p.color.as_str()), frame: full.then_some(p.frame), country: p.country.as_deref().filter(|_| full), bot: full && p.bot,
+            id: p.id,
+            distance: p.distance,
+            speed_kmh: p.speed_kmh,
+            power: p.power,
+            wkg: p.wkg,
+            pos: p.pos,
+            emote: p.emote,
+            name: full.then_some(p.name.as_str()),
+            color: full.then_some(p.color.as_str()),
+            frame: full.then_some(p.frame),
+            country: p.country.as_deref().filter(|_| full),
+            bot: full && p.bot,
         }
     }
 }
@@ -1607,8 +1953,11 @@ impl Standing {
     fn new(e: &Event, riders: &HashMap<u64, Presence>) -> Self {
         let cats: HashMap<&str, char> = e.entrants.iter().map(|x| (x.pid.as_str(), x.cat)).collect();
         // The field: people, and the server's racers (not a group ride's leader).
-        let mut field: Vec<_> = riders.values().filter(|p| (!p.bot || p.pid.starts_with("bot:")) && p.event.as_deref() == Some(&e.id))
-            .map(|p| (p.sid, p.ridden, p.name.clone(), cats.get(p.pid.as_str()).copied().unwrap_or('-'))).collect();
+        let mut field: Vec<_> = riders
+            .values()
+            .filter(|p| (!p.bot || p.pid.starts_with("bot:")) && p.event.as_deref() == Some(&e.id))
+            .map(|p| (p.sid, p.ridden, p.name.clone(), cats.get(p.pid.as_str()).copied().unwrap_or('-')))
+            .collect();
         field.sort_by(|a, b| b.1.total_cmp(&a.1));
         let leader = riders.values().find(|p| p.bot && p.pid.is_empty() && p.event.as_deref() == Some(&e.id)).map(|p| p.ridden);
         Self { field, leader }
@@ -1618,7 +1967,11 @@ impl Standing {
 impl App {
     fn standing(&self, e: &Event, riders: &HashMap<u64, Presence>) -> Arc<Standing> {
         let mut all = self.standings.lock().unwrap_or_else(|x| x.into_inner());
-        if let Some((at, s)) = all.get(&e.id) && at.elapsed() < STANDINGS_TTL { return s.clone() }
+        if let Some((at, s)) = all.get(&e.id)
+            && at.elapsed() < STANDINGS_TTL
+        {
+            return s.clone();
+        }
         all.retain(|_, (at, _)| at.elapsed() < Duration::from_secs(60)); // events over
         let s = Arc::new(Standing::new(e, riders));
         all.insert(e.id.clone(), (std::time::Instant::now(), s.clone()));
@@ -1630,13 +1983,30 @@ impl App {
 fn event_live(e: &Event, st: &Standing, sid: u64, ride: &Ride, phase: Option<Phase>, finish: Option<(usize, usize, f32)>, course: &Course) -> EventLive {
     let field = &st.field;
     let rank = field.iter().position(|f| f.0 == sid).map_or(field.len() + 1, |i| i + 1);
-    let board = field.iter().enumerate().filter(|&(i, f)| i < 5 || f.0 == sid)
-        .map(|(_, f)| BoardRow { name: f.2.clone(), cat: f.3, gap: if f.0 == sid { 0.0 } else { f.1 - ride.ridden }, me: f.0 == sid }).collect();
+    let board = field
+        .iter()
+        .enumerate()
+        .filter(|&(i, f)| i < 5 || f.0 == sid)
+        .map(|(_, f)| BoardRow { name: f.2.clone(), cat: f.3, gap: if f.0 == sid { 0.0 } else { f.1 - ride.ridden }, me: f.0 == sid })
+        .collect();
     let bunch = st.leader.map_or(0, |l| field.iter().filter(|f| (-25.0..200.0).contains(&(l - f.1))).count());
     EventLive {
-        id: e.id.clone(), kind: e.kind, name: e.name.clone(), phase: phase.unwrap_or(Phase::Upcoming),
-        starts_in: (e.start as f64 - now_f()) as f32, laps: e.laps, race_m: e.distance(course.length(), course.looped), done_m: ride.ridden,
-        leader_gap: st.leader.map(|l| l - ride.ridden), bunch, rank, of: field.len(), board, finish, unranked: None, radio: None,
+        id: e.id.clone(),
+        kind: e.kind,
+        name: e.name.clone(),
+        phase: phase.unwrap_or(Phase::Upcoming),
+        starts_in: (e.start as f64 - now_f()) as f32,
+        laps: e.laps,
+        race_m: e.distance(course.length(), course.looped),
+        done_m: ride.ridden,
+        leader_gap: st.leader.map(|l| l - ride.ridden),
+        bunch,
+        rank,
+        of: field.len(),
+        board,
+        finish,
+        unranked: None,
+        radio: None,
     }
 }
 
@@ -1647,7 +2017,9 @@ async fn beacon(t: Arc<Track>, e: Event) {
     let mut ride = Ride::new(83.0);
     ride.power = e.pace * 75.0;
     // Out late (the first rider came after the start): where the leader would be by now.
-    for _ in 0..((unix_now().saturating_sub(e.start)) as f32 / DT) as usize { ride.tick(&t.course, DT) }
+    for _ in 0..((unix_now().saturating_sub(e.start)) as f32 / DT) as usize {
+        ride.tick(&t.course, DT)
+    }
     let (mut tick, mut n) = (tokio::time::interval(Duration::from_secs_f32(DT)), 0u32);
     while e.phase(unix_now()) != Phase::Over {
         tick.tick().await;
@@ -1656,8 +2028,23 @@ async fn beacon(t: Arc<Track>, e: Event) {
         if n % 3 == 0 {
             let mut riders = t.riders.lock().unwrap_or_else(|e| e.into_inner());
             let p = riders.entry(id).or_insert_with(|| Presence {
-                id, sid: id, emote: None, emote_at: None, name: format!("Meneur · {:.1} W/kg", e.pace).replace('.', ","), color: "#f2cd37".into(), frame: "road",
-                country: None, distance: 0.0, speed_kmh: 0.0, power: 0.0, wkg: e.pace, pos: None, bot: true, pid: String::new(), ridden: 0.0, event: Some(e.id.clone()),
+                id,
+                sid: id,
+                emote: None,
+                emote_at: None,
+                name: format!("Meneur · {:.1} W/kg", e.pace).replace('.', ","),
+                color: "#f2cd37".into(),
+                frame: "road",
+                country: None,
+                distance: 0.0,
+                speed_kmh: 0.0,
+                power: 0.0,
+                wkg: e.pace,
+                pos: None,
+                bot: true,
+                pid: String::new(),
+                ridden: 0.0,
+                event: Some(e.id.clone()),
             });
             (p.distance, p.speed_kmh, p.power, p.ridden) = (ride.distance, ride.speed_kmh, ride.power, ride.ridden);
         }
@@ -1680,7 +2067,9 @@ async fn peloton_task(t: Arc<Track>, e: Event, app: Arc<App>) {
     loop {
         tick.tick().await;
         let phase = e.phase(unix_now());
-        if phase == Phase::Over || (race.all_done() && n > 600) { break }
+        if phase == Phase::Over || (race.all_done() && n > 600) {
+            break;
+        }
         n += 1;
         if phase == Phase::Live {
             let t_race = (now_f() - e.start as f64) as f32;
@@ -1698,7 +2087,9 @@ async fn peloton_task(t: Arc<Track>, e: Event, app: Arc<App>) {
                     race.finish(i, t_race);
                     let mut events = app.events.lock().unwrap_or_else(|x| x.into_inner());
                     events.finish(&e.id, &race.bots[i].pid, &race.bots[i].name, t_race);
-                    if let Err(err) = events.save(&app.db) { eprintln!("events: {err}") }
+                    if let Err(err) = events.save(&app.db) {
+                        eprintln!("events: {err}")
+                    }
                 }
             }
         }
@@ -1709,17 +2100,36 @@ async fn peloton_task(t: Arc<Track>, e: Event, app: Arc<App>) {
                 let r = &mut rides[i];
                 r.draft = draft_behind(riders.values().filter(|p| p.sid != id), r.distance, None, lap);
                 let p = riders.entry(id).or_insert_with(|| Presence {
-                    id, sid: id, emote: None, emote_at: None, name: b.name.clone(), color: b.color().into(), frame: "road", country: Some(b.country.into()),
-                    distance: 0.0, speed_kmh: 0.0, power: 0.0, wkg: 0.0, pos: None, bot: true, pid: b.pid.clone(), ridden: 0.0, event: Some(e.id.clone()),
+                    id,
+                    sid: id,
+                    emote: None,
+                    emote_at: None,
+                    name: b.name.clone(),
+                    color: b.color().into(),
+                    frame: "road",
+                    country: Some(b.country.into()),
+                    distance: 0.0,
+                    speed_kmh: 0.0,
+                    power: 0.0,
+                    wkg: 0.0,
+                    pos: None,
+                    bot: true,
+                    pid: b.pid.clone(),
+                    ridden: 0.0,
+                    event: Some(e.id.clone()),
                 });
                 (p.distance, p.speed_kmh, p.power, p.wkg, p.ridden) = (r.distance, r.speed_kmh, r.power, r.power / b.mass, r.ridden);
             }
             drop(riders);
-            if let Some(line) = race.radio.drain(..).next_back() { app.radio.lock().unwrap_or_else(|x| x.into_inner()).insert(e.id.clone(), (line, unix_now())); }
+            if let Some(line) = race.radio.drain(..).next_back() {
+                app.radio.lock().unwrap_or_else(|x| x.into_inner()).insert(e.id.clone(), (line, unix_now()));
+            }
         }
     }
     let mut riders = t.riders.lock().unwrap_or_else(|x| x.into_inner());
-    for i in 0..race.bots.len() { riders.remove(&(base + i as u64)); }
+    for i in 0..race.bots.len() {
+        riders.remove(&(base + i as u64));
+    }
     app.radio.lock().unwrap_or_else(|x| x.into_inner()).remove(&e.id);
     app.pelotons.lock().unwrap_or_else(|x| x.into_inner()).remove(&e.id);
 }
@@ -1764,7 +2174,15 @@ fn draft_behind<'a>(others: impl Iterator<Item = &'a Presence>, distance: f32, p
         }
         _ => {
             let g = p.distance - distance;
-            lap.map_or(g, |l| if g > l / 2.0 { g - l } else if g < -l / 2.0 { g + l } else { g })
+            lap.map_or(g, |l| {
+                if g > l / 2.0 {
+                    g - l
+                } else if g < -l / 2.0 {
+                    g + l
+                } else {
+                    g
+                }
+            })
         }
     };
     physics::draft(others.map(gap).filter(|g| *g > 0.0).fold(f32::MAX, f32::min))
@@ -1789,7 +2207,12 @@ pub fn spawn_pacers(app: &App) {
 async fn pacer(t: Arc<Track>, id: u64, k: usize) {
     let (name, wkg, color) = PACERS[k];
     let mut rng = id.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
-    let mut rand = move || { rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17; (rng >> 11) as f32 / (1u64 << 53) as f32 };
+    let mut rand = move || {
+        rng ^= rng << 13;
+        rng ^= rng >> 7;
+        rng ^= rng << 17;
+        (rng >> 11) as f32 / (1u64 << 53) as f32
+    };
     let city = t.city.as_ref();
     let start = |c: &City| c.starts.get(k % c.starts.len().max(1)).map_or(c.start, |s| s.at);
     let mut route = city.map(|c| Route::start_at(c, start(c)));
@@ -1802,7 +2225,9 @@ async fn pacer(t: Arc<Track>, id: u64, k: usize) {
         tick.tick().await;
         n += 1;
         if let (Some(c), Some(r)) = (city, route.as_mut()) {
-            if r.next == Turn::Straight && rand() < 0.012 { r.next = if rand() < 0.5 { Turn::Left } else { Turn::Right } }
+            if r.next == Turn::Straight && rand() < 0.012 {
+                r.next = if rand() < 0.5 { Turn::Left } else { Turn::Right }
+            }
             r.extend(c, ride.distance);
             // The route only grows: start a fresh one from here every 50 km so it never weighs much.
             if ride.distance > 50_000.0 {
@@ -1815,7 +2240,9 @@ async fn pacer(t: Arc<Track>, id: u64, k: usize) {
         ride.power = wkg * 75.0 * (1.0 + 0.04 * (n as f32 * 0.04 + k as f32).sin());
         if ride.finished {
             rest += PACE_DT;
-            if rest > 20.0 { (ride, rest) = (Ride::new(83.0), 0.0) } // at the top of a climb: back down to the start
+            if rest > 20.0 {
+                (ride, rest) = (Ride::new(83.0), 0.0)
+            } // at the top of a climb: back down to the start
         }
         ride.tick(course, PACE_DT);
         {
@@ -1823,8 +2250,23 @@ async fn pacer(t: Arc<Track>, id: u64, k: usize) {
             let mut riders = t.riders.lock().unwrap_or_else(|e| e.into_inner());
             ride.draft = draft_behind(riders.values().filter(|p| p.sid != id), ride.distance, pos, t.course.looped.then(|| t.course.length()));
             let p = riders.entry(id).or_insert_with(|| Presence {
-                id, sid: id, emote: None, emote_at: None, name: format!("{name} · {wkg:.1} W/kg").replace('.', ","), color: color.into(), frame: "road", country: None,
-                distance: 0.0, speed_kmh: 0.0, power: 0.0, wkg, pos: None, bot: true, pid: String::new(), ridden: 0.0, event: None,
+                id,
+                sid: id,
+                emote: None,
+                emote_at: None,
+                name: format!("{name} · {wkg:.1} W/kg").replace('.', ","),
+                color: color.into(),
+                frame: "road",
+                country: None,
+                distance: 0.0,
+                speed_kmh: 0.0,
+                power: 0.0,
+                wkg,
+                pos: None,
+                bot: true,
+                pid: String::new(),
+                ridden: 0.0,
+                event: None,
             });
             (p.distance, p.speed_kmh, p.power, p.pos) = (ride.distance, ride.speed_kmh, ride.power, pos.map(|x| x.0));
         }
@@ -1894,24 +2336,42 @@ async fn ride_session(
         // Caught by the zombies: the ride freezes like a finish line.
         let caught = game.as_ref().is_some_and(|g| g.over);
         let paused = app.paused.lock().unwrap_or_else(|e| e.into_inner()).contains(&sid);
-        if app.powerup.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid) { ride.use_powerup() }
+        if app.powerup.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid) {
+            ride.use_powerup()
+        }
         // An event: on the start line until the gun.
         let phase = event.as_ref().map(|e| e.phase(unix_now()));
         let held = matches!(phase, Some(Phase::Upcoming | Phase::Pen));
-        if held { (ride.distance, ride.speed_kmh) = (0.0, 0.0) }
-        if let (Some(e), Some(Phase::Live)) = (&event, phase) && e.kind == EventKind::Group && !beacon_spawned && { beacon_spawned = true; app.beacons.lock().unwrap_or_else(|e| e.into_inner()).insert(e.id.clone()) }
+        if held {
+            (ride.distance, ride.speed_kmh) = (0.0, 0.0)
+        }
+        if let (Some(e), Some(Phase::Live)) = (&event, phase)
+            && e.kind == EventKind::Group
+            && !beacon_spawned
+            && {
+                beacon_spawned = true;
+                app.beacons.lock().unwrap_or_else(|e| e.into_inner()).insert(e.id.clone())
+            }
             && let Some(t) = app.track(&e.track)
         {
             tokio::spawn(beacon(t, e.clone()));
         }
         // A race: the server's riders line up in the pen with the first person who shows up.
-        if let (Some(e), Some(Phase::Pen | Phase::Live)) = (&event, phase) && e.kind == EventKind::Race && !beacon_spawned && { beacon_spawned = true; e.entrants.iter().any(|x| x.bot) && app.pelotons.lock().unwrap_or_else(|x| x.into_inner()).insert(e.id.clone()) }
+        if let (Some(e), Some(Phase::Pen | Phase::Live)) = (&event, phase)
+            && e.kind == EventKind::Race
+            && !beacon_spawned
+            && {
+                beacon_spawned = true;
+                e.entrants.iter().any(|x| x.bot) && app.pelotons.lock().unwrap_or_else(|x| x.into_inner()).insert(e.id.clone())
+            }
             && let Some(t) = app.track(&e.track)
         {
             tokio::spawn(peloton_task(t, e.clone(), app.clone()));
         }
         // Every second of power is checked, warm-up in the pen included: the slider or no profile makes a demo ride.
-        if !paused && !caught { check.tick(ride.power, ride.cadence, sensors.live || app.trainer.is_some(), DT) }
+        if !paused && !caught {
+            check.tick(ride.power, ride.cadence, sensors.live || app.trainer.is_some(), DT)
+        }
         if !paused && !caught && !held {
             ride.tick(course, DT);
             if let (Some(e), Some(Phase::Live), None, None) = (&event, phase, finish, unranked)
@@ -1934,7 +2394,9 @@ async fn ride_session(
                 if unranked.is_none() {
                     let mut events = app.events.lock().unwrap_or_else(|e| e.into_inner());
                     finish = events.finish(&e.id, &me.pid, &me.name, time).map(|(o, c)| (o, c, time));
-                    if let Err(err) = events.save(&app.db) { eprintln!("events: {err}") }
+                    if let Err(err) = events.save(&app.db) {
+                        eprintln!("events: {err}")
+                    }
                 }
             }
             // The horde waits for the first pedal stroke, like the ride clock.
@@ -1957,10 +2419,16 @@ async fn ride_session(
         {
             let w = &windows[i];
             // A hash of the profile id: enough to keep one line per rider, and not the id itself (docs/security.md).
-            let who = { let mut h = Fnv::default(); h.add(if me.pid.is_empty() { sid.to_string() } else { me.pid }.as_bytes()); h.hex() };
+            let who = {
+                let mut h = Fnv::default();
+                h.add(if me.pid.is_empty() { sid.to_string() } else { me.pid }.as_bytes());
+                h.hex()
+            };
             let mut boards = app.boards.lock().unwrap_or_else(|e| e.into_inner());
             let rank = boards.record(&key(w), Entry { who, name: me.name, color: me.color, time, date: unix_now() });
-            if let Err(e) = boards.save(&app.db, &key(w)) { eprintln!("leaderboards: {e}") }
+            if let Err(e) = boards.save(&app.db, &key(w)) {
+                eprintln!("leaderboards: {e}")
+            }
             metrics::inc("le_mollet_segment_efforts_total", &[("kind", if w.kind == Kind::Kom { "kom" } else { "sprint" })]);
             result = Some(SegResult { name: w.name.clone(), kind: w.kind, time, rank });
         }
@@ -1980,10 +2448,18 @@ async fn ride_session(
                 let lap = t.course.looped.then(|| t.course.length());
                 // Drafting: the rider just ahead cuts the wind for the next ticks.
                 ride.draft = draft_behind(riders.values().filter(|p| p.sid != sid), ride.distance, me.map(|a| (a, course.latlon_at(ride.distance + 5.0))), lap);
-                live = event.as_ref().map(|e| EventLive { unranked, radio: app.radio.lock().unwrap_or_else(|x| x.into_inner()).get(&e.id).filter(|r| unix_now() < r.1 + 25).map(|r| r.0.clone()), ..event_live(e, &app.standing(e, &riders), sid, ride, phase, finish, base) });
+                live = event.as_ref().map(|e| EventLive {
+                    unranked,
+                    radio: app.radio.lock().unwrap_or_else(|x| x.into_inner()).get(&e.id).filter(|r| unix_now() < r.1 + 25).map(|r| r.0.clone()),
+                    ..event_live(e, &app.standing(e, &riders), sid, ride, phase, finish, base)
+                });
                 // Group ride: anyone up to 200 m behind the leader rides on the bunch's wheel; ahead of it, alone.
                 if let Some(gap) = live.as_ref().and_then(|l| l.leader_gap) {
-                    if gap > 0.0 && gap < 200.0 { ride.draft = ride.draft.max(0.3) } else if gap < -25.0 { ride.draft = 0.0 }
+                    if gap > 0.0 && gap < 200.0 {
+                        ride.draft = ride.draft.max(0.3)
+                    } else if gap < -25.0 {
+                        ride.draft = 0.0
+                    }
                 }
                 nearest(riders.values().filter(|p| p.sid != sid), ride.distance, me, lap, OTHERS_MAX)
             });
@@ -2001,7 +2477,20 @@ async fn ride_session(
             let new_windows = windows[sent_windows..].to_vec();
             sent_windows = windows.len();
             let others: Vec<Other> = near.iter().map(|p| Other::new(p, seen.insert(p.id))).collect();
-            let frame = Frame { fair: Fair { trust: check.trust(), why: check.why() }, event: live, ride, workout: progress, zombie: game.as_ref(), others, route: fresh, junction, windows: new_windows, segment, result: result.take(), inbox: app.inbox.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid).unwrap_or_default() };
+            let frame = Frame {
+                fair: Fair { trust: check.trust(), why: check.why() },
+                event: live,
+                ride,
+                workout: progress,
+                zombie: game.as_ref(),
+                others,
+                route: fresh,
+                junction,
+                windows: new_windows,
+                segment,
+                result: result.take(),
+                inbox: app.inbox.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid).unwrap_or_default(),
+            };
             let mut json = serde_json::to_vec(&frame).expect("frame serializes");
             json.splice(0..0, *b"data: ");
             json.extend_from_slice(b"\n\n");
@@ -2013,7 +2502,10 @@ async fn ride_session(
             }
         }
         tick_work += t0.elapsed().as_secs_f64();
-        if n.is_multiple_of(10) { metrics::observe("le_mollet_ride_tick_seconds", &[], tick_work / 10.0); tick_work = 0.0 }
+        if n.is_multiple_of(10) {
+            metrics::observe("le_mollet_ride_tick_seconds", &[], tick_work / 10.0);
+            tick_work = 0.0
+        }
         // Workout: ERG holds the target watts. Course: grade scaled by difficulty.
         // ponytail: 1 W / 0.2 % deadbands at 1 Hz keep BLE writes low, tune if it feels steppy
         if let Some(t) = &app.trainer
@@ -2063,28 +2555,38 @@ fn header<'a>(req: &'a str, name: &str) -> Option<&'a str> {
 
 /// The browser says this request comes from another site's page: `Sec-Fetch-Site`, or an `Origin` that is not us.
 fn cross_site(req: &str) -> bool {
-    header(req, "sec-fetch-site").is_some_and(|s| s == "cross-site" || s == "same-site")
-        || header(req, "origin").is_some_and(|o| o.split_once("://").map(|x| x.1) != header(req, "host"))
+    header(req, "sec-fetch-site").is_some_and(|s| s == "cross-site" || s == "same-site") || header(req, "origin").is_some_and(|o| o.split_once("://").map(|x| x.1) != header(req, "host"))
 }
 
 /// Events as one profile sees them: no profile ids (they are the only key to a profile at home), `me` instead.
 fn events_for(list: &[Event], pid: Option<&str>) -> serde_json::Value {
-    json!(list.iter().map(|e| {
-        let mut v = json!(e);
-        v["by"] = json!(if e.by == "auto" { "auto" } else if Some(e.by.as_str()) == pid { "me" } else { "" });
-        for k in ["entrants", "results"] {
-            for x in v[k].as_array_mut().into_iter().flatten() {
-                x["me"] = json!(pid.is_some() && x["pid"].as_str() == pid);
-                x.as_object_mut().map(|o| o.remove("pid"));
-            }
-        }
-        v
-    }).collect::<Vec<_>>())
+    json!(
+        list.iter()
+            .map(|e| {
+                let mut v = json!(e);
+                v["by"] = json!(if e.by == "auto" {
+                    "auto"
+                } else if Some(e.by.as_str()) == pid {
+                    "me"
+                } else {
+                    ""
+                });
+                for k in ["entrants", "results"] {
+                    for x in v[k].as_array_mut().into_iter().flatten() {
+                        x["me"] = json!(pid.is_some() && x["pid"].as_str() == pid);
+                        x.as_object_mut().map(|o| o.remove("pid"));
+                    }
+                }
+                v
+            })
+            .collect::<Vec<_>>()
+    )
 }
 
 /// A cookie's value from the request head.
 fn cookie<'a>(req: &'a str, name: &str) -> Option<&'a str> {
-    req.lines().take_while(|l| !l.is_empty())
+    req.lines()
+        .take_while(|l| !l.is_empty())
         .filter_map(|l| l.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case("cookie")).map(|(_, v)| v))
         .flat_map(|v| v.split(';'))
         .find_map(|kv| kv.trim().split_once('=').filter(|(k, _)| *k == name).map(|(_, v)| v))
@@ -2104,10 +2606,57 @@ fn is_asset(path: &str) -> bool {
 }
 
 fn route_label(path: &str) -> &'static str {
-    const ROUTES: [&str; 38] = ["/friend", "/friend/ask", "/friend/accept", "/friend/remove", "/friend/view", "/friend/ride", "/friend/unride", "/", "/courses", "/worlds", "/worlds/new", "/course", "/terrain", "/buildings", "/district", "/ortho", "/workouts", "/turn", "/events",
-        "/power", "/segments", "/whoami", "/emote", "/seek", "/pause", "/powerup", "/rider", "/metrics", "/club", "/club/create", "/club/join", "/club/leave",
-        "/event/list", "/event/create", "/event/join", "/event/leave", "/event/delete", "/admin/flags"];
-    ROUTES.iter().find(|r| **r == path).copied().unwrap_or(if path.starts_with("/audio/") { "/audio" } else if path.starts_with("/vendor/") || path.starts_with("/fonts/") { "/vendor" } else if path.starts_with("/auth/") { "/auth" } else if path.starts_with("/admin/") { "/admin" } else { "other" })
+    const ROUTES: [&str; 38] = [
+        "/friend",
+        "/friend/ask",
+        "/friend/accept",
+        "/friend/remove",
+        "/friend/view",
+        "/friend/ride",
+        "/friend/unride",
+        "/",
+        "/courses",
+        "/worlds",
+        "/worlds/new",
+        "/course",
+        "/terrain",
+        "/buildings",
+        "/district",
+        "/ortho",
+        "/workouts",
+        "/turn",
+        "/events",
+        "/power",
+        "/segments",
+        "/whoami",
+        "/emote",
+        "/seek",
+        "/pause",
+        "/powerup",
+        "/rider",
+        "/metrics",
+        "/club",
+        "/club/create",
+        "/club/join",
+        "/club/leave",
+        "/event/list",
+        "/event/create",
+        "/event/join",
+        "/event/leave",
+        "/event/delete",
+        "/admin/flags",
+    ];
+    ROUTES.iter().find(|r| **r == path).copied().unwrap_or(if path.starts_with("/audio/") {
+        "/audio"
+    } else if path.starts_with("/vendor/") || path.starts_with("/fonts/") {
+        "/vendor"
+    } else if path.starts_with("/auth/") {
+        "/auth"
+    } else if path.starts_with("/admin/") {
+        "/admin"
+    } else {
+        "other"
+    })
 }
 
 /// Times a request into the metrics when it is answered (dropped).
@@ -2132,7 +2681,10 @@ async fn reply_static(sock: &mut TcpStream, req: &str, query: &str, ctype: &str,
         (None, false) => ("200 OK", raw, ""),
     };
     metrics::inc("le_mollet_http_responses_total", &[("code", &status[..3])]);
-    let head = format!("HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\n{enc}Content-Length: {}\r\nCache-Control: {cache}\r\nETag: {etag}\r\nVary: Accept-Encoding\r\n{SAFE_HEADERS}Connection: close\r\n\r\n", body.len());
+    let head = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\n{enc}Content-Length: {}\r\nCache-Control: {cache}\r\nETag: {etag}\r\nVary: Accept-Encoding\r\n{SAFE_HEADERS}Connection: close\r\n\r\n",
+        body.len()
+    );
     sock.write_all(head.as_bytes()).await?;
     sock.write_all(body).await
 }
@@ -2160,6 +2712,112 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_client_address_is_the_proxys_last_hop() {
+        let lo: std::net::IpAddr = "127.0.0.1".parse().unwrap();
+        let far: std::net::IpAddr = "10.0.0.9".parse().unwrap();
+        let req = "GET / HTTP/1.1\r\nHost: x\r\nX-Forwarded-For: 1.2.3.4, 5.6.7.8\r\n\r\n";
+        assert_eq!(client_ip(req, Some(lo), Mode::Cloud), "5.6.7.8"); // the hop the proxy appended
+        assert_eq!(client_ip(req, Some(far), Mode::Cloud), "10.0.0.9"); // not from our proxy: the peer
+        assert_eq!(client_ip(req, Some(lo), Mode::Local), "127.0.0.1"); // no proxy at home
+        assert_eq!(client_ip("GET / HTTP/1.1\r\nX-Forwarded-For: 1.2.3.4, nonsense\r\n\r\n", Some(lo), Mode::Cloud), "127.0.0.1"); // a made-up hop: the peer
+        assert_eq!(client_ip("GET / HTTP/1.1\r\nX-Forwarded-For: 2001:db8::1\r\n\r\n", Some(lo), Mode::Cloud), "2001:db8::1");
+        assert_eq!(client_ip(req, None, Mode::Local), "?");
+    }
+
+    #[test]
+    fn hosts_of_our_own_only() {
+        let with = |h: &str| host_ok(&format!("GET / HTTP/1.1\r\nHost: {h}\r\n\r\n"));
+        assert!(with("localhost") && with("LOCALHOST:8080") && with("127.0.0.1:8080") && with("[::1]:8080") && with("pc.local") && with("le-mollet.localhost"));
+        assert!(!with("evil.example.com") && !with("le-mollet.fr.evil.com"));
+        assert!(host_ok("GET / HTTP/1.0\r\n\r\n")); // no Host at all: an old tool, not an attack
+    }
+
+    #[test]
+    fn query_parameters_and_request_headers() {
+        assert_eq!(param("pid=1&id=2&idx=3", "id"), Some("2")); // the key, not a prefix of one
+        assert_eq!(param("a=1&b=&a=2", "b"), Some(""));
+        assert_eq!(param("a=1", "c"), None);
+        let req = "GET /x HTTP/1.1\r\nHost: ride.le-mollet.fr\r\nSec-Fetch-Site: same-origin\r\nX-Thing:  spaced \r\n\r\nHost: body.example";
+        assert_eq!(header(req, "HOST"), Some("ride.le-mollet.fr"));
+        assert_eq!(header(req, "x-thing"), Some("spaced"));
+        assert_eq!(header(req, "missing"), None);
+        assert!(valid_pid("a1111111-1111-4111-8111-111111111111") && !valid_pid("") && !valid_pid("acct:12") && !valid_pid(&"f".repeat(41)));
+        assert_eq!(presence("pid=not%20hex", 1).pid, "");
+    }
+
+    #[test]
+    fn requests_from_other_sites_are_told_apart() {
+        let req = |extra: &str| format!("POST /club/leave HTTP/1.1\r\nHost: ride.le-mollet.fr\r\n{extra}\r\n");
+        assert!(!cross_site(&req("Sec-Fetch-Site: same-origin\r\n")));
+        assert!(cross_site(&req("Sec-Fetch-Site: cross-site\r\n")) && cross_site(&req("Sec-Fetch-Site: same-site\r\n")));
+        assert!(!cross_site(&req("Origin: https://ride.le-mollet.fr\r\n")));
+        assert!(cross_site(&req("Origin: https://evil.example\r\n")));
+        assert!(!cross_site(&req(""))); // an old browser, a curl: nothing to say
+    }
+
+    #[test]
+    fn every_changing_call_has_a_route_label() {
+        for p in POST_ONLY {
+            assert_ne!(route_label(p), "other", "{p} is unlabelled")
+        }
+        assert_eq!((route_label("/audio/wind.mp3"), route_label("/fonts/x.woff2"), route_label("/auth/link/use"), route_label("/nope")), ("/audio", "/vendor", "/auth", "other"));
+        assert!(is_asset("/vendor/three.module.js") && is_asset("/audio/a.mp3") && !is_asset("/auth/link") && !is_asset("/"));
+    }
+
+    #[test]
+    fn secrets_compare_whole() {
+        assert!(same_secret("abc", "abc") && !same_secret("abc", "abd") && !same_secret("abc", "ab") && same_secret("", ""));
+    }
+
+    #[test]
+    fn events_show_me_and_never_a_profile_id() {
+        use le_mollet::event::{Entrant, Finish, Kind};
+        let e = Event {
+            id: "e".into(),
+            kind: Kind::Race,
+            name: "R".into(),
+            track: "t".into(),
+            start: 0,
+            laps: 1,
+            pace: 0.0,
+            cats: String::new(),
+            keep: 0,
+            club: None,
+            by: "p1".into(),
+            by_name: "Ana".into(),
+            entrants: vec![Entrant { pid: "p1".into(), name: "Ana".into(), wkg: 3.0, cat: 'P', bot: false }, Entrant { pid: "p2".into(), name: "Bob".into(), wkg: 2.0, cat: 'A', bot: false }],
+            results: vec![Finish { pid: "p2".into(), name: "Bob".into(), cat: 'A', time: 100.0 }],
+        };
+        let v = events_for(&[e.clone()], Some("p1"));
+        assert_eq!(
+            (v[0]["by"].as_str(), v[0]["entrants"][0]["me"].as_bool(), v[0]["entrants"][1]["me"].as_bool(), v[0]["results"][0]["me"].as_bool()),
+            (Some("me"), Some(true), Some(false), Some(false))
+        );
+        assert!(!v.to_string().contains("p1") && !v.to_string().contains("p2"));
+        let v = events_for(&[e], None);
+        assert_eq!((v[0]["by"].as_str(), v[0]["entrants"][0]["me"].as_bool()), (Some(""), Some(false)));
+    }
+
+    #[test]
+    fn gzip_round_trips_and_tags_are_stable() {
+        use std::io::Read;
+        let raw = b"le mollet ".repeat(1000);
+        let z = gzip(&raw);
+        assert!(z.len() < raw.len() / 10);
+        let mut back = Vec::new();
+        flate2::read::GzDecoder::new(&z[..]).read_to_end(&mut back).unwrap();
+        assert_eq!(back, raw);
+        let tag = |s: &[u8]| {
+            let mut h = Fnv::default();
+            h.add(s);
+            h.hex()
+        };
+        assert_eq!(tag(b"abc"), tag(b"abc"));
+        assert_ne!(tag(b"abc"), tag(b"abd"));
+        assert_eq!(tag(b"abc").len(), 16);
+    }
+
+    #[test]
     fn query_values_are_decoded_and_sanitized() {
         assert_eq!(decode("Ren%C3%A9+Vi%25"), "René Vi%");
         assert_eq!(decode("bad%zz%4"), "bad%zz%4");
@@ -2170,7 +2828,25 @@ mod tests {
     }
 
     fn rider(id: u64, distance: f32) -> Presence {
-        Presence { id, sid: id, emote: None, emote_at: None, name: String::new(), color: String::new(), frame: "road", country: None, distance, speed_kmh: 0.0, power: 0.0, wkg: 0.0, pos: None, bot: false, pid: String::new(), ridden: 0.0, event: None }
+        Presence {
+            id,
+            sid: id,
+            emote: None,
+            emote_at: None,
+            name: String::new(),
+            color: String::new(),
+            frame: "road",
+            country: None,
+            distance,
+            speed_kmh: 0.0,
+            power: 0.0,
+            wkg: 0.0,
+            pos: None,
+            bot: false,
+            pid: String::new(),
+            ridden: 0.0,
+            event: None,
+        }
     }
 
     #[test]

@@ -73,7 +73,9 @@ impl Ride {
 
     /// Use the held bonus, if any and none is running.
     pub fn use_powerup(&mut self) {
-        if self.active.is_none() && let Some(p) = self.held.take() {
+        if self.active.is_none()
+            && let Some(p) = self.held.take()
+        {
             self.active = Some((p, p.secs()));
         }
     }
@@ -165,21 +167,29 @@ mod tests {
         let points = (0..=500).map(|i| Point { d: i as f32 * 10.0, lat: 0.0, lon: 0.0, ele: 0.0 }).collect();
         let c = Course { name: "flat".into(), attribution: String::new(), waypoints: vec![], roads: vec![], looped: false, points, ..Default::default() };
         let mut r = Ride { powerups: true, power: 250.0, ..Ride::new(78.0) };
-        while r.distance < 1100.0 { r.tick(&c, 0.1) }
+        while r.distance < 1100.0 {
+            r.tick(&c, 0.1)
+        }
         assert_eq!((r.held, r.active), (Some(PowerUp::Aero), None)); // arch 1
         let v = r.speed_kmh;
         r.use_powerup();
         assert_eq!(r.held, None);
-        for _ in 0..100 { r.tick(&c, 0.1) }
+        for _ in 0..100 {
+            r.tick(&c, 0.1)
+        }
         assert!(r.speed_kmh > v + 1.0, "aero {v} -> {}", r.speed_kmh);
-        for _ in 0..60 { r.tick(&c, 0.1) }
+        for _ in 0..60 {
+            r.tick(&c, 0.1)
+        }
         assert_eq!(r.active, None); // 15 s gone
         // A teleport over several arches gives nothing; no bonuses at all when the ride has none.
         r.distance = 4500.0;
         r.tick(&c, 0.1);
         assert_eq!(r.held, None);
         let mut w = Ride { power: 250.0, ..Ride::new(78.0) };
-        while w.distance < 1100.0 { w.tick(&c, 0.1) }
+        while w.distance < 1100.0 {
+            w.tick(&c, 0.1)
+        }
         assert_eq!(w.held, None);
     }
 }

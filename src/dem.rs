@@ -34,7 +34,9 @@ impl Tiles {
         let n = (PX as i64) << ZOOM;
         let (x, y) = (x.rem_euclid(n) as u64, y.clamp(0, n - 1) as u64);
         let key = ((x / PX as u64) as u32, (y / PX as u64) as u32);
-        if let std::collections::hash_map::Entry::Vacant(e) = self.0.entry(key) { e.insert(fetch(key.0, key.1)?); }
+        if let std::collections::hash_map::Entry::Vacant(e) = self.0.entry(key) {
+            e.insert(fetch(key.0, key.1)?);
+        }
         Ok(self.0[&key][(y as usize % PX) * PX + x as usize % PX])
     }
 }
@@ -58,8 +60,14 @@ fn decode(png_bytes: &[u8]) -> Result<Vec<f32>> {
     let mut reader = png::Decoder::new(png_bytes).read_info().context("elevation tile: not a PNG")?;
     let mut buf = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf)?;
-    let ch = match info.color_type { png::ColorType::Rgb => 3, png::ColorType::Rgba => 4, c => bail!("elevation tile: color type {c:?}") };
-    if (info.width as usize, info.height as usize) != (PX, PX) || info.bit_depth != png::BitDepth::Eight { bail!("elevation tile: unexpected format") }
+    let ch = match info.color_type {
+        png::ColorType::Rgb => 3,
+        png::ColorType::Rgba => 4,
+        c => bail!("elevation tile: color type {c:?}"),
+    };
+    if (info.width as usize, info.height as usize) != (PX, PX) || info.bit_depth != png::BitDepth::Eight {
+        bail!("elevation tile: unexpected format")
+    }
     Ok(buf.chunks_exact(ch).take(PX * PX).map(|p| p[0] as f32 * 256.0 + p[1] as f32 + p[2] as f32 / 256.0 - 32768.0).collect())
 }
 
