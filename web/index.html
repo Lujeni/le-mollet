@@ -37,7 +37,7 @@ header { padding:18px 22px; display:flex; align-items:center; justify-content:sp
 .logo b { color:var(--accent) }
 .logo i { width:30px; height:22px; border-radius:5px; background:var(--accent); position:relative; box-shadow:inset 0 -4px 0 rgba(0,0,0,.22) } /* a 2x1 brick */
 .logo i::before { content:''; position:absolute; top:-5px; left:4px; width:22px; height:6px; background:radial-gradient(circle at 4px 3px, #f7dc6a 3.5px, transparent 4px) 0 0 / 11px 6px repeat-x }
-#theme { pointer-events:auto; font-size:13px; padding:7px 12px }
+.top-actions { display:flex; gap:8px } #theme, #topSignOut { pointer-events:auto; font-size:13px; padding:7px 12px }
 .block { background:var(--glass); backdrop-filter:blur(16px) saturate(1.35); -webkit-backdrop-filter:blur(16px) saturate(1.35); border:1px solid var(--edge); border-radius:var(--r); box-shadow:var(--shadow) }
 .panel { padding:24px; pointer-events:auto }
 h1, h2, legend { font-family:var(--font); font-weight:700; margin:0 0 12px; letter-spacing:.2px }
@@ -344,7 +344,7 @@ button.friend-row { cursor:pointer } button.friend-row:hover { background:var(--
 @media (prefers-reduced-motion:reduce) { .zones.hot .watts::before, .zones.inferno, .zones .wow, .zones .gear.shifted b, .dev.just, .dev-cheer:not(:empty) { animation:none } .brick-burst { display:none } }
 #devGo { padding:14px; font-size:17px }
 .dev-status { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:-8px 0 20px; padding:8px 8px 8px 14px; border-radius:14px; background:var(--glass-hi); font-size:13px }
-.dev-status > span { display:flex; flex-wrap:wrap; gap:4px 14px; margin-right:auto }
+.dev-status > span { display:flex; flex-wrap:wrap; gap:4px 14px }
 .dev-state { font-size:12.5px; color:var(--muted) } .dev-state::before { content:''; display:inline-block; width:8px; height:8px; border-radius:50%; background:#8a93a0; margin-right:6px }
 .dev-state.on { color:var(--ink) } .dev-state.on::before { background:#4bd06a; box-shadow:0 0 6px #4bd06a }
 .dev-diff { flex-direction:row; align-items:center; justify-content:space-between; gap:12px; font-size:13px }
@@ -620,7 +620,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
 <body>
 <canvas id="scene"></canvas>
 <div class="ui">
-  <header><span class="logo"><i></i>LE <b>MOLLET</b></span><button class="btn" id="theme" aria-label="Basculer thème clair ou sombre"></button></header>
+  <header><span class="logo"><i></i>LE <b>MOLLET</b></span><span class="top-actions"><button class="btn" id="topSignOut" type="button" hidden></button><button class="btn" id="theme" aria-label="Basculer thème clair ou sombre"></button></span></header>
 
   <main id="signinGate" hidden>
     <div class="gate block panel">
@@ -699,7 +699,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   <main id="home" hidden>
     <div class="block panel">
       <div class="hello"><span class="avatar" id="homeAvatar"></span><div><p class="kicker">Prêt à rouler ?</p><h1><span id="homeHello"></span><span id="homeRole"></span></h1><div class="chips" id="homeStats"></div><div id="homeLevel"></div></div></div>
-      <div class="dev-status"><span id="homeDevices"></span><button class="btn" id="goDevices">Équipements</button><button class="btn" id="homeSignOut" type="button" hidden>Se déconnecter</button></div>
+      <div class="dev-status"><span id="homeDevices"></span><button class="btn" id="goDevices">Équipements</button></div>
       <button class="home-event" id="homeEvent" hidden></button>
       <div class="tiles">
         <button class="tile ride" id="goRide">
@@ -6388,8 +6388,10 @@ async function whoami() {
   $('#signOut').hidden = !signed;
   $('#accountSettings').hidden = !signed;
   if (signed) $('#accountDevices').textContent = me.devices === 1 ? 'Connecté sur cet appareil seulement.' : `Connecté sur ${me.devices} appareils.`;
-  $('#homeSignOut').hidden = !signed;
-  $('#signOut').onclick = $('#homeSignOut').onclick = async () => { await authed('/auth/logout', { method:'POST' }).catch(() => {}); location.reload() };
+  // In the header, on every screen: who is signed in, and the way out.
+  $('#topSignOut').hidden = !signed;
+  $('#topSignOut').textContent = signed ? `${me.name} · Se déconnecter` : '';
+  $('#signOut').onclick = $('#topSignOut').onclick = async () => { await authed('/auth/logout', { method:'POST' }).catch(() => {}); location.reload() };
   $('#homeRole').replaceChildren(...(me.role !== 'rider' ? [h('span', { class:'role-chip' }, ROLE_NAMES[me.role])] : []));
 }
 whoami();
