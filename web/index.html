@@ -161,7 +161,16 @@ input:focus, select:focus { outline:3px solid var(--accent); outline-offset:0 }
 .tiles { display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:22px 16px }
 .tiles .tile.me, .tiles .hist-tile { min-height:118px }
 .tile.hist-tile { --c:#e9781a }
-.tile.club-tile { --c:#0b7a75 } .tiles .tile.zombie { grid-column:2 / -1 }
+.tile.club-tile { --c:#0b7a75 } .tile.friends-tile { --c:#c2185b } .tiles .tile.friends-tile { grid-column:2 / -1 } .tiles .tile.zombie { grid-column:1 / -1 }
+.friend-me { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 16px; border-radius:14px; background:var(--glass-hi2) }
+.friend-me small { color:var(--muted) }
+.friend-add { display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin:14px 0 4px } .friend-add label { flex:1; min-width:200px }
+.friend-rows { display:grid; gap:8px; margin-bottom:16px }
+.friend-row { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:14px; background:var(--glass-hi); border:1px solid var(--edge); color:var(--ink); font:inherit; text-align:left }
+button.friend-row { cursor:pointer } button.friend-row:hover { background:var(--glass-hi2) }
+.friend-row .avatar { flex:none; width:36px; height:36px; border-radius:10px; display:grid; place-items:center; background:#c2185b; color:#fff; font:700 17px var(--font) }
+.friend-row .who { flex:1; min-width:0; display:flex; flex-direction:column } .friend-row .who small { color:var(--muted) }
+.friend-row .acts { display:flex; gap:6px }
 .tiles .tile.ride { grid-row:span 2; justify-content:flex-end; min-height:230px; background:linear-gradient(160deg, #ff5a3c, #d0230f 50%, #8f1406) }
 .tiles .tile.ride b { font-size:38px }
 .tiles .tile.ride svg { width:72px; height:72px; position:absolute; top:22px; right:22px; opacity:.9 }
@@ -574,7 +583,7 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
   .pick-body { grid-template-columns:1fr } #pickMap { height:38vh } .pick { padding:20px }
   .tiles { grid-template-columns:1fr }
   .devices { grid-template-columns:1fr } .seg-banner { top:150px; min-width:0 }
-  .tiles .tile.me, .tiles .tile.zombie { grid-column:auto }
+  .tiles .tile.me, .tiles .tile.zombie, .tiles .tile.friends-tile { grid-column:auto }
   .lobby-clock b { font-size:48px } .club-forms, .plan-cards { grid-template-columns:1fr } .event-card { grid-template-columns:auto 1fr } .event-card .acts { grid-column:1 / -1; justify-content:flex-start } .event-box { top:auto; bottom:120px; width:auto; right:16px } .plan-cal { font-size:10px } .plan-cal .day { padding:3px }
   .kpis { grid-template-columns:repeat(3, 1fr) } .hist-top, .hist-body { grid-template-columns:1fr } .hist { padding:20px } .hist-list { max-height:none }
   .tiles .tile.ride { grid-row:auto; min-height:150px }
@@ -714,6 +723,10 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
         <button class="tile club-tile" id="goClub">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M1 1h10v5h-1v2H9v1H8v1H7v1H5v-1H4V9H3V8H2V6H1zM4 3v1h4V3zM5 5v1h2V5z"/></svg>
           <b>Club</b><small id="goClubSub">Crée ou rejoins ta bande</small>
+        </button>
+        <button class="tile friends-tile" id="goFriends">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#fff" d="M2 1h3v1h1v2H5v1H2V4H1V2h1zM7 2h3v1h1v2h-1v1H7V5H6V3h1zM0 7h6v1h1v3H0V8h0zM7 8h4v1h1v2H8V9H7z"/></svg>
+          <b>Amis</b><small id="goFriendsSub">Ajoute un ami ou ton coach avec son pseudo#1234</small>
         </button>
         <button class="tile zombie" id="goZombie">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#bbe90b" d="M3 1h6v1h1v4H9v1H3V6H2V2h1zM4 3v2h1V3zM7 3v2h1V3zM4 8h4v1h4v1H8v2H7v-2H5v2H4v-2H0V9h4z"/></svg>
@@ -948,6 +961,16 @@ input[type=range] { flex:1; accent-color:var(--accent); padding:0; border:0; bac
     </div>
   </main>
 
+  <main id="friendsScreen" hidden>
+    <div class="block panel">
+      <div class="ride-head">
+        <h1>Amis</h1>
+        <button class="btn" id="friendsBack">‹ Accueil</button>
+      </div>
+      <div id="friendsBody"></div>
+    </div>
+  </main>
+
   <main id="ride" hidden>
     <!-- Video mode: a YouTube video fills the screen instead of the 3D, the HUD floats over it -->
     <div class="video" id="video" hidden><iframe id="videoFrame" title="Vidéo" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
@@ -1060,6 +1083,7 @@ const OPTIONS = [
 
 // ponytail: profiles live in this browser only, move to the Rust backend when login lands
 const KEY = 'lemollet.profiles.v1';
+let current = null; // the profile riding; before persist(), which a profile migration may call at load
 let profiles = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || [] } catch { return [] } })();
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(profiles)) } catch {} syncRider() };
 // Fair play (docs/security.md): the server keeps each profile's weight and rank, races and leaderboards go by
@@ -1107,7 +1131,6 @@ function newId() {
   }
   if (changed) persist();
 }
-let current = null;
 
 // Bike part colors; bike and rider share one side-view space (x forward, y up, z across, 1 unit ≈ 37 mm).
 const TIRE = '#1b2a34', METAL = '#a0a5a9', CHAIN = '#6c6e68';
@@ -1617,7 +1640,7 @@ function h(tag, props = {}, ...kids) {
 }
 
 // One screen at a time. Leaving the ride stops its stream, sound and 3D world.
-const SCREENS = ['#profileNew', '#cinema', '#lobby', '#eventsScreen', '#clubScreen', '#devicesScreen', '#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
+const SCREENS = ['#profileNew', '#cinema', '#lobby', '#eventsScreen', '#clubScreen', '#friendsScreen', '#devicesScreen', '#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
 function show(id) {
   if (id !== '#ride') {
     $('#ride').classList.remove('editing', 'bare');
@@ -1745,7 +1768,7 @@ function renderList() {
         onmouseenter: () => draw(p), onfocus: () => draw(p),
       },
       h('span', { class:'avatar' }, p.name[0].toUpperCase()),
-      h('strong', {}, `${p.club ? `[${p.club.tag}] ` : ''}${p.name}${p.country ? ` ${flag(p.country)}` : ''}`),
+      h('strong', {}, `${p.club?.tag ? `[${p.club.tag}] ` : ''}${p.name}${p.country ? ` ${flag(p.country)}` : ''}`),
       h('span', { class:'who-stats' }, h('span', { class:'chip' }, h('b', {}, `Niv. ${levelOf(p.xp ?? 0).level}`)), h('span', { class:'chip' }, `${(Math.floor(wkg * 10) / 10).toFixed(1)} W/kg`), catChip(CAT_OF(wkg))),
       h('small', {}, last ? `${Math.round(km)} km · dernière sortie ${ago(last.date)}` : 'Pas encore roulé'),
       h('button', {
@@ -4915,6 +4938,7 @@ function renderDetail(r) {
       h('button', { class:'btn danger', onclick: () => {
         if (!confirm(`Supprimer la sortie « ${r.name} » ?`)) return;
         current.history = current.history.filter(o => o !== r);
+        if (current.friendsShared) friendApi('/unride', { id:r.id }).catch(() => {});
         persist();
         renderHistoryPage();
       } }, 'Supprimer')));
@@ -6123,6 +6147,7 @@ const clubName = () => current.club?.tag ? `[${current.club.tag}] ${current.name
 const clubApi = (path, args = {}) => fetch(`/club${path}?${new URLSearchParams({ pid:current.id, me:current.name, ...args })}`)
   .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.json() });
 function keepClub(c) {
+  if (!c?.tag) c = null; // older servers answered {"members":null} for no club
   const was = JSON.stringify(current.club ?? null);
   current.club = c && { tag:c.tag, color:c.color, name:c.name, code:c.code };
   if (JSON.stringify(current.club ?? null) !== was) persist();
@@ -6166,6 +6191,96 @@ async function showClub() {
     h('button', { class:'btn danger', onclick: async () => { if (confirm(`Quitter ${c.name} ?`)) { await clubApi('/leave').catch(() => {}); keepClub(null); showClub() } } }, 'Quitter le club'));
 }
 $('#goClub').addEventListener('click', showClub);
+
+// ---------- friends: a handle (Name#1234), requests, and a friend's profile and rides (src/friend.rs) ----------
+// Friends see each other's profile and rides: a coach follows their riders. Sharing starts the first time the
+// screen opens: the page sends the history (its last 100 rides) once, then each ride it keeps.
+const friendApi = (path, args = {}) => fetch(`/friend${path}?${new URLSearchParams({ pid:current.id, me:current.name, country:current.country ?? '', ...args })}`)
+  .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.json() });
+// One ride a request (the server reads 16 KB at most): a long trace is thinned to fit.
+function shareRide(r, p = current) {
+  let body = JSON.stringify(r);
+  if (body.length > 12000) body = JSON.stringify({ ...r, trace:thin(r.trace ?? [], 80) });
+  return fetch(`/friend/ride?pid=${p.id}`, { method:'POST', headers:{ 'content-type':'application/json' }, body }).catch(() => {});
+}
+async function shareHistory(p = current) {
+  if (p.friendsShared) return;
+  for (const r of (p.history ?? []).slice(0, 100).reverse()) { r.id ??= newId(); await shareRide(r, p) }
+  p.friendsShared = true;
+  persist();
+}
+const FRIEND_ERRORS = { 'no one with this handle':'Personne avec ce pseudo : vérifie le nom et les 4 chiffres.', "that's you":'C\'est toi !', 'already friends':'Vous êtes déjà amis.',
+  'too many friends':'Cette personne a trop d\'amis ou de demandes.', 'no request from them':'Plus de demande de sa part.', 'not your friend':'Vous n\'êtes pas amis.' };
+const friendRow = (f, sub, ...acts) => h('div', { class:'friend-row' }, h('span', { class:'avatar' }, f.name[0].toUpperCase()),
+  h('span', { class:'who' }, h('b', {}, `${f.name}${f.country ? ` ${flag(f.country)}` : ''}`), h('small', {}, sub)), h('span', { class:'acts' }, ...acts));
+async function showFriends() {
+  show('#friendsScreen');
+  const body = $('#friendsBody');
+  const me = await friendApi('').catch(() => null);
+  if (!me) return body.replaceChildren(h('p', { class:'club-error' }, 'Le serveur ne répond pas, réessaie dans un moment.'));
+  shareHistory();
+  $('#goFriendsSub').textContent = `${me.handle} · ${me.friends.length} ami${me.friends.length > 1 ? 's' : ''}`;
+  const err = h('p', { class:'club-error', role:'alert' });
+  const act = (path, handle) => friendApi(path, { h:handle }).then(showFriends).catch(x => { err.textContent = FRIEND_ERRORS[x.message] ?? x.message });
+  const add = h('form', { class:'friend-add' }, h('label', {}, 'Ajouter un ami', h('input', { name:'h', required:'', placeholder:'Pseudo#1234', pattern:'.+#[0-9]{1,4}', autocomplete:'off', maxlength:30 })),
+    h('button', { class:'btn primary' }, 'Envoyer la demande'));
+  add.addEventListener('submit', e => { e.preventDefault(); act('/ask', add.h.value) });
+  const copy = h('button', { class:'btn', onclick: () => navigator.clipboard?.writeText(me.handle).then(() => { copy.textContent = 'Copié !' }) }, 'Copier');
+  const btn = (label, onclick, cls = 'btn') => h('button', { class:cls, onclick }, label);
+  const last = f => f.last ? `dernière sortie le ${new Date(f.last).toLocaleDateString('fr-FR', { day:'numeric', month:'short' })}` : 'pas encore de sortie partagée';
+  body.replaceChildren(
+    h('div', { class:'friend-me' }, h('small', {}, 'Ton pseudo d\'ami'), h('span', { class:'club-code' }, me.handle), copy),
+    h('p', { class:'muted' }, 'Donne-le à tes amis ou à ton coach. Une fois la demande acceptée, vous voyez le profil et les sorties l\'un de l\'autre. Retirer un ami arrête le partage.'),
+    add, err,
+    ...(me.asked.length ? [h('h3', {}, 'Demandes reçues'), h('div', { class:'friend-rows' }, ...me.asked.map(f => friendRow(f, f.handle,
+      btn('Accepter', () => act('/accept', f.handle), 'btn primary'), btn('Refuser', () => act('/remove', f.handle)))))] : []),
+    ...(me.sent.length ? [h('h3', {}, 'En attente de réponse'), h('div', { class:'friend-rows' }, ...me.sent.map(handle => friendRow({ name:handle }, 'demande envoyée',
+      btn('Annuler', () => act('/remove', handle)))))] : []),
+    h('h3', {}, `Amis · ${me.friends.length}`),
+    me.friends.length ? h('div', { class:'friend-rows' }, ...me.friends.map(f => {
+      const row = friendRow(f, `${f.handle} · ${last(f)}`, btn('Voir ›', () => showFriend(f.handle), 'btn primary'),
+        btn('Retirer', e => { e.stopPropagation(); if (confirm(`Retirer ${f.name} de tes amis ? Vous ne verrez plus vos sorties.`)) act('/remove', f.handle) }, 'btn danger'));
+      return row;
+    })) : h('p', { class:'muted' }, 'Pas encore d\'ami : envoie une demande avec son pseudo.'));
+}
+// A friend's page: their profile as the server knows it (weight, FTP, rank), then their rides, a list and the one open.
+async function showFriend(handle) {
+  const f = await friendApi('/view', { h:handle }).catch(() => null);
+  if (!f?.handle) return showFriends();
+  const rides = f.rides ?? [], body = $('#friendsBody'), month = rides.filter(r => Date.now() - new Date(r.date) < 30 * 864e5);
+  const kpi = (v, label) => h('div', { class:'kpi' }, h('b', {}, v), h('small', {}, label));
+  const stat = (label, v, u) => h('div', { class:'stat' }, h('small', {}, label), h('b', {}, v), h('i', {}, u));
+  const sum = (rs, k) => rs.reduce((a, r) => a + (r[k] ?? 0), 0);
+  let open = rides[0]?.id;
+  const render = () => {
+    const r = rides.find(x => x.id === open), cv = h('canvas', { class:'hist-trace', 'aria-label':'Altitude et puissance pendant la sortie' });
+    body.replaceChildren(
+      h('div', { class:'ride-head' }, h('div', {}, h('p', { class:'kicker' }, f.handle), h('h2', {}, `${f.name}${f.country ? ` ${flag(f.country)}` : ''}`)),
+        h('button', { class:'btn', onclick:showFriends }, '‹ Amis')),
+      h('div', { class:'kpis' },
+        kpi(f.ftp ? `${Math.round(f.ftp)} W` : '—', 'FTP'), kpi(f.ftp && f.weight ? (f.ftp / f.weight).toFixed(1) : '—', 'W/kg'), kpi(f.rank ? TIER[f.rank]?.name ?? f.rank : '—', 'rang'),
+        kpi(month.length, 'sorties en 30 j'), kpi(`${(sum(month, 'distance') / 1000).toFixed(0)} km`, 'en 30 j'), kpi(`${(sum(month, 'elapsed') / 3600).toFixed(1)} h`, 'en selle en 30 j')),
+      rides.length ? h('div', { class:'hist-body' },
+        h('div', { class:'hist-list' }, ...rides.map(x => h('button', { class:'hist-item' + (x.id === open ? ' on' : ''), onclick: () => { open = x.id; render() } },
+          h('span', { class:'brick', style:`--c:${CATS[catOf(x)][1]}` }),
+          h('span', { class:'hist-main' }, h('strong', {}, x.name), h('small', {}, `${new Date(x.date).toLocaleDateString('fr-FR', { weekday:'short', day:'numeric', month:'short' })} · ${hms(x.elapsed)}`)),
+          h('span', { class:'hist-num' }, h('b', {}, (x.distance / 1000).toFixed(1)), h('small', {}, 'km'))))),
+        h('div', { class:'hist-detail' }, ...(r ? [
+          h('div', { class:'hist-head', style:`--c:${CATS[catOf(r)][1]}` }, h('span', { class:'tag' }, CATS[catOf(r)][0]), h('h2', {}, r.name),
+            h('small', {}, new Date(r.date).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' }))),
+          h('div', { class:'summary' },
+            stat('Durée', hms(r.elapsed), ''), stat('Distance', (r.distance / 1000).toFixed(2), 'km'), stat('Dénivelé', Math.round(r.climbed), 'm'),
+            stat('Puissance moy.', Math.round(r.avgPower), 'W'), stat('Puissance max', Math.round(r.maxPower), 'W'), stat('Vitesse moy.', r.avgSpeed.toFixed(1), 'km/h'),
+            ...(r.tss != null ? [stat('Puiss. normalisée', Math.round(r.np), 'W'), stat('Charge', Math.round(r.tss), 'TSS')] : []),
+            ...(f.weight ? [stat('W/kg moy.', (r.avgPower / f.weight).toFixed(2), '')] : [])),
+          r.trace?.length > 1 ? cv : h('p', { class:'muted' }, 'Pas de courbe pour cette sortie.'),
+        ] : []))) : h('p', { class:'muted' }, `${f.name} n'a pas encore partagé de sortie.`));
+    if (r?.trace?.length > 1) requestAnimationFrame(() => drawTrace(cv, r.trace));
+  };
+  render();
+}
+$('#goFriends').addEventListener('click', showFriends);
+$('#friendsBack').addEventListener('click', () => showHome());
 $('#clubBack').addEventListener('click', () => showHome());
 
 // ---------- account and access (RBAC), see docs/rbac.md ----------
@@ -6454,7 +6569,9 @@ function saveRide() {
   ride.newRecords = BESTS.filter(([d]) => (r.best[d] ?? 0) > (before[d]?.w ?? 0)).map(([d, label]) => [label, r.best[d]]);
   ride.ghostResult = keepGhost(r);
   r.record = !!ride.ghostResult?.record;
+  r.id ??= newId();
   current.history = [r, ...(current.history ?? [])].slice(0, 200);
+  if (current.friendsShared) shareRide(r);
   ride.award = awardRide(r);
   ride.events?.close();
   stopAmbience();

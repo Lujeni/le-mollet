@@ -33,6 +33,10 @@
 //!                                              leader (group) or a live ranking and a finish line (race)
 //!   GET /club?pid=<profile>                    the profile's club, members ranked by km this week (or null)
 //!   GET /club/create?pid=&me=&name=&tag=&color=   found a club;  /club/join?pid=&me=&code=;  /club/leave?pid=
+//!   GET /friend?pid=&me=[&country=]           the profile's handle (Name#1234), friends, requests in and out
+//!   GET /friend/ask?pid=&h=<Name#1234>;  /friend/accept?pid=&h=;  /friend/remove?pid=&h=   (no, take back, unfriend)
+//!   GET /friend/view?pid=&h=                   a friend's profile and rides (friends only)
+//!   POST /friend/ride?pid=  (a ride as JSON);  GET /friend/unride?pid=&id=   the rides friends see
 //!   GET /audio/<name>.mp3                      nature ambience loops (web/audio/CREDITS.md)
 //!   GET /rider?pid=[&weight=<kg>&ftp=<W>]      the profile as the server knows it (weight, FTP seen, rank); with
 //!                                              weight and ftp, register or update it (docs/security.md)
@@ -54,6 +58,7 @@
 use le_mollet::Trainer;
 use le_mollet::auth::{Identity, Perm, Role, Roles};
 use le_mollet::club::{self, Clubs};
+use le_mollet::friend::Friends;
 use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
 use le_mollet::peloton::{self, View};
 use le_mollet::account;
@@ -297,6 +302,7 @@ pub struct App {
     db: Db,
     boards: Mutex<Boards>,
     clubs: Mutex<Clubs>,
+    friends: Mutex<Friends>,
     events: Mutex<Events>,
     /// Group rides whose pace leader is out on the road.
     beacons: Mutex<HashSet<String>>,
@@ -399,6 +405,7 @@ impl App {
             sensors: Mutex::new(HashMap::new()),
             boards: Mutex::new(Boards::load(&db)?),
             clubs: Mutex::new(Clubs::load(&db)?),
+            friends: Mutex::new(Friends::load(&db)?),
             events: Mutex::new(Events::load(&db)?),
             beacons: Mutex::new(HashSet::new()),
             pelotons: Mutex::new(HashSet::new()),
@@ -690,6 +697,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         "/auth/login" => Some(("auth", 10, 3600)),
         "/worlds/new" => Some(("world", 3, 600)),
         "/club/create" | "/event/create" => Some(("create", 10, 3600)),
+        "/friend/ask" => Some(("friend", 30, 3600)),
+        "/friend/ride" => Some(("ride", 300, 3600)), // a first share sends the history, one ride a call
         "/rider" if param(query, "weight").is_some() => Some(("rider", 30, 3600)),
         _ => None,
     };
@@ -728,7 +737,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await;
     }
     // Cloud: a profile the server does not know yet cannot act (the page registers it on `/rider` first).
-    if app.mode == Mode::Cloud && (path.starts_with("/club") || path.starts_with("/event/")) && pid.is_some_and(|p| !app.riders.lock().unwrap_or_else(|e| e.into_inner()).riders.contains_key(p)) {
+    if app.mode == Mode::Cloud && (path.starts_with("/club") || path.starts_with("/event/") || path.starts_with("/friend")) && pid.is_some_and(|p| !app.riders.lock().unwrap_or_else(|e| e.into_inner()).riders.contains_key(p)) {
         return reply(&mut sock, "403 Forbidden", "text/plain", b"unknown rider").await;
     }
     // Cloud: names come from the account, so nobody appears as someone else.
@@ -1078,7 +1087,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                         c.members.sort_by(|a, b| b.km.total_cmp(&a.km));
                     }
                     let mut v = json!(c);
-                    for m in v["members"].as_array_mut().into_iter().flatten() { // no profile ids for the others
+                    // get_mut, not v["members"]: indexing null would turn "no club" into an object
+                    for m in v.get_mut("members").and_then(|m| m.as_array_mut()).into_iter().flatten() { // no profile ids for the others
                         m["me"] = json!(m["pid"].as_str() == Some(pid));
                         m.as_object_mut().map(|o| o.remove("pid"));
                     }
@@ -1086,6 +1096,59 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 }
                 Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
             }
+        }
+        (p, _) if p == "/friend" || p.starts_with("/friend/") => {
+            let Some(pid) = pid else {
+                return reply(&mut sock, "400 Bad Request", "text/plain", b"need pid").await;
+            };
+            let handle = param(query, "h").map(decode).unwrap_or_default();
+            let res: Result<Vec<String>, &str> = {
+                let mut friends = app.friends.lock().unwrap_or_else(|e| e.into_inner());
+                let res = match p {
+                    "/friend" => {
+                        let me = me_name.clone().unwrap_or_else(|| param(query, "me").map(decode).unwrap_or_default());
+                        let country = param(query, "country").filter(|c| c.len() == 2 && c.bytes().all(|b| b.is_ascii_uppercase())).map(str::to_owned);
+                        let was = friends.people.get(pid).map(|p| (p.handle(), p.country.clone()));
+                        let p = friends.me(pid, &me, country, (uuid::Uuid::new_v4().as_u128() % 10_000) as u16);
+                        Ok(if was == Some((p.handle(), p.country.clone())) { vec![] } else { vec![pid.to_owned()] })
+                    }
+                    "/friend/ask" => friends.ask(pid, &handle).map(|o| vec![pid.to_owned(), o]),
+                    "/friend/accept" => friends.accept(pid, &handle).map(|o| vec![pid.to_owned(), o]),
+                    "/friend/remove" => friends.remove(pid, &handle).map(|o| vec![pid.to_owned(), o]),
+                    "/friend/view" => friends.view(pid, &handle).map(|_| vec![]).ok_or("not your friend"),
+                    "/friend/ride" if req.starts_with("POST ") => {
+                        let body = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
+                        serde_json::from_str::<serde_json::Value>(body).map_err(|_| "ride: bad JSON")
+                            .and_then(|r| if r.is_object() { Ok(r) } else { Err("ride: not an object") })
+                            .and_then(|r| friends.add_ride(pid, r)).map(|_| vec![pid.to_owned()])
+                    }
+                    "/friend/unride" => { friends.drop_ride(pid, &param(query, "id").map(decode).unwrap_or_default()); Ok(vec![pid.to_owned()]) }
+                    _ => Err("not found"),
+                };
+                if let Ok(changed) = &res && let Err(e) = friends.save(&app.db, &changed.iter().map(String::as_str).collect::<Vec<_>>()) { eprintln!("friends: {e}") }
+                res
+            };
+            if let Err(e) = res {
+                return reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await;
+            }
+            // What the page shows: never a profile id, only handles.
+            let body = {
+                let friends = app.friends.lock().unwrap_or_else(|e| e.into_inner());
+                let riders = app.riders.lock().unwrap_or_else(|e| e.into_inner());
+                let now = unix_now();
+                let card = |k: &str| friends.people.get(k).map(|p| {
+                    let r = riders.riders.get(k);
+                    json!({ "handle": p.handle(), "name": p.name, "country": p.country, "last": p.rides.first().and_then(|r| r.get("date")), "rides": p.rides.len(),
+                        "weight": r.map(|r| r.weight), "ftp": r.map(|r| r.ftp), "rank": r.map(|r| r.rank(now).to_string()) })
+                });
+                match (p, friends.people.get(pid)) {
+                    ("/friend/view", _) => friends.view(pid, &handle).map(|(k, p)| { let mut v = card(&k).unwrap(); v["rides"] = json!(p.rides); v }).unwrap_or_default(),
+                    (_, Some(me)) => json!({ "handle": me.handle(), "friends": me.friends.iter().filter_map(|k| card(k)).collect::<Vec<_>>(),
+                        "asked": me.asked.iter().filter_map(|k| card(k)).collect::<Vec<_>>(), "sent": friends.sent(pid) }),
+                    _ => json!(null),
+                }
+            };
+            reply(&mut sock, "200 OK", "application/json", body.to_string().as_bytes()).await
         }
         ("/pause", _) => match (session, param(query, "on")) {
             (Some(s), Some(on)) => {
@@ -1747,7 +1810,7 @@ async fn redirect(sock: &mut TcpStream, to: &str, set_cookie: Option<&str>) -> s
 
 /// A request's route for the metrics: the known paths, everything else as "other" (no unbounded labels).
 fn route_label(path: &str) -> &'static str {
-    const ROUTES: [&str; 31] = ["/", "/courses", "/worlds", "/worlds/new", "/course", "/terrain", "/buildings", "/district", "/ortho", "/workouts", "/turn", "/events",
+    const ROUTES: [&str; 38] = ["/friend", "/friend/ask", "/friend/accept", "/friend/remove", "/friend/view", "/friend/ride", "/friend/unride", "/", "/courses", "/worlds", "/worlds/new", "/course", "/terrain", "/buildings", "/district", "/ortho", "/workouts", "/turn", "/events",
         "/power", "/segments", "/whoami", "/emote", "/seek", "/pause", "/powerup", "/rider", "/metrics", "/club", "/club/create", "/club/join", "/club/leave",
         "/event/list", "/event/create", "/event/join", "/event/leave", "/event/delete", "/admin/flags"];
     ROUTES.iter().find(|r| **r == path).copied().unwrap_or(if path.starts_with("/audio/") { "/audio" } else if path.starts_with("/auth/") { "/auth" } else if path.starts_with("/admin/") { "/admin" } else { "other" })

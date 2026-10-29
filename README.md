@@ -121,6 +121,9 @@ A multiplayer, online indoor cycling training program. Source available, free fo
   lighter for 15 s), Aero (a quarter less drag) or Draft (50 % more on a wheel for 30 s).
 - **Clubs.** Found a club or join one with its code: your tag rides before your name, and the club ranks its
   members by kilometres this week.
+- **Friends and coaches.** Each profile gets a handle like `Lujeni#2138`: send a request, and once it is accepted
+  you both see each other's profile (FTP, W/kg, rank) and rides, with their power and elevation curves. Handy for a
+  coach following their riders. Removing a friend stops the sharing.
 - **Ride On!** Send a thumbs-up to the rider next to you, or a quick emote (keys 1 to 5): it pops up over your
   rider, and pace partners wave back.
 - **Ride in a bunch.** Sit on a wheel and drafting saves up to 30 % of the air drag. Pace partners (2, 3 and 4

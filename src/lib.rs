@@ -7,6 +7,7 @@ pub mod db;
 pub mod decor;
 pub mod dem;
 pub mod event;
+pub mod friend;
 pub mod buildings;
 pub mod city;
 pub mod course;
