@@ -4,6 +4,9 @@
 
 A multiplayer, online indoor cycling training program. Source available, free for non-commercial use, core in Rust.
 
+**Open beta: [ride.le-mollet.fr](https://ride.le-mollet.fr).** A stress test of the server with real riders, and a hunt
+for hardware to support: tell us how your trainer did with a [hardware report](https://github.com/Lujeni/le-mollet/issues/new?template=hardware.yml).
+
 - **Free forever.** No subscription, no paywall, ever.
 - **No account required.** Run it on your PC and ride: no sign-up, everything stays local, you are admin. Open it to
   your LAN with `serve --lan`. A public server (`--mode cloud`) asks riders for a Le Mollet account, a name

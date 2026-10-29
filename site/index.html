@@ -104,10 +104,9 @@ nav .spacer { flex:1 }
 .soon { --c:var(--purple); color:#fff; padding:96px 0; text-align:center }
 .soon h2 { text-shadow:4px 4px 0 var(--ink) }
 .soon p { font-size:20px; max-width:46ch; margin:18px auto 30px; background:rgba(22,22,29,.5); padding:12px 18px; border-radius:14px }
-.load { width:min(520px, 100%); margin:0 auto 34px; height:34px; border:4px solid var(--ink); border-radius:12px; background:#fff; overflow:hidden; position:relative }
-.load i { position:absolute; inset:0 auto 0 0; width:87%; background:repeating-linear-gradient(90deg, var(--red) 0 40px, var(--yellow) 40px 80px, var(--green) 80px 120px, var(--blue) 120px 160px); animation:fill 3s ease-out }
-.load span { position:absolute; inset:0; display:grid; place-items:center; font:700 15px Fredoka, sans-serif; color:var(--ink); text-shadow:0 0 6px #fff }
-@keyframes fill { from { width:0 } }
+.soon p a { color:var(--yellow) }
+.soon .ctas { justify-content:center; margin-bottom:48px }
+.soon h3 { font:700 26px Fredoka, sans-serif; margin:0; text-shadow:3px 3px 0 var(--ink) }
 
 footer { background:var(--ink); color:#cfcfe0; padding:36px 0; font-size:14px }
 footer .wrap { display:flex; flex-wrap:wrap; justify-content:space-between; gap:16px }
@@ -147,12 +146,12 @@ footer a { color:var(--yellow) }
   <span class="float" style="background:var(--green);left:46%;bottom:6%;animation-delay:-4s;--r:12deg" aria-hidden="true"></span>
   <div class="wrap">
     <div>
-      <span class="tag" data-i18n="tag">Arrive bientôt · gratuit pour de vrai</span>
+      <span class="tag" data-i18n="tag">Bêta ouverte · gratuit pour de vrai</span>
       <h1 data-i18n="h1">Ton vélo t'a coûté <em>un rein</em>. Ton home trainer, <em>l'autre</em>.</h1>
       <p class="lead" data-i18n="lead">Et maintenant on voudrait te faire payer tous les mois pour regarder des watts sur des polygones… en Bluetooth ? Le Mollet, c'est le même plaisir, en briques, gratuit et à code ouvert.</p>
       <div class="ctas">
-        <a class="btn y" href="#features" data-i18n="cta1">Voir les features ↓</a>
-        <a class="btn w" href="https://github.com/Lujeni/le-mollet" target="_blank" rel="noopener" data-i18n="cta2">★ Suivre le projet</a>
+        <a class="btn y" href="https://ride.le-mollet.fr" data-i18n="cta1">Rouler maintenant →</a>
+        <a class="btn w" href="#features" data-i18n="cta3">Voir les features ↓</a>
       </div>
     </div>
     <div class="shot"><img src="img/alpe.jpg" width="1440" height="900" alt="L'Alpe d'Huez en briques, avec les supporters au bord de la route" data-i18n-alt="altHero"></div>
@@ -223,12 +222,20 @@ footer a { color:var(--yellow) }
   </div>
 </section>
 
-<section class="soon studs">
+<section class="soon studs" id="beta">
   <div class="wrap">
-    <h2 data-i18n="sH">Arrive bientôt.</h2>
-    <p data-i18n="sP">On emboîte les dernières briques. Mets une étoile sur GitHub pour être prévenu du départ, ou viens tester ton home trainer avec nous.</p>
-    <div class="load" role="img" aria-label="87 %"><i></i><span data-i18n="load">Chargement des briques… 87 %</span></div>
-    <a class="btn y" href="https://github.com/Lujeni/le-mollet" target="_blank" rel="noopener" data-i18n="cta2">★ Suivre le projet</a>
+    <h2 data-i18n="sH">C'est ouvert. En phase de stress test.</h2>
+    <p data-i18n="sP"><a href="https://ride.le-mollet.fr">ride.le-mollet.fr</a> est en ligne : crée un compte, branche ton home trainer, roule. On teste la tenue du serveur avec de vrais mollets, et on veut faire marcher un maximum de matériel. Il faut <b>Chrome ou Edge</b> (Bluetooth web) et un home trainer Bluetooth (FTMS). Ça peut casser : c'est le but.</p>
+    <div class="ctas">
+      <a class="btn y" href="https://ride.le-mollet.fr" data-i18n="cta1">Rouler maintenant →</a>
+    </div>
+    <h3 data-i18n="fbH">Ton matos marche ? Ne marche pas ? Dis-le.</h3>
+    <p data-i18n="fbP">Chaque retour sur un home trainer, une ceinture ou une manette finit dans la liste du matériel supporté, les succès comme les échecs. Un bug, une idée : pareil.</p>
+    <div class="ctas">
+      <a class="btn w" href="https://github.com/Lujeni/le-mollet/issues/new?template=hardware.yml" target="_blank" rel="noopener" data-i18n="fb1">🚲 Signaler mon matériel</a>
+      <a class="btn w" href="https://github.com/Lujeni/le-mollet/issues/new/choose" target="_blank" rel="noopener" data-i18n="fb2">🐛 Un bug, une idée</a>
+      <a class="btn w" href="https://github.com/Lujeni/le-mollet/blob/main/docs/hardware.md" target="_blank" rel="noopener" data-i18n="fb3">📋 Matériel testé</a>
+    </div>
   </div>
 </section>
 
@@ -242,9 +249,9 @@ footer a { color:var(--yellow) }
 <script>
 const T = {
   en: {
-    tag:'Coming soon · actually free', h1:'Your bike cost you <em>a kidney</em>. Your smart trainer, <em>the other one</em>.',
+    tag:'Open beta · actually free', h1:'Your bike cost you <em>a kidney</em>. Your smart trainer, <em>the other one</em>.',
     lead:'And now someone wants a monthly fee so you can watch watts on polygons… over Bluetooth? Le Mollet is the same fun, in bricks, free and source available.',
-    cta1:'See the features ↓', cta2:'★ Follow the project', altHero:"Alpe d'Huez in bricks, fans by the road",
+    cta1:'Ride now →', cta3:'See the features ↓', altHero:"Alpe d'Huez in bricks, fans by the road",
     billH:"Let's do the maths.", billP:"The bike, the trainer, the heart rate strap, the fan that keeps you alive… The one thing your bill was missing was a lifetime subscription. We crossed it out.",
     rTitle:'RECEIPT', r1:'Road bike, "not too expensive"', r2:'Smart trainer', r3:'Heart rate strap', r4:'Survival fan', r5:'Subscription', r5m:'months', rT:'TOTAL', stamp:'FREE',
     fH:'Everything you need. Nothing to pay.', fSub:'Plug in your trainer, open your browser, ride. No account needed at home, no credit card, ever.',
@@ -255,8 +262,9 @@ const T = {
     c5t:'Gear', c5h:'Your trainer, your controller, your gears', c5p:'Bluetooth FTMS trainers, heart rate and cadence sensors, a handlebar controller with 24 virtual gears. And a debug mode to get the rest working.',
     c6t:'Open', c6h:'At home, on your LAN or online. Source available.', c6p:'One Rust binary, your data stays with you. Run it in your living room or host a server for your club. Free for any non-commercial use.',
     altClimbs:'Climbs as fridge magnets with their flags', altPen:'Riders in the start pen before a race', altIsland:'The Brick Island, a hand-made world',
-    sH:'Coming soon.', sP:'We are clicking the last bricks in place. Star it on GitHub to hear when it rolls out, or come test your trainer with us.',
-    load:'Loading bricks… 87 %', foot1:'Made of bricks and calves. Free for non-commercial use (PolyForm Noncommercial).',
+    sH:'It is open. Stress-test phase.', sP:'<a href="https://ride.le-mollet.fr">ride.le-mollet.fr</a> is live: create an account, plug in your trainer, ride. We are testing how the server holds up with real calves, and we want as much hardware as possible to work. You need <b>Chrome or Edge</b> (Web Bluetooth) and a Bluetooth trainer (FTMS). It may break: that is the point.',
+    fbH:'Does your gear work? Does it not? Tell us.', fbP:'Every report on a trainer, a strap or a controller ends up in the supported hardware list, successes and failures alike. A bug, an idea: same place.',
+    fb1:'🚲 Report my hardware', fb2:'🐛 A bug, an idea', fb3:'📋 Tested hardware', foot1:'Made of bricks and calves. Free for non-commercial use (PolyForm Noncommercial).',
     foot2:'Roads © OpenStreetMap contributors · relief IGN. Not affiliated with any toy brand or subscription app.',
     title:'Le Mollet · the smart trainer game, no subscription',
   },

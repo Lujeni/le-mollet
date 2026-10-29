@@ -19,3 +19,7 @@ courses/events.json
 courses/riders.json
 roles.json
 strava-tokens.json
+# the private ops repo, checked out here
+le-mollet-ops/
+# ovhcloud CLI credentials, written where `ovhcloud login` is run
+ovh.conf

@@ -1,0 +1,57 @@
+name: Hardware report
+description: Your trainer, strap or controller on ride.le-mollet.fr, whether it worked or not.
+title: "[hardware] "
+labels: [hardware]
+body:
+  - type: markdown
+    attributes:
+      value: Every device report helps, the ones that worked too. It ends up in docs/hardware.md.
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Brand, model, firmware version if you know it.
+      placeholder: Wahoo KICKR CORE, firmware 1.3.17
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - Smart trainer
+        - Heart rate strap
+        - Controller (Zwift Ride, Click...)
+        - Power meter / other
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and system
+      placeholder: Chrome 131 on Windows 11 / Edge on macOS 15 / Chrome on Android 14
+    validations:
+      required: true
+  - type: checkboxes
+    id: worked
+    attributes:
+      label: What worked
+      options:
+        - label: Found in the Bluetooth list and connected
+        - label: Power shown while pedalling
+        - label: Cadence shown
+        - label: Heart rate shown
+        - label: The slope changes the resistance (ride)
+        - label: ERG holds the target watts (workout)
+        - label: Virtual gears / buttons (controller)
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Anything odd, the exact message if there was one, how long it lasted.
+  - type: textarea
+    id: probe
+    attributes:
+      label: Probe output (optional)
+      description: If you can run the CLI, the output of `le-mollet probe` tells us the services the device exposes (docs/hardware.md).
+      render: text
