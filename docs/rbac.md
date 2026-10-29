@@ -35,7 +35,8 @@ to show or hide controls; the server checks again on every request.
 ## Accounts
 
 A Le Mollet account (`src/account.rs`) is, at home, a name and a password (**Profile > Compte**: *Se connecter* or
-*Créer un compte*); on a public server, a name and an e-mail and no password at all (**the sign-in screen**): every
+*Créer un compte*); on a public server, an e-mail and no password at all (**the sign-in screen**; the name comes out of the e-mail, and
+**Mon compte** renames): every
 sign-in is a link sent to the mailbox (15 minutes, one use; docs/security.md), and the first one proves the address.
 The e-mail is changed from the account settings; at home, password in hand.
 

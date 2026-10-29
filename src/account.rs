@@ -114,6 +114,31 @@ pub fn delete(db: &Db, name: &str, password: Option<&str>) -> Result<Account, &'
     Ok(a)
 }
 
+/// A name out of an e-mail, for a public server's sign-up (which asks for no name): the part before the @, kept to
+/// what names allow; src/web.rs adds digits if it is taken. Changed later with `rename`.
+pub fn name_from(email: &str) -> String {
+    let local = email.split('@').next().unwrap_or("");
+    let mut n: String = local.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '-' }).take(24).collect();
+    while n.contains("--") { n = n.replace("--", "-") }
+    let n = n.trim_matches('-').to_owned();
+    if n.len() < 3 { format!("rider-{}", uuid::Uuid::new_v4().simple().to_string()[..4].to_owned()) } else { n }
+}
+
+/// A new name: the account moves to its new key, the old one gone. The server renames the sessions (src/web.rs).
+pub fn rename(db: &Db, name: &str, new: &str) -> Result<Account, &'static str> {
+    let new = new.trim();
+    if !valid_name(new) { return Err("name: 3 to 24 letters, digits, - or _") }
+    let mut a = find(db, name).ok_or("no such account")?;
+    a.name = new.to_owned();
+    if key(new) == key(name) { db.put("accounts", &key(name), &a).map_err(|_| "could not save the account")?; return Ok(a) }
+    match db.insert("accounts", &key(new), &a) {
+        Ok(true) => { db.delete("accounts", &key(name)).map_err(|_| "could not save the account")?; Ok(a) }
+        Ok(false) => Err("name taken"),
+        Err(_) => Err("could not save the account"),
+    }
+}
+
+
 /// A sign-in link's body, for src/mail.rs; the token is the server's (one use, a quarter of an hour).
 pub fn link_mail(name: &str, url: &str) -> (String, String) {
     ("Ta connexion à Le Mollet".into(), format!("Salut {name},\n\nVoici ton lien pour te connecter, valable 15 minutes et une seule fois :\n\n{url}\n\nSi tu n'as rien demandé, ignore ce message.\n\nLe Mollet"))
@@ -228,6 +253,24 @@ mod tests {
         assert_eq!(delete(&db, "marie", None).unwrap().id, m.id);
         assert_eq!(delete(&db, "marie", None).unwrap_err(), "no such account");
         assert!(link_mail("Marie", "https://x/?link=1").1.contains("https://x/?link=1"));
+    }
+
+    #[test]
+    fn names_from_emails_and_renames() {
+        assert_eq!(name_from("julien.thebault@mail.fr"), "julien-thebault");
+        assert_eq!(name_from("Ju_2024+ride@x.y"), "Ju_2024-ride");
+        assert_eq!(name_from("a.very.long.local.part.for.sure.really@x.y"), "a-very-long-local-part-f");
+        assert!(name_from("ab@x.y").starts_with("rider-") && valid_name(&name_from("ab@x.y")));
+        assert!(valid_name(&name_from("...@x.y")));
+        let db = Db::memory();
+        let a = signup(&db, "Julien", None, Some("longenough"), 1).unwrap();
+        signup(&db, "Marie", None, Some("longenough"), 1).unwrap();
+        assert_eq!(rename(&db, "julien", "marie").unwrap_err(), "name taken");
+        assert_eq!(rename(&db, "julien", "ju").unwrap_err(), "name: 3 to 24 letters, digits, - or _");
+        assert_eq!(rename(&db, "julien", "JULIEN").unwrap().name, "JULIEN"); // the same key, just the look
+        let r = rename(&db, "julien", "Jules").unwrap();
+        assert!(r.id == a.id && find(&db, "julien").is_none() && find(&db, "jules").unwrap().name == "Jules");
+        assert_eq!(rename(&db, "julien", "Jules").unwrap_err(), "no such account");
     }
 
     #[test]

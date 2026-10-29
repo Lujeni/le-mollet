@@ -22,6 +22,7 @@
 //!                                              are no passwords: the e-mail is required, /auth/login refused, a link mailed instead; POST /auth/logout[?all=1] signs out
 //!   POST /auth/link  (email=)   mails a sign-in link, {url}/?link=<t>;  POST /auth/link/use  (t=)   signs in with it (one use, 15 min)
 //!   POST /auth/password  (password=&new=)   a new password, the other browsers signed out;  POST /auth/email  (password=&email=)   a new e-mail;
+//!   POST /auth/name  (name=)   a new name (in cloud mode a sign-up gives none: it comes out of the e-mail);
 //!   POST /auth/delete  (password=)   the account gone
 //!   POST /admin/segments/reset?id=<id>&name=<segment>  wipe a leaderboard (moderate)
 //!
@@ -727,8 +728,8 @@ fn public_id(sid: u64) -> u64 {
 
 /// Calls that change something: POST only (`/rider` with a weight too). Steering one's own ride stays GET: it
 /// needs the ride's session, which only its page knows.
-const POST_ONLY: [&str; 20] = ["/worlds/new", "/event/create", "/event/join", "/event/leave", "/event/delete", "/club/create", "/club/join", "/club/leave",
-    "/friend/ask", "/friend/accept", "/friend/remove", "/friend/ride", "/friend/unride", "/auth/logout", "/auth/password", "/auth/delete", "/auth/email", "/auth/link", "/auth/link/use", "/admin/segments/reset"];
+const POST_ONLY: [&str; 21] = ["/worlds/new", "/event/create", "/event/join", "/event/leave", "/event/delete", "/club/create", "/club/join", "/club/leave",
+    "/friend/ask", "/friend/accept", "/friend/remove", "/friend/ride", "/friend/unride", "/auth/logout", "/auth/password", "/auth/delete", "/auth/email", "/auth/name", "/auth/link", "/auth/link/use", "/admin/segments/reset"];
 
 /// Emotes a rider can send.
 const EMOTES: [&str; 5] = ["rideon", "wave", "fire", "laugh", "party"];
@@ -820,7 +821,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let client = client_ip(&req, peer, app.mode);
     // What costs the server something (a password hash, a world, a row that stays) is counted per client.
     let budget = match path {
-        "/auth/password" | "/auth/delete" | "/auth/email" | "/auth/link/use" => Some(("auth", 10, 3600)),
+        "/auth/password" | "/auth/delete" | "/auth/email" | "/auth/name" | "/auth/link/use" => Some(("auth", 10, 3600)),
         "/auth/link" => Some(("link", 5, 3600)),
         // Accounts: 3 an hour and 5 a day from one address, 100 an hour from everywhere (a flood stops at the door).
         "/auth/signup" if req.starts_with("POST ") => Some(("signup", 3, 3600)),
@@ -934,7 +935,16 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 fails.get(&key).is_some_and(|(n, _)| *n >= 5)
             };
             let res = if locked { Err("too many tries: wait 15 minutes") } else if path == "/auth/signup" {
-                tokio::task::block_in_place(|| account::signup(&app.db, &name, email.as_deref(), Some(password.as_str()), unix_now())) // the hash takes a while, on purpose
+                // A public server asks for no name: one comes out of the e-mail, a few digits added if it is taken.
+                let derived = app.mode == Mode::Cloud && name.is_empty() && email.is_some();
+                let base = if derived { account::name_from(email.as_deref().unwrap_or("")) } else { name.clone() };
+                let mut res = Err("name taken");
+                for i in 0..if derived { 5 } else { 1 } {
+                    let n = if i == 0 { base.clone() } else { format!("{}-{:04}", &base[..base.len().min(19)], uuid::Uuid::new_v4().as_u128() % 10_000) };
+                    res = tokio::task::block_in_place(|| account::signup(&app.db, &n, email.as_deref(), Some(password.as_str()), unix_now())); // the hash takes a while, on purpose
+                    if !matches!(res, Err("name taken")) { break }
+                }
+                res
             } else {
                 tokio::task::block_in_place(|| account::login(&app.db, &name, &password))
             };
@@ -1021,6 +1031,22 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     app.forget_profiles(id);
                     eprintln!("account {name} deleted itself");
                     redirect(&mut sock, "/", Some(CLEAR_COOKIE)).await
+                }
+                Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
+            }
+        }
+        // A new name for the account, its sessions renamed with it (the page shows the name from the session).
+        ("/auth/name", _) if req.starts_with("POST ") => {
+            let Some((id, name)) = who.account.zip(who.name.clone()) else { return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await };
+            let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
+            let new = param(form, "name").map(decode).unwrap_or_default();
+            match tokio::task::block_in_place(|| account::rename(&app.db, &name, &new)) {
+                Ok(a) => {
+                    {
+                        let mut sessions = app.sessions.lock().unwrap_or_else(|e| e.into_inner());
+                        for (k, s) in sessions.iter_mut().filter(|(_, s)| s.account == id) { s.name = a.name.clone(); if let Err(e) = app.db.put("sessions", k, s) { eprintln!("sessions: {e}") } }
+                    }
+                    reply(&mut sock, "204 No Content", "text/plain", b"").await
                 }
                 Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
             }
