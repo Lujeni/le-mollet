@@ -1666,7 +1666,7 @@ function h(tag, props = {}, ...kids) {
     else if (k === 'style') e.style.cssText = v;
     else e.setAttribute(k, v);
   }
-  e.append(...kids);
+  e.append(...kids.filter(k => k != null && k !== false));
   return e;
 }
 
@@ -6355,7 +6355,8 @@ const authed = (path, opts = {}) => fetch(path, { credentials:'same-origin', ...
 const ROLE_NAMES = { rider:'Cycliste', organizer:'Organisateur', admin:'Admin' };
 const ACCOUNT_ERRORS = { 'wrong name or password':'Nom ou mot de passe incorrect.', 'name taken':'Ce nom est déjà pris.', 'too many tries: wait 15 minutes':'Trop d\'essais : attends 15 minutes.',
   'name: 3 to 24 letters, digits, - or _':'Nom : 3 à 24 lettres, chiffres, - ou _.', 'password: 8 characters at least':'Mot de passe : 8 caractères au moins.', 'password: 128 characters at most':'Mot de passe : 128 caractères au plus.',
-  'too many requests: try again later':'Trop de demandes depuis ici : réessaie plus tard.' };
+  'too many requests: try again later':'Trop de demandes depuis ici : réessaie plus tard.', 'email: required':'Un e-mail est nécessaire sur ce serveur.', 'email: not an address':'Cet e-mail n\'a pas l\'air d\'une adresse.',
+  'email taken':'Cet e-mail a déjà un compte.', 'link: expired or used':'Ce lien a expiré ou a déjà servi.' };
 // Sign-up proof of work, the captcha nobody sees (src/account.rs): a challenge from the server, a counter whose
 // SHA-256 with it starts with enough zero bits. A second or so, started as soon as the form is touched.
 async function solvePow() {
@@ -6368,14 +6369,18 @@ async function solvePow() {
     if (z >= bits) return `${token}:${n}`;
   }
 }
-// Sign in, or sign up with the same two fields; `done` runs once the server knows who this is.
-function accountForm(done) {
+// Sign in, or sign up with the same fields; `done` runs once the server knows who this is. On a public server
+// (`cloud`) an e-mail is required and the password optional: without one, a link in the mailbox signs in.
+function accountForm(done, cloud) {
   const err = h('p', { class:'club-error', role:'alert' });
   let pow = null;
   const f = h('form', { class:'account-form', onfocusin: () => { pow ??= solvePow().catch(() => null) } },
     h('label', {}, 'Nom', h('input', { name:'name', required:'', minlength:3, maxlength:24, pattern:'[A-Za-z0-9_\\-]{3,24}', autocomplete:'username' })),
-    h('label', {}, 'Mot de passe', h('input', { name:'password', type:'password', required:'', minlength:8, maxlength:128, autocomplete:'current-password' })),
-    h('div', { class:'form-actions' }, h('button', { class:'btn primary', value:'login' }, 'Se connecter'), h('button', { class:'btn', value:'signup' }, 'Créer un compte')), err);
+    cloud && h('label', {}, 'E-mail', h('input', { name:'email', type:'email', maxlength:254, autocomplete:'email' })),
+    h('label', {}, cloud ? 'Mot de passe (facultatif : sans, tu te connectes par e-mail)' : 'Mot de passe',
+      h('input', { name:'password', type:'password', ...(cloud ? {} : { required:'' }), minlength:8, maxlength:128, autocomplete:'current-password' })),
+    h('div', { class:'form-actions' }, h('button', { class:'btn primary', value:'login' }, 'Se connecter'), h('button', { class:'btn', value:'signup' }, 'Créer un compte'),
+      cloud && h('button', { class:'btn', value:'link', formnovalidate:'' }, 'Recevoir un lien par e-mail')), err);
   f.addEventListener('submit', async e => {
     e.preventDefault();
     const action = e.submitter?.value ?? 'login', body = new URLSearchParams(new FormData(f));
@@ -6386,15 +6391,28 @@ function accountForm(done) {
       if (!p) { err.textContent = 'Vérification anti-robots impossible : recharge la page.'; return }
       body.set('pow', p);
     }
-    const r = await authed(`/auth/${action}`, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body }).catch(() => null);
-    if (!r?.ok) { const t = await r?.text().catch(() => ''); err.textContent = ACCOUNT_ERRORS[t] ?? (t.startsWith('pow') ? 'Vérification anti-robots échouée : réessaie.' : t || 'Serveur injoignable.'); return }
-    f.reset(); err.textContent = '';
+    const r = await post(`/auth/${action}`, body).catch(() => null);
+    if (!r?.ok) return show(r);
+    f.reset();
+    if (r.status === 202) { err.textContent = 'Compte créé : un lien de connexion est parti dans ta boîte mail, il vaut 15 minutes.'; return }
+    err.textContent = '';
+    const post = (path, body) => authed(path, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body });
+    const show = async r => { const t = await r?.text().catch(() => ''); err.textContent = ACCOUNT_ERRORS[t] ?? (t.startsWith('pow') ? 'Vérification anti-robots échouée : réessaie.' : t || 'Serveur injoignable.') };
+    if (action === 'link') {
+      if (!f.email.value) { err.textContent = 'Indique ton e-mail.'; f.email.focus(); return }
+      const r = await post('/auth/link', new URLSearchParams({ email:f.email.value })).catch(() => null);
+      if (!r?.ok) return show(r);
+      err.textContent = 'Si cet e-mail a un compte, un lien de connexion vient d\'y partir : il vaut 15 minutes.';
+      return;
+    }
+    if (action === 'login' && !f.password.value) { err.textContent = 'Ton mot de passe, ou « Recevoir un lien par e-mail ».'; f.password.focus(); return }
+    if (action === 'signup' && cloud && !f.email.value) { err.textContent = 'Indique ton e-mail : c\'est lui qui te reconnecte.'; f.email.focus(); return }
     await whoami();
     done?.();
   });
   return f;
 }
-$('#signinGate .gate').append(accountForm(() => { $('#signinGate').hidden = true; showProfiles() }));
+$('#signinGate .gate').append(accountForm(() => { $('#signinGate').hidden = true; showProfiles() }, true));
 $('#accountIn').append(accountForm());
 // The account's settings, signed in: the browsers it is on, a new password, sign out everywhere, delete it.
 function accountSettings() {
@@ -6425,7 +6443,7 @@ function accountSettings() {
     location.reload();
   });
   const everywhere = h('button', { class:'btn', type:'button', onclick: async () => { await authed('/auth/logout?all=1', { method:'POST' }).catch(() => {}); location.reload() } }, 'Se déconnecter partout');
-  return h('div', { class:'account-settings' }, h('p', { class:'muted', id:'accountDevices' }), everywhere, pw, del);
+  return h('div', { class:'account-settings' }, h('p', { class:'muted', id:'accountDevices' }), everywhere, em, pw, del);
 }
 $('#accountSettings').append(accountSettings());
 // The account in the header, on every screen: a brick with the name, a menu with the role, the devices, the
@@ -6434,6 +6452,18 @@ const signOut = async () => { await authed('/auth/logout', { method:'POST' }).ca
 const openAccount = () => { closeAcct(); $('#accountModal').hidden = false; $('#accountClose').focus() };
 const closeAcct = () => { $('#acctMenu').hidden = true; $('#acctBtn').setAttribute('aria-expanded', 'false') };
 function renderAcct() {
+  const emErr = h('p', { class:'club-error', role:'alert' });
+  const em = h('form', { class:'account-form' }, h('h3', {}, 'E-mail'), h('p', { class:'muted', id:'accountEmail' }),
+    h('label', {}, 'Nouvel e-mail', h('input', { name:'email', type:'email', required:'', maxlength:254, autocomplete:'email' })),
+    h('label', {}, 'Mot de passe', h('input', { name:'password', type:'password', required:'', autocomplete:'current-password' })),
+    h('div', { class:'form-actions' }, h('button', { class:'btn primary' }, 'Changer')), emErr);
+  em.addEventListener('submit', async e => {
+    e.preventDefault();
+    const r = await post('/auth/email', em).catch(() => null);
+    if (!r?.ok) return fail(emErr, r);
+    em.reset(); emErr.textContent = 'E-mail changé.';
+    whoami();
+  });
   const { me } = auth, signed = !!me.account, btn = $('#acctBtn');
   btn.hidden = !signed;
   if (!signed) return closeAcct();
@@ -6467,12 +6497,21 @@ async function whoami() {
   renderAcct();
   $('#homeRole').replaceChildren(...(me.role !== 'rider' ? [h('span', { class:'role-chip' }, ROLE_NAMES[me.role])] : []));
 }
-whoami();
+// Back from a sign-in link (the mail's `/?link=<t>`): the token posted once, the address cleaned up first, so a
+// reload or a mail scanner's prefetch never spends it.
+const linkToken = new URLSearchParams(location.search).get('link');
+if (linkToken) {
+  history.replaceState(null, '', location.pathname);
+  authed('/auth/link/use', { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:new URLSearchParams({ t:linkToken }) })
+    .then(r => { if (!r.ok) $('#signinGate .gate').prepend(h('p', { class:'club-error', role:'alert' }, 'Ce lien de connexion a expiré ou a déjà servi : demandes-en un autre.')) })
+    .catch(() => {}).finally(whoami);
+} else whoami();
 
 // ---------- progression: XP, levels, badges, garage unlocks (kept in the profile) ----------
 // XP like Zwift: 20 per km ridden, 12 per minute of workout, 50 per segment finished, plus each badge's bonus.
 const XP = { km:20, workoutMin:12, segment:50 };
 // Each level asks a little more than the last: 500 XP to level 2, then +250 each time.
+  if (signed) $('#accountEmail').textContent = me.email ? `Actuel : ${me.email}` : 'Aucun e-mail : ajoutes-en un pour pouvoir te connecter par lien.';
 function levelOf(xp) {
   let [level, at, need] = [1, 0, 500];
   while (xp >= at + need && level < 99) { at += need; level++; need = 500 + 250 * (level - 1) }

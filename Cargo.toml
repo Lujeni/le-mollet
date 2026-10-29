@@ -26,6 +26,8 @@ rusqlite = { version = "0.41.0", features = ["bundled"] }
 argon2 = "0.6.0"
 # the sign-up proof of work (src/account.rs)
 sha2 = "0.10"
+# sign-in links by e-mail (src/mail.rs)
+lettre = { version = "0.11.23", default-features = false, features = ["smtp-transport", "builder", "rustls-tls", "webpki-roots"] }
 
 [workspace]
 members = ["client"]

@@ -18,8 +18,11 @@
 //!   GET /power?session=<n>&w=<W>[&cad=&hr=&src=bt]  the rider's power: demo slider, or the browser's own trainer
 //!   GET /segments?id=<id>                      KOM and sprint leaderboards of a course or open world
 //!   GET /whoami                                the caller's identity, role and permissions (docs/rbac.md)
-//!   POST /auth/signup, /auth/login  (name=&password=, form-encoded)   a Le Mollet account; POST /auth/logout[?all=1] signs out
-//!   POST /auth/password  (password=&new=)   a new password, the other browsers signed out;  POST /auth/delete  (password=)   the account gone
+//!   POST /auth/signup (name=&email=&password=), /auth/login (name=&password=)   a Le Mollet account (form-encoded; in cloud mode the
+//!                                              e-mail is required and the password optional: without one, a link is mailed); POST /auth/logout[?all=1] signs out
+//!   POST /auth/link  (email=)   mails a sign-in link, {url}/?link=<t>;  POST /auth/link/use  (t=)   signs in with it (one use, 15 min)
+//!   POST /auth/password  (password=&new=)   a new password, the other browsers signed out;  POST /auth/email  (password=&email=)   a new e-mail;
+//!   POST /auth/delete  (password=)   the account gone
 //!   POST /admin/segments/reset?id=<id>&name=<segment>  wipe a leaderboard (moderate)
 //!
 //!   GET /emote?session=<n>&course=<id>&e=<rideon|wave|fire|laugh|party>[&to=<rider id>]  a bubble over my rider; a Ride On to someone
@@ -343,6 +346,8 @@ pub struct App {
     rideons: Mutex<HashMap<u64, std::time::Instant>>,
     /// Sign-up challenges already turned into an account, and when (account::pow_check): one account each.
     pow_used: Mutex<HashMap<String, std::time::Instant>>,
+    /// Sign-in links out by mail, token -> (account, when): one use, a quarter of an hour.
+    links: Mutex<HashMap<String, (u64, std::time::Instant)>>,
 }
 
 /// Connections at once: in all, and per client address.
@@ -435,6 +440,7 @@ impl App {
             roles: Mutex::new((Roles::load(&db)?, std::time::Instant::now())),
             rideons: Mutex::new(HashMap::new()),
             pow_used: Mutex::new(HashMap::new()),
+            links: Mutex::new(HashMap::new()),
             db,
         })
     }
@@ -538,6 +544,49 @@ impl App {
     }
 
     /// End one sign-in session.
+    /// A session for an account that just proved itself: kept in the database, the account's oldest browsers
+    /// signed out past 20; the `Set-Cookie` value to answer with.
+    fn open_session(&self, a: &account::Account) -> String {
+        let id = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
+        let s = Session { account: a.id, name: a.name.clone(), expires: std::time::SystemTime::now() + SESSION_TTL };
+        if let Err(e) = self.db.put("sessions", &id, &s) { eprintln!("sessions: {e}") }
+        {
+            // Expired sessions go; an account keeps its 20 most recent (older browsers sign out).
+            let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+            let now = std::time::SystemTime::now();
+            let gone: Vec<String> = sessions.iter().filter(|(_, s)| s.expires <= now).map(|(k, _)| k.clone()).collect();
+            let mut mine: Vec<(String, std::time::SystemTime)> = sessions.iter().filter(|(_, s)| s.account == a.id).map(|(k, s)| (k.clone(), s.expires)).collect();
+            mine.sort_by_key(|m| m.1);
+            let extra: Vec<String> = mine.iter().rev().skip(19).map(|m| m.0.clone()).collect();
+            for k in gone.iter().chain(&extra) { sessions.remove(k); if let Err(e) = self.db.delete("sessions", k) { eprintln!("sessions: {e}") } }
+            sessions.insert(id.clone(), s);
+        }
+        // Cloud sits behind https; LE_MOLLET_PUBLIC_URL=http://... says otherwise (a test on a LAN).
+        let secure = if self.mode == Mode::Cloud && !std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("http://")) || std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("https://")) { "; Secure" } else { "" };
+        format!("{SESSION_COOKIE}={id}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}{secure}", SESSION_TTL.as_secs())
+    }
+
+    /// A sign-in link to the account's e-mail (src/mail.rs), sent off this thread: the request does not wait for
+    /// the mail server. The link opens the page, which posts the token to /auth/link/use.
+    fn mail_link(&self, a: &account::Account, req: &str) {
+        let Some(to) = a.email.clone() else { return };
+        let t = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
+        {
+            let mut links = self.links.lock().unwrap_or_else(|e| e.into_inner());
+            links.retain(|_, (_, at)| at.elapsed() < LINK_TTL);
+            links.insert(t.clone(), (a.id, std::time::Instant::now()));
+        }
+        let base = std::env::var("LE_MOLLET_PUBLIC_URL").unwrap_or_else(|_| format!("http://{}", header(req, "host").unwrap_or("localhost:8080")));
+        let (subject, body) = account::link_mail(&a.name, &format!("{}/?link={t}", base.trim_end_matches('/')));
+        let name = a.name.clone();
+        tokio::task::spawn_blocking(move || {
+            match le_mollet::mail::send(&to, &subject, &body) {
+                Ok(()) => metrics::inc("le_mollet_mails_total", &[("result", "sent")]),
+                Err(e) => { eprintln!("mail to {name}: {e:#}"); metrics::inc("le_mollet_mails_total", &[("result", "failed")]) }
+            }
+        });
+    }
+
     fn end_session(&self, id: &str) -> usize {
         let gone = self.sessions.lock().unwrap_or_else(|e| e.into_inner()).remove(id).is_some();
         if let Err(e) = self.db.delete("sessions", id) { eprintln!("sessions: {e}") }
@@ -657,8 +706,8 @@ fn public_id(sid: u64) -> u64 {
 
 /// Calls that change something: POST only (`/rider` with a weight too). Steering one's own ride stays GET: it
 /// needs the ride's session, which only its page knows.
-const POST_ONLY: [&str; 17] = ["/worlds/new", "/event/create", "/event/join", "/event/leave", "/event/delete", "/club/create", "/club/join", "/club/leave",
-    "/friend/ask", "/friend/accept", "/friend/remove", "/friend/ride", "/friend/unride", "/auth/logout", "/auth/password", "/auth/delete", "/admin/segments/reset"];
+const POST_ONLY: [&str; 20] = ["/worlds/new", "/event/create", "/event/join", "/event/leave", "/event/delete", "/club/create", "/club/join", "/club/leave",
+    "/friend/ask", "/friend/accept", "/friend/remove", "/friend/ride", "/friend/unride", "/auth/logout", "/auth/password", "/auth/delete", "/auth/email", "/auth/link", "/auth/link/use", "/admin/segments/reset"];
 
 /// Emotes a rider can send.
 const EMOTES: [&str; 5] = ["rideon", "wave", "fire", "laugh", "party"];
@@ -750,7 +799,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
     let client = client_ip(&req, peer, app.mode);
     // What costs the server something (a password hash, a world, a row that stays) is counted per client.
     let budget = match path {
-        "/auth/password" | "/auth/delete" => Some(("auth", 10, 3600)),
+        "/auth/password" | "/auth/delete" | "/auth/email" | "/auth/link/use" => Some(("auth", 10, 3600)),
+        "/auth/link" => Some(("link", 5, 3600)),
         // Accounts: 3 an hour and 5 a day from one address, 100 an hour from everywhere (a flood stops at the door).
         "/auth/signup" if req.starts_with("POST ") => Some(("signup", 3, 3600)),
         "/auth/login" => Some(("auth", 10, 3600)),
@@ -825,7 +875,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         ("/whoami", _) => {
             // `devices`: the account's live sessions, for its settings.
             let devices = who.account.map(|id| app.sessions.lock().unwrap_or_else(|e| e.into_inner()).values().filter(|s| s.account == id && s.expires > std::time::SystemTime::now()).count());
-            let body = json!({ "role": who.role, "name": who.name, "account": who.account, "perms": who.role.perms(), "mode": app.mode, "devices": devices }).to_string();
+            let body = json!({ "role": who.role, "name": who.name, "account": who.account, "perms": who.role.perms(), "mode": app.mode, "devices": devices, "email": who.account.and_then(|id| account::by_id(&app.db, id)).and_then(|a| a.email) }).to_string();
             reply(&mut sock, "200 OK", "application/json", body.as_bytes()).await
         }
         ("/auth/challenge", _) => reply(&mut sock, "200 OK", "application/json", json!({ "token": account::pow_challenge(unix_now()), "bits": account::POW_BITS }).to_string().as_bytes()).await,
@@ -833,7 +883,9 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
             let (name, password) = (param(form, "name").map(decode).unwrap_or_default(), param(form, "password").map(decode).unwrap_or_default());
             let name = name.trim().to_owned();
-            // A sign-up carries its proof of work (account::pow_check), each challenge good for one account.
+            let email = param(form, "email").map(decode).map(|e| e.trim().to_ascii_lowercase()).filter(|e| !e.is_empty());
+            // A sign-up carries its proof of work (account::pow_check), each challenge good for one account; in
+            // cloud mode it carries an e-mail, the password optional (without one, the mailbox is the key).
             if path == "/auth/signup" {
                 let checked = account::pow_check(&param(form, "pow").map(decode).unwrap_or_default(), unix_now()).and_then(|token| {
                     let mut used = app.pow_used.lock().unwrap_or_else(|e| e.into_inner());
@@ -844,6 +896,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     metrics::inc("le_mollet_rejected_total", &[("reason", "pow")]);
                     return reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await;
                 }
+                if app.mode == Mode::Cloud && email.is_none() { return reply(&mut sock, "400 Bad Request", "text/plain", b"email: required").await }
             }
             // Five wrong passwords for a name from one client: that client waits 15 minutes for that name (the
             // per-client budget above slows the rest).
@@ -854,7 +907,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 fails.get(&key).is_some_and(|(n, _)| *n >= 5)
             };
             let res = if locked { Err("too many tries: wait 15 minutes") } else if path == "/auth/signup" {
-                tokio::task::block_in_place(|| account::signup(&app.db, &name, &password, unix_now())) // the hash takes a while, on purpose
+                tokio::task::block_in_place(|| account::signup(&app.db, &name, email.as_deref(), Some(password.as_str()), unix_now())) // the hash takes a while, on purpose
             } else {
                 tokio::task::block_in_place(|| account::login(&app.db, &name, &password))
             };
@@ -862,23 +915,12 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 Ok(a) => {
                     metrics::inc("le_mollet_signins_total", &[("result", if path == "/auth/signup" { "signup" } else { "ok" })]);
                     app.login_fails.lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
-                    let id = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
-                    let s = Session { account: a.id, name: a.name.clone(), expires: std::time::SystemTime::now() + SESSION_TTL };
-                    if let Err(e) = app.db.put("sessions", &id, &s) { eprintln!("sessions: {e}") }
-                    {
-                        // Expired sessions go; an account keeps its 20 most recent (older browsers sign out).
-                        let mut sessions = app.sessions.lock().unwrap_or_else(|e| e.into_inner());
-                        let now = std::time::SystemTime::now();
-                        let gone: Vec<String> = sessions.iter().filter(|(_, s)| s.expires <= now).map(|(k, _)| k.clone()).collect();
-                        let mut mine: Vec<(String, std::time::SystemTime)> = sessions.iter().filter(|(_, s)| s.account == a.id).map(|(k, s)| (k.clone(), s.expires)).collect();
-                        mine.sort_by_key(|m| m.1);
-                        let extra: Vec<String> = mine.iter().rev().skip(19).map(|m| m.0.clone()).collect();
-                        for k in gone.iter().chain(&extra) { sessions.remove(k); if let Err(e) = app.db.delete("sessions", k) { eprintln!("sessions: {e}") } }
-                        sessions.insert(id.clone(), s);
+                    if path == "/auth/signup" && password.is_empty() {
+                        // No password: the first sign-in is by the link, so the mailbox is proven before anything.
+                        app.mail_link(&a, &req);
+                        return reply(&mut sock, "202 Accepted", "text/plain", b"link sent").await;
                     }
-                    // Cloud sits behind https; LE_MOLLET_PUBLIC_URL=http://... says otherwise (a test on a LAN).
-                    let secure = if app.mode == Mode::Cloud && !std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("http://")) || std::env::var("LE_MOLLET_PUBLIC_URL").is_ok_and(|u| u.starts_with("https://")) { "; Secure" } else { "" };
-                    let cookie = format!("{SESSION_COOKIE}={id}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}{secure}", SESSION_TTL.as_secs());
+                    let cookie = app.open_session(&a);
                     let body = json!({ "name": a.name, "account": a.id }).to_string();
                     let head = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nSet-Cookie: {cookie}\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
                     metrics::inc("le_mollet_http_responses_total", &[("code", "200")]);
@@ -896,6 +938,34 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     reply(&mut sock, if locked { "429 Too Many Requests" } else { "400 Bad Request" }, "text/plain", e.as_bytes()).await
                 }
             }
+        }
+        // A sign-in link by mail: the same answer whether the address is known or not (nothing to enumerate), the
+        // mail sent off the request (nothing to time).
+        ("/auth/link", _) if req.starts_with("POST ") => {
+            let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
+            let email = param(form, "email").map(decode).unwrap_or_default().trim().to_ascii_lowercase();
+            if let Some(a) = tokio::task::block_in_place(|| account::by_email(&app.db, &email)) { app.mail_link(&a, &req) }
+            reply(&mut sock, "202 Accepted", "text/plain", b"link sent").await
+        }
+        ("/auth/link/use", _) if req.starts_with("POST ") => {
+            let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
+            let t = param(form, "t").map(decode).unwrap_or_default();
+            let hit = {
+                let mut links = app.links.lock().unwrap_or_else(|e| e.into_inner());
+                links.retain(|_, (_, at)| at.elapsed() < LINK_TTL);
+                links.remove(&t).map(|(id, _)| id)
+            };
+            let Some(a) = hit.and_then(|id| account::by_id(&app.db, id)) else {
+                metrics::inc("le_mollet_signins_total", &[("result", "refused")]);
+                return reply(&mut sock, "400 Bad Request", "text/plain", b"link: expired or used").await;
+            };
+            metrics::inc("le_mollet_signins_total", &[("result", "link")]);
+            let cookie = app.open_session(&a);
+            let body = json!({ "name": a.name, "account": a.id }).to_string();
+            let head = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nSet-Cookie: {cookie}\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+            metrics::inc("le_mollet_http_responses_total", &[("code", "200")]);
+            sock.write_all(head.as_bytes()).await?;
+            sock.write_all(body.as_bytes()).await
         }
         ("/auth/logout", _) => {
             // `all=1`: every browser of the account, not only this one.
@@ -924,6 +994,15 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                     eprintln!("account {name} deleted itself");
                     redirect(&mut sock, "/", Some(CLEAR_COOKIE)).await
                 }
+                Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
+            }
+        }
+        ("/auth/email", _) if req.starts_with("POST ") => {
+            let Some(name) = who.name.clone().filter(|_| who.account.is_some()) else { return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await };
+            let form = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
+            let (password, email) = (param(form, "password").map(decode).unwrap_or_default(), param(form, "email").map(decode).unwrap_or_default());
+            match tokio::task::block_in_place(|| account::set_email(&app.db, &name, &password, &email)) {
+                Ok(_) => reply(&mut sock, "204 No Content", "text/plain", b"").await,
                 Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
             }
         }
@@ -1934,6 +2013,8 @@ async fn ride_session(
 /// Sign-in sessions: an HttpOnly cookie naming an entry of `App::sessions`.
 const SESSION_COOKIE: &str = "lm_session";
 const CLEAR_COOKIE: &str = "lm_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+/// A sign-in link is good for this long, once.
+const LINK_TTL: Duration = Duration::from_secs(900);
 const SESSION_TTL: Duration = Duration::from_secs(30 * 86_400);
 
 #[derive(Clone, Serialize, serde::Deserialize)]

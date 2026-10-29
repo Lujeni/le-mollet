@@ -1,6 +1,7 @@
-//! Le Mollet accounts: a name and a password, nothing else, kept in the database (src/db.rs). Passwords are
+//! Le Mollet let hash = PasswordHash::new(a.as_ref().map(|a| a.hash.as_str()).filter(|h| !h.is_empty()).unwrap_or(DUMMY.as_str()))ccounts: a name, a password or an e-mail (or both), kept in the database (src/db.rs). Passwords are
 //! stored as Argon2id hashes (PHC strings with their own salt), never as such. In cloud mode an account is
-//! required to ride; at home it is optional (roles for LAN guests). See docs/rbac.md.
+//! required to ride and carries an e-mail; at home it is optional (roles for LAN guests). See docs/rbac.md.
+//! An account without a password signs in by a link sent to its e-mail (`link`, src/mail.rs).
 
 use crate::db::Db;
 use argon2::Argon2;
@@ -12,8 +13,12 @@ pub struct Account {
     /// What roles and profiles refer to; the name may be looked up case-insensitively.
     pub id: u64,
     pub name: String,
+    /// Empty: no password, the account signs in by e-mail only.
     hash: String,
     pub created: u64,
+    /// Lower case, one account each; where the sign-in links go.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
 }
 
 /// 3 to 24 letters, digits, `-` or `_`: a name to type and to show, nothing to escape.
@@ -34,14 +39,34 @@ pub fn by_id(db: &Db, id: u64) -> Option<Account> {
     db.all::<Account>("accounts").ok()?.into_iter().map(|(_, a)| a).find(|a| a.id == id)
 }
 
-/// Create an account. Slow on purpose (the hash): call it off the async threads.
-pub fn signup(db: &Db, name: &str, password: &str, now: u64) -> Result<Account, &'static str> {
+/// `a@b.c`, 254 characters at most, no spaces: enough to send to, the mail server says the rest.
+pub fn valid_email(email: &str) -> bool {
+    let Some((user, host)) = email.split_once('@') else { return false };
+    email.len() <= 254 && !user.is_empty() && host.contains('.') && !host.starts_with('.') && !host.ends_with('.') && !email.chars().any(|c| c.is_whitespace() || c.is_control()) && email.matches('@').count() == 1
+}
+
+// ponytail: a scan, like by_id; an index when accounts count in thousands
+pub fn by_email(db: &Db, email: &str) -> Option<Account> {
+    let email = email.to_ascii_lowercase();
+    db.all::<Account>("accounts").ok()?.into_iter().map(|(_, a)| a).find(|a| a.email.as_deref() == Some(&email))
+}
+
+/// Create an account: a password, an e-mail, or both (`None` and `""` alike mean none). Slow on purpose (the
+/// hash): call it off the async threads.
+pub fn signup(db: &Db, name: &str, email: Option<&str>, password: Option<&str>, now: u64) -> Result<Account, &'static str> {
     if !valid_name(name) { return Err("name: 3 to 24 letters, digits, - or _") }
     if find(db, name).is_some() { return Err("name taken") }
-    let hash = hash(password)?;
+    let email = email.map(str::trim).filter(|e| !e.is_empty()).map(str::to_ascii_lowercase);
+    if let Some(e) = &email {
+        if !valid_email(e) { return Err("email: not an address") }
+        if by_email(db, e).is_some() { return Err("email taken") }
+    }
+    let password = password.filter(|p| !p.is_empty());
+    if password.is_none() && email.is_none() { return Err("password: 8 characters at least") }
+    let hash = password.map(hash).transpose()?.unwrap_or_default();
     // A random id below 2^53, so the page reads it exactly.
     let id = ((uuid::Uuid::new_v4().as_u128() >> 75) as u64).max(1);
-    let a = Account { id, name: name.into(), hash, created: now };
+    let a = Account { id, name: name.into(), hash, created: now, email };
     // Atomic: two sign-ups with one name at once, one wins (the check above only gives the quick answer).
     match db.insert("accounts", &key(name), &a) {
         Ok(true) => Ok(a),
@@ -65,11 +90,27 @@ pub fn set_password(db: &Db, name: &str, password: &str, new: &str) -> Result<Ac
     Ok(a)
 }
 
+/// A new e-mail, the password checked first (an account without one got here by its mail: it has no other key).
+pub fn set_email(db: &Db, name: &str, password: &str, email: &str) -> Result<Account, &'static str> {
+    let mut a = login(db, name, password)?;
+    let email = email.trim().to_ascii_lowercase();
+    if !valid_email(&email) { return Err("email: not an address") }
+    if by_email(db, &email).is_some_and(|o| o.id != a.id) { return Err("email taken") }
+    a.email = Some(email);
+    db.put("accounts", &key(name), &a).map_err(|_| "could not save the account")?;
+    Ok(a)
+}
+
 /// The account gone, its password checked first. Its sessions and profiles are the server's to end (src/web.rs).
 pub fn delete(db: &Db, name: &str, password: &str) -> Result<Account, &'static str> {
     let a = login(db, name, password)?;
     db.delete("accounts", &key(name)).map_err(|_| "could not delete the account")?;
     Ok(a)
+}
+
+/// A sign-in link's body, for src/mail.rs; the token is the server's (one use, a quarter of an hour).
+pub fn link_mail(name: &str, url: &str) -> (String, String) {
+    ("Ta connexion à Le Mollet".into(), format!("Salut {name},\n\nVoici ton lien pour te connecter, valable 15 minutes et une seule fois :\n\n{url}\n\nSi tu n'as rien demandé, ignore ce message.\n\nLe Mollet"))
 }
 
 /// Sign-up proof of work, a captcha nobody sees: the page asks for a challenge, finds a counter whose SHA-256
@@ -129,7 +170,7 @@ pub fn login(db: &Db, name: &str, password: &str) -> Result<Account, &'static st
     let a = find(db, name);
     let hash = PasswordHash::new(a.as_ref().map_or(DUMMY.as_str(), |a| a.hash.as_str())).map_err(|_| WRONG)?;
     Argon2::default().verify_password(password.as_bytes(), &hash).map_err(|_| WRONG)?;
-    a.ok_or(WRONG)
+    a.filter(|a| !a.hash.is_empty()).ok_or(WRONG)
 }
 
 #[cfg(test)]
@@ -139,11 +180,11 @@ mod tests {
     #[test]
     fn sign_up_then_log_in() {
         let db = Db::memory();
-        assert_eq!(signup(&db, "Ju", "longenough", 1).unwrap_err(), "name: 3 to 24 letters, digits, - or _");
-        assert_eq!(signup(&db, "Julien", "short", 1).unwrap_err(), "password: 8 characters at least");
-        let a = signup(&db, "Julien", "pédale-douce", 1).unwrap();
+        assert_eq!(signup(&db, "Ju", None, Some("longenough"), 1).unwrap_err(), "name: 3 to 24 letters, digits, - or _");
+        assert_eq!(signup(&db, "Julien", None, Some("short"), 1).unwrap_err(), "password: 8 characters at least");
+        let a = signup(&db, "Julien", Some("Ju@Example.org"), Some("pédale-douce"), 1).unwrap();
         assert!(a.id > 0 && a.id < 1 << 53 && a.hash.starts_with("$argon2id$") && !a.hash.contains("pédale"));
-        assert_eq!(signup(&db, "julien", "autrechose", 2).unwrap_err(), "name taken");
+        assert_eq!(signup(&db, "julien", None, Some("autrechose"), 2).unwrap_err(), "name taken");
         assert_eq!(login(&db, "JULIEN", "pédale-douce").unwrap().id, a.id);
         assert_eq!(login(&db, "Julien", "pedale-douce").unwrap_err(), "wrong name or password");
         assert_eq!(login(&db, "nobody", "pédale-douce").unwrap_err(), "wrong name or password");
@@ -157,6 +198,26 @@ mod tests {
         assert_eq!(delete(&db, "julien", "pédale-douce").unwrap_err(), "wrong name or password");
         assert_eq!(delete(&db, "julien", "nouveau-mdp").unwrap().id, a.id);
         assert!(find(&db, "julien").is_none());
+    }
+
+    #[test]
+    fn email_and_no_password() {
+        let db = Db::memory();
+        assert_eq!(signup(&db, "Marie", None, None, 1).unwrap_err(), "password: 8 characters at least");
+        assert_eq!(signup(&db, "Marie", Some("marie"), None, 1).unwrap_err(), "email: not an address");
+        assert!(!valid_email("a@b") && !valid_email("a b@c.d") && !valid_email("@c.d") && !valid_email("a@.d") && valid_email("a@b.c"));
+        let m = signup(&db, "Marie", Some(" Marie@Mail.fr "), None, 1).unwrap();
+        assert_eq!(m.email.as_deref(), Some("marie@mail.fr"));
+        assert_eq!(signup(&db, "Marie2", Some("marie@mail.fr"), Some("longenough"), 1).unwrap_err(), "email taken");
+        // No password: no password works, the same answer as a wrong one.
+        assert_eq!(login(&db, "marie", "").unwrap_err(), "wrong name or password");
+        assert_eq!(by_email(&db, "MARIE@mail.fr").unwrap().id, m.id);
+        assert!(by_email(&db, "nobody@mail.fr").is_none());
+        let j = signup(&db, "Julien", None, Some("pédale-douce"), 1).unwrap();
+        assert_eq!(set_email(&db, "julien", "pédale-douce", "marie@mail.fr").unwrap_err(), "email taken");
+        assert_eq!(set_email(&db, "julien", "pédale-douce", "ju@mail.fr").unwrap().email.as_deref(), Some("ju@mail.fr"));
+        assert_eq!(by_email(&db, "ju@mail.fr").unwrap().id, j.id);
+        assert!(link_mail("Marie", "https://x/?link=1").1.contains("https://x/?link=1"));
     }
 
     #[test]

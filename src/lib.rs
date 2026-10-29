@@ -13,6 +13,7 @@ pub mod city;
 pub mod course;
 pub mod district;
 pub mod island;
+pub mod mail;
 pub mod ortho;
 pub mod metrics;
 pub mod peloton;
