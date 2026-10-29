@@ -61,12 +61,14 @@ impl Role {
 pub struct Identity {
     pub role: Role,
     pub name: Option<String>,
-    /// Le Mollet account id, when signed in (src/account.rs).
+    /// Le Mollet account id, when signed in (`account::Auth::account_id`).
     pub account: Option<u64>,
+    /// torii's user id behind it (src/account.rs).
+    pub user: Option<String>,
 }
 
 impl Identity {
-    pub const ANONYMOUS: Identity = Identity { role: Role::Rider, name: None, account: None };
+    pub const ANONYMOUS: Identity = Identity { role: Role::Rider, name: None, account: None, user: None };
 
     pub fn can(&self, p: Perm) -> bool {
         self.role.can(p)

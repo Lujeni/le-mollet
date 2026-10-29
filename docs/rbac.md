@@ -34,14 +34,18 @@ to show or hide controls; the server checks again on every request.
 
 ## Accounts
 
-A Le Mollet account (`src/account.rs`) is, at home, a name and a password (**Profile > Compte**: *Se connecter* or
+Accounts, sessions and sign-in links are [torii](https://github.com/cmackenzie1/torii-rs)'s (`src/account.rs`:
+torii's tables in the server's SQLite file, our own token repository since torii's SQLite one is a stub, and a
+`u64` folded out of torii's user id for the roles, profiles and ride owners). A Le Mollet account is, at home, a name and a password (**Profile > Compte**: *Se connecter* or
 *Créer un compte*); on a public server, an e-mail and no password at all (**the sign-in screen**; the name comes out of the e-mail, and
 **Mon compte** renames): every
-sign-in is a link sent to the mailbox (15 minutes, one use; docs/security.md), and the first one proves the address.
+sign-in is a link sent to the mailbox (15 minutes, one use; docs/security.md), and the first one proves the address:
+until then the account is **provisional** (a typo in the address is not a lost name: a new sign-up with the same name
+or e-mail takes its place), and after a day without an answer it is dropped.
 The e-mail is changed from the account settings; at home, password in hand.
 
 - **Name**: 3 to 24 letters, digits, `-` or `_`; "Julien" and "julien" are one account.
-- **Password**: 8 to 128 characters, stored as an Argon2id hash (its own salt, PHC string), never as such.
+- **Password** (home only): 8 to 128 characters, hashed by torii (Argon2id, its own salt), never stored as such.
 - `POST /auth/signup` or `/auth/login` with `name` and `password` (form-encoded) set an `lm_session` cookie:
   HttpOnly, SameSite=Lax, 30 days, and `Secure` when `LE_MOLLET_PUBLIC_URL` starts with `https://`. Sessions are
   kept in the database: a restart signs nobody out. `/auth/logout` ends one, `/auth/logout?all=1` every one of the account.

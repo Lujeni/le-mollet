@@ -22,8 +22,14 @@ png = "0.17"
 flate2 = "1.1"
 ureq = { version = "2", features = ["json"] }
 clap = { version = "4", features = ["derive"] }
-rusqlite = { version = "0.41.0", features = ["bundled"] }
-argon2 = "0.6.0"
+# 0.32: the libsqlite3-sys that torii's sqlx storage links too (one native SQLite per binary)
+rusqlite = { version = "0.32", features = ["bundled"] }
+# accounts, sessions, magic links and passwords (src/account.rs)
+torii = { version = "0.5.3", default-features = false, features = ["sqlite", "magic-link", "password"] }
+torii-core = "0.5.2"
+async-trait = "0.1"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "chrono", "uuid"] }
+chrono = "0.4"
 # the sign-up proof of work (src/account.rs)
 sha2 = "0.10"
 # sign-in links by e-mail (src/mail.rs)

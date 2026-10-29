@@ -181,27 +181,29 @@ async fn main() -> anyhow::Result<()> {
         }
         Cmd::Role { action, account, role, note, db } => {
             use le_mollet::auth::{Grant, Role, Roles};
+            use le_mollet::account::Auth;
+            let auth = Auth::open(&db).await?;
             let db = le_mollet::db::Db::open(&db, &[db_dir(&db)])?;
             let mut r = Roles::load(&db)?;
-            let find = |name: &str| le_mollet::account::find(&db, name).with_context(|| format!("no account named {name}"));
+            let label = |u: &torii::User| u.name.clone().unwrap_or_else(|| u.email.clone());
             match (action.as_str(), account, role) {
                 ("set", Some(name), Some(role)) => {
-                    let a = find(&name)?;
+                    let a = auth.by_name(&name).await.with_context(|| format!("no account named {name}"))?;
                     let role = Role::parse(&role).context("role: admin, organizer or rider")?;
-                    r.grants.insert(a.id, Grant { role, note });
+                    r.grants.insert(Auth::account_id(&a.id), Grant { role, note });
                     r.save(&db)?;
-                    println!("{} is now {role:?} on this server (effective at once).", a.name);
+                    println!("{} is now {role:?} on this server (effective at once).", label(&a));
                 }
                 ("remove", Some(name), _) => {
-                    let a = find(&name)?;
-                    anyhow::ensure!(r.grants.remove(&a.id).is_some(), "{} has no role", a.name);
+                    let a = auth.by_name(&name).await.with_context(|| format!("no account named {name}"))?;
+                    anyhow::ensure!(r.grants.remove(&Auth::account_id(&a.id)).is_some(), "{} has no role", label(&a));
                     r.save(&db)?;
-                    println!("{} is a rider again.", a.name);
+                    println!("{} is a rider again.", label(&a));
                 }
-                ("list", _, _) => r.grants.iter().for_each(|(id, g)| {
-                    let name = le_mollet::account::by_id(&db, *id).map_or_else(|| format!("#{id}"), |a| a.name);
+                ("list", _, _) => for (id, g) in &r.grants {
+                    let name = auth.by_account(*id).await.map_or_else(|| format!("#{id}"), |a| label(&a));
                     println!("{name:<24} {:<10} {}", format!("{:?}", g.role), g.note)
-                }),
+                },
                 _ => anyhow::bail!("usage: le-mollet role set <account> admin|organizer|rider [--note X] | remove <account> | list"),
             }
             Ok(())
@@ -317,8 +319,11 @@ async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &st
         }
         None => None,
     };
+    let auth = le_mollet::account::Auth::open(db).await?;
+    let swept = auth.sweep().await;
+    if swept > 0 { eprintln!("{swept} provisional account(s) dropped: signed up by e-mail, never signed in") }
     let db = le_mollet::db::Db::open(db, &[courses, db_dir(db)])?;
-    let app = Arc::new(web::App::new(courses, trainer, difficulty, db, mode)?);
+    let app = Arc::new(web::App::new(courses, trainer, difficulty, db, auth, mode)?);
     if mode == web::Mode::Local && addr.starts_with("0.0.0.0:") {
         // The address other PCs on the network use; connecting a UDP socket sends nothing.
         let ip = std::net::UdpSocket::bind("0.0.0.0:0").and_then(|u| u.connect("192.0.2.1:9").and(u.local_addr()));
