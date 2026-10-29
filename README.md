@@ -125,7 +125,8 @@ for hardware to support: tell us how your trainer did with a [hardware report](h
   lighter for 15 s), Aero (a quarter less drag) or Draft (50 % more on a wheel for 30 s).
 - **Clubs.** Found a club or join one with its code: your tag rides before your name, and the club ranks its
   members by kilometres this week.
-- **Friends and coaches.** Each profile gets a handle like `Lujeni#2138`: send a request, and once it is accepted
+- **Friends and coaches.** You get a handle like `Lujeni#2138` (your account's on a public server, one for all your
+  profiles; the profile's at home): send a request, and once it is accepted
   you both see each other's profile (FTP, W/kg, rank) and rides, with their power and elevation curves. Handy for a
   coach following their riders. Removing a friend stops the sharing.
 - **Ride On!** Send a thumbs-up to the rider next to you, or a quick emote (keys 1 to 5): it pops up over your

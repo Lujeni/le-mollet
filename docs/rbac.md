@@ -51,7 +51,8 @@ The e-mail is changed from the account settings; at home, password in hand.
   kept in the database: a restart signs nobody out. `/auth/logout` ends one, `/auth/logout?all=1` every one of the account.
 - **Settings** (Profile > Compte, signed in): `POST /auth/password` (`password`, `new`) changes the password and signs
   the other browsers out; `POST /auth/delete` (`password`) removes the account, its sessions and the profiles it
-  owns (their club seats and friendships with them). `/whoami` tells how many browsers are signed in (`devices`).
+  owns (their club seats), and the account's friendships: signed in, friends are the account's, one handle for all
+  its profiles (`friend::account_key`); at home, with no account, each profile has its own. `/whoami` tells how many browsers are signed in (`devices`).
 - **Password guessing**: five wrong passwords for a name lock that name for 15 minutes. A wrong name and a wrong
   password get the same answer, in the same time (an unknown name is checked against a dummy hash).
 - Requests from another site's page are refused, sign-in included (docs/security.md).

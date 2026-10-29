@@ -4,6 +4,8 @@
 //! Kept in the database (src/db.rs): one row per profile (handle, friends, the rides' ids and dates), and each
 //! ride as a row of its own (`rides:<pid>`), read only when a friend looks: a ride is a few KB of trace, so
 //! neither the memory nor a profile's row grows with them.
+//! Signed in, the key is the account's (`account_key`), one handle for all its profiles: a coach follows the person,
+//! not a profile. At home, with no account, the key is the profile id.
 //! ponytail: a pid is the only credential, like clubs (src/club.rs); in cloud mode the account owns the pid
 
 use crate::db::Db;
@@ -45,6 +47,16 @@ pub struct Person {
 
 fn coll(pid: &str) -> String {
     format!("rides:{pid}")
+}
+
+/// The friends key of a signed-in account.
+pub fn account_key(account: u64) -> String {
+    format!("acct:{account}")
+}
+
+/// The account behind a key, if it is an account's.
+pub fn account_of(key: &str) -> Option<u64> {
+    key.strip_prefix("acct:").and_then(|a| a.parse().ok())
 }
 
 impl Person {

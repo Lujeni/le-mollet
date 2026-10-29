@@ -65,7 +65,7 @@
 use le_mollet::Trainer;
 use le_mollet::auth::{Identity, Perm, Role, Roles};
 use le_mollet::club::{self, Clubs};
-use le_mollet::friend::Friends;
+use le_mollet::friend::{self, Friends};
 use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
 use le_mollet::peloton::{self, View};
 use le_mollet::account::{self, Auth};
@@ -599,14 +599,14 @@ impl App {
             for p in &pids { riders.riders.remove(p); if let Err(e) = self.db.delete("riders", p) { eprintln!("riders: {e}") } }
             pids
         };
-        if pids.is_empty() { return }
-        {
+        if !pids.is_empty() {
             let mut clubs = self.clubs.lock().unwrap_or_else(|e| e.into_inner());
             for p in &pids { clubs.leave(p) }
             if let Err(e) = clubs.save(&self.db) { eprintln!("clubs: {e}") }
         }
+        // Friendships: the profiles' (at home) and the account's own (signed in).
         let mut friends = self.friends.lock().unwrap_or_else(|e| e.into_inner());
-        for p in &pids {
+        for p in pids.iter().chain(std::iter::once(&friend::account_key(account))) {
             let handles: Vec<String> = friends.people.get(p).map(|me| me.friends.iter().chain(&me.asked).filter_map(|k| friends.people.get(k)).map(|o| o.handle()).collect()).unwrap_or_default();
             for h in handles { let _ = friends.remove(p, &h); }
             let others: Vec<String> = friends.sent(p);
@@ -1298,6 +1298,10 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let Some(pid) = pid else {
                 return reply(&mut sock, "400 Bad Request", "text/plain", b"need pid").await;
             };
+            // Signed in, friends are the account's (one handle for all its profiles, a coach follows the person); at
+            // home, with no account, the profile's.
+            let key = who.account.map_or_else(|| pid.to_owned(), friend::account_key);
+            let pid = key.as_str();
             let handle = param(query, "h").map(decode).unwrap_or_default();
             let res: Result<Vec<String>, &str> = {
                 let mut friends = app.friends.lock().unwrap_or_else(|e| e.into_inner());
@@ -1334,7 +1338,8 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 let riders = app.riders.lock().unwrap_or_else(|e| e.into_inner());
                 let now = unix_now();
                 let card = |k: &str| friends.people.get(k).map(|p| {
-                    let r = riders.riders.get(k);
+                    // The rider behind the key: the profile, or any profile of the account.
+                    let r = riders.riders.get(k).or_else(|| friend::account_of(k).and_then(|a| riders.riders.values().find(|r| r.owner == Some(a))));
                     json!({ "handle": p.handle(), "name": p.name, "country": p.country, "last": p.kept.first().map(|r| &r.1), "rides": p.kept.len(),
                         "weight": r.map(|r| r.weight), "ftp": r.map(|r| r.ftp), "rank": r.map(|r| r.rank(now).to_string()) })
                 });
