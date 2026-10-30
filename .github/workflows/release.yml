@@ -1,4 +1,5 @@
 # A release on every tag v*: one archive per platform (the binary, the courses, the docs), checksums, and the
+# GitHub release. Linux and Windows for now; macOS comes back when someone tests it (two lines in the matrix).
 # GitHub release itself with generated notes. See docs/CONTRIBUTING.md, "Releasing". Run by hand for a tag that
 # exists already (a fix to this file, a runner that failed): gh workflow run release.yml -f tag=v0.3.0
 name: Release
@@ -27,8 +28,6 @@ jobs:
         include:
           - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, name: linux-x86_64 }
           - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, name: linux-aarch64 }
-          - { os: macos-14, target: aarch64-apple-darwin, name: macos-apple-silicon }
-          - { os: macos-15-intel, target: x86_64-apple-darwin, name: macos-intel }
           - { os: windows-latest, target: x86_64-pc-windows-msvc, name: windows-x86_64 }
     runs-on: ${{ matrix.os }}
     steps:

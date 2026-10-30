@@ -70,7 +70,7 @@ Add a scenario there whenever a route changes: it is what catches a form that no
 ## Releasing
 
 A tag `v*` on `main` makes the release: the workflow in `.github/workflows/release.yml` builds the binary for
-Linux (x86_64, ARM), macOS (Apple Silicon, Intel) and Windows, packs each with the courses and the docs, writes
+Linux (x86_64, ARM) and Windows (macOS later: two lines in its matrix), packs each with the courses and the docs, writes
 `SHA256SUMS`, and publishes a GitHub release with generated notes. For a tag that exists already (the workflow
 fixed, a runner that failed), run it by hand: `gh workflow run release.yml -f tag=v0.3.0`; the release's files
 are replaced.
