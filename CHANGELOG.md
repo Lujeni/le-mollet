@@ -1,3 +1,9 @@
+## v0.4.1 (2026-10-30)
+
+### Fix
+
+- **ride**: watts and clock precision, a HUD that patches instead of rebuilding
+
 ## v0.4.0 (2026-10-30)
 
 ### Feat
