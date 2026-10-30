@@ -71,7 +71,9 @@ Add a scenario there whenever a route changes: it is what catches a form that no
 
 A tag `v*` on `main` makes the release: the workflow in `.github/workflows/release.yml` builds the binary for
 Linux (x86_64, ARM), macOS (Apple Silicon, Intel) and Windows, packs each with the courses and the docs, writes
-`SHA256SUMS`, and publishes a GitHub release with generated notes.
+`SHA256SUMS`, and publishes a GitHub release with generated notes. For a tag that exists already (the workflow
+fixed, a runner that failed), run it by hand: `gh workflow run release.yml -f tag=v0.3.0`; the release's files
+are replaced.
 
 1. `cz bump` ([commitizen](https://commitizen-tools.github.io/commitizen/), config in `.cz.toml`): it reads the commits since
    the last tag, picks the version (feat → minor, fix → patch; major stays 0), bumps `[workspace.package].version`
