@@ -35,7 +35,7 @@ pub const DEFS: &[(&str, &str, &str)] = &[
     ("le_mollet_worlds_generated_total", "counter", "Open worlds generated on request"),
     ("le_mollet_signins_total", "counter", "Sign-ups and sign-ins, by result (signup, ok, link, refused, locked)"),
     ("le_mollet_mails_total", "counter", "Sign-in links mailed, by result (sent, failed)"),
-    ("le_mollet_feedback_total", "counter", "What riders told us from the page, by kind (bug, idea, feedback)"),
+    ("le_mollet_feedback_total", "counter", "What riders told us from the page, by kind (bug, idea, feedback, hardware)"),
     // Read at scrape time
     ("le_mollet_riders_online", "gauge", "Riders on the road now, by track (pace partners excluded)"),
     ("le_mollet_events_upcoming", "gauge", "Events not over yet, by kind"),

@@ -2,17 +2,22 @@
 
 ## Tested hardware
 
-✅ verified on the device · ⚠️ partial · ⏳ not tested yet. Tested something? Add a row (see
+✅ verified on the device · ⚠️ partial · ⏳ not tested yet. Tested something? The 🚲 tab on the page has a guided
+test (pedal, a grade, an ERG target, the controller's buttons) that sends a report with every Bluetooth frame seen,
+the trainer's feature word and the figures; or add a row (see
 [Testing a trainer](CONTRIBUTING.md#testing-a-trainer)).
 
 | Trainer | Firmware | Protocol | Connection | Speed | Cadence | Power | Grade (ride) | ERG (workout) |
 |---|---|---|---|---|---|---|---|---|
 | Wahoo KICKR CORE | 1.3.17 | FTMS | ✅ | ✅ | ✅ | ✅ | ✅ from the browser | ⏳ |
 | Older Wahoo KICKR (no FTMS) | | Wahoo proprietary | ⏳ implemented, untested | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| Van Rysel D500 (Decathlon) | | FTMS, says the maker | ⏳ untested | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 
 | Controller | Firmware | Connection | Virtual gears | Other buttons |
 |---|---|---|---|---|
 | Zwift Ride (both hoods) | 1.1.0 | ✅ one per hood | ✅ right shifts up, left down | ✅ Ride On, power-up, turns, pause; brake levers read, unused |
+| Zwift Click (Cog kits) | | ⏳ implemented, untested | ⏳ up shifts up, down shifts down | none |
+| Zwift Cog | | mechanical: a single sprocket | ✅ the gears are virtual here anyway (the page sets the grade) | |
 
 | Heart rate strap | Connection | Heart rate |
 |---|---|---|
@@ -86,6 +91,12 @@ On Linux, Bluetooth goes through BlueZ (`bluetoothd` running, your user allowed 
 terminal to use Bluetooth when asked.
 
 ## Known devices
+
+### Zwift Click (not measured: from zwiftplay's capture, firmware 1.2.1)
+
+Same service and `RideOn` handshake as the Ride. Each change comes as `37 08 <up> 10 <down>`, a button being `00`
+while pressed and `01` released. Newer firmware may lock the service to Zwift, as the Ride's 1.3 does: then the
+keyboard (`+` / `-`) shifts. A `le-mollet probe` output from a real one would settle it.
 
 ### Zwift Ride controllers (firmware 1.1.0, measured)
 

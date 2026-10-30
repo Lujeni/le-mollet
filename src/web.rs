@@ -890,7 +890,7 @@ fn presence(query: &str, sid: u64) -> Presence {
 }
 
 async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
-    let mut buf = [0u8; 16384]; // an imported workout travels in the query
+    let mut buf = [0u8; 65536]; // an imported workout travels in the query, a hardware report's frames in a body
     // The whole request within READ_TIMEOUT: a client that connects and says nothing holds no task.
     let read = tokio::time::timeout(READ_TIMEOUT, async {
         let mut n = sock.read(&mut buf).await?;

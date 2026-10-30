@@ -210,12 +210,17 @@ fn cloud_accounts_links_settings_friends_and_quotas() {
 
     // The feedback tab: a rider's word kept with what the page saw; a stranger has none, a rider reads none back.
     assert_eq!(bot.post("/feedback", r#"{"kind":"bug","text":"x"}"#).0, 401);
-    assert_eq!(alice.post("/feedback", r#"{"kind":"rant","text":"x"}"#), (400, "kind: bug, idea or feedback".into()));
+    assert_eq!(alice.post("/feedback", r#"{"kind":"rant","text":"x"}"#), (400, "kind: bug, idea, feedback or hardware".into()));
     assert_eq!(alice.post("/feedback", r#"{"kind":"idea","text":"  "}"#), (400, "say something".into()));
     let (status, body) = alice.post("/feedback", r##"{"kind":"bug","text":"the trainer drops at km 3","page":{"screen":"#ride","trainer":{"name":"KICKR CORE"}}}"##);
     assert_eq!(status, 201, "{body}");
     assert_eq!(alice.get("/admin/feedback").0, 403);
-    assert_eq!(s.audit("feedback"), 1);
+    // A hardware report carries the guided test's Bluetooth frames: a body well past 16 KB still gets through.
+    let frames: Vec<String> = (0..450).map(|i| format!(r#"{{"t":{},"src":"ftms","hex":"7400aa0b2d0000000000"}}"#, i * 100)).collect();
+    let report = format!(r#"{{"kind":"hardware","text":"D500: all good","page":{{"hardware":{{"model":"D500","probe":{{"frames":[{}]}}}}}}}}"#, frames.join(","));
+    assert!(report.len() > 16_384 && report.len() < 32_000);
+    assert_eq!(alice.post("/feedback", &report).0, 201);
+    assert_eq!(s.audit("feedback"), 2);
 
     // No passwords on a public server.
     assert_eq!(alice.post("/auth/login", "name=alice-dupont&password=longenough").0, 400);

@@ -1,14 +1,15 @@
-//! What riders tell us from the page's side tab (a bug, an idea, an opinion): one row each in the database, with what
+//! What riders tell us from the page's side tabs (a bug, an idea, an opinion, how their hardware did): one row each in the database, with what
 //! the page saw of the moment (screen, course, ride, trainer, browser, last errors) and what the server knows (account,
 //! address, version). Read back by an admin on `GET /admin/feedback`, or straight from the database.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const KINDS: [&str; 3] = ["bug", "idea", "feedback"];
-/// Characters of the text; the page's context in bytes of JSON. Both fit a request (src/web.rs reads 16 KB).
+pub const KINDS: [&str; 4] = ["bug", "idea", "feedback", "hardware"];
+/// Characters of the text; the page's context in bytes of JSON (a hardware report carries the Bluetooth frames of
+/// the guided test, a few hundred at most). Both fit a request (src/web.rs reads 64 KB).
 pub const MAX_TEXT: usize = 2000;
-pub const MAX_PAGE: usize = 6000;
+pub const MAX_PAGE: usize = 32_000;
 pub const COLL: &str = "feedback";
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -36,7 +37,7 @@ pub fn parse(body: &str) -> Result<(String, String, Value), &'static str> {
     let v: Value = serde_json::from_str(body).map_err(|_| "bad JSON")?;
     let kind = v["kind"].as_str().unwrap_or("feedback");
     if !KINDS.contains(&kind) {
-        return Err("kind: bug, idea or feedback");
+        return Err("kind: bug, idea, feedback or hardware");
     }
     let text = v["text"].as_str().unwrap_or("").trim();
     if text.is_empty() {
@@ -62,7 +63,8 @@ mod tests {
         assert_eq!((kind.as_str(), text.as_str(), page["screen"].as_str()), ("bug", "the trainer drops", Some("#ride")));
         assert_eq!(parse(r#"{"text":"no kind given"}"#).unwrap().0, "feedback");
         assert_eq!(parse("not json"), Err("bad JSON"));
-        assert_eq!(parse(r#"{"kind":"rant","text":"x"}"#), Err("kind: bug, idea or feedback"));
+        assert_eq!(parse(r#"{"kind":"rant","text":"x"}"#), Err("kind: bug, idea, feedback or hardware"));
+        assert_eq!(parse(r#"{"kind":"hardware","text":"D500: all good"}"#).unwrap().0, "hardware");
         assert_eq!(parse(r#"{"kind":"idea","text":"   "}"#), Err("say something"));
         assert_eq!(parse(&format!(r#"{{"kind":"idea","text":"{}"}}"#, "a".repeat(MAX_TEXT + 1))), Err("text: 2000 characters at most"));
         assert_eq!(parse(&format!(r#"{{"kind":"idea","text":"ok","page":{{"errors":"{}"}}}}"#, "e".repeat(MAX_PAGE))), Err("page: too much context"));
