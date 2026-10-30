@@ -14,7 +14,7 @@ pub const COLL: &str = "feedback";
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Feedback {
-    /// `<unix ms>-<account>`: sorts by time, unique enough for one account.
+    /// `<unix ms>-<account>-<seq>`: sorts by time, unique within a server run.
     pub id: String,
     /// When, RFC 3339 UTC.
     pub at: String,

@@ -1258,7 +1258,11 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             let account = who.account.unwrap_or(0);
             let now = chrono::Utc::now();
             let fb = Feedback {
-                id: format!("{}-{account}", now.timestamp_millis()),
+                // A sequence number too: two posts in the same millisecond (a double click, a fast test) would share an id and the second overwrite the first.
+                id: {
+                    static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                    format!("{}-{account}-{}", now.timestamp_millis(), SEQ.fetch_add(1, Ordering::Relaxed))
+                },
                 at: now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
                 kind,
                 text,
