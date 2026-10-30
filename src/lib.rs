@@ -12,6 +12,7 @@ pub mod decor;
 pub mod dem;
 pub mod district;
 pub mod event;
+pub mod feedback;
 pub mod friend;
 pub mod island;
 pub mod mail;

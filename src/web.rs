@@ -71,6 +71,7 @@ use le_mollet::club::{self, Clubs};
 use le_mollet::course::{Course, Point};
 use le_mollet::db::Db;
 use le_mollet::event::{Event, Events, Kind as EventKind, Phase, TIERS};
+use le_mollet::feedback::{self, Feedback};
 use le_mollet::friend::{self, Friends};
 use le_mollet::metrics;
 use le_mollet::peloton::{self, View};
@@ -817,7 +818,8 @@ fn public_id(sid: u64) -> u64 {
 
 /// Calls that change something: POST only (`/rider` with a weight too). Steering one's own ride stays GET: it
 /// needs the ride's session, which only its page knows.
-const POST_ONLY: [&str; 23] = [
+const POST_ONLY: [&str; 24] = [
+    "/feedback",
     "/auth/signup",
     "/auth/login",
     "/worlds/new",
@@ -952,6 +954,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
         "/worlds/new" => Some(("world", 3, 600)),
         "/club/create" | "/event/create" => Some(("create", 10, 3600)),
         "/friend/ask" => Some(("friend", 30, 3600)),
+        "/feedback" => Some(("feedback", 10, 3600)),
         "/friend/ride" => Some(("ride", 300, 3600)), // a first share sends the history, one ride a call
         "/rider" if param(query, "weight").is_some() => Some(("rider", 30, 3600)),
         _ => None,
@@ -1231,6 +1234,52 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 Ok(()) => reply(&mut sock, "204 No Content", "text/plain", b"").await,
                 Err(e) => reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
             }
+        }
+        // What a rider tells us from the side tab: kept with what the page saw and what we know (src/feedback.rs).
+        // At home the owner has no account and is admin: their word counts too.
+        ("/feedback", _) if req.starts_with("POST ") => {
+            if who.account.is_none() && who.role != Role::Admin {
+                return reply(&mut sock, "401 Unauthorized", "text/plain", b"sign in first").await;
+            }
+            let body = req.split_once("\r\n\r\n").map_or("", |(_, b)| b);
+            let (kind, text, page) = match feedback::parse(body) {
+                Ok(x) => x,
+                Err(e) => return reply(&mut sock, "400 Bad Request", "text/plain", e.as_bytes()).await,
+            };
+            let email = match &who.user {
+                Some(id) => app.auth.user(&UserId::new(id)).await.and_then(|u| account::public_email(&u).map(str::to_owned)).unwrap_or_default(),
+                None => String::new(),
+            };
+            let account = who.account.unwrap_or(0);
+            let now = chrono::Utc::now();
+            let fb = Feedback {
+                id: format!("{}-{account}", now.timestamp_millis()),
+                at: now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                kind,
+                text,
+                account,
+                name: who.name.clone().unwrap_or_default(),
+                email,
+                ip: client.clone(),
+                user_agent: header(&req, "user-agent").unwrap_or("").to_owned(),
+                version: env!("CARGO_PKG_VERSION").to_owned(),
+                mode: if app.mode == Mode::Cloud { "cloud" } else { "local" }.to_owned(),
+                page,
+            };
+            if let Err(e) = app.db.put(feedback::COLL, &fb.id, &fb) {
+                eprintln!("feedback: {e}");
+                return reply(&mut sock, "500 Internal Server Error", "text/plain", b"could not keep it").await;
+            }
+            metrics::inc("le_mollet_feedback_total", &[("kind", &fb.kind)]);
+            audit("feedback", &[("account", &account.to_string()), ("kind", &fb.kind), ("id", &fb.id), ("ip", &client)]);
+            reply(&mut sock, "201 Created", "application/json", json!({ "id": fb.id }).to_string().as_bytes()).await
+        }
+        // Everything riders told us, newest first (the gate above: admins).
+        ("/admin/feedback", _) => {
+            let mut all = app.db.all::<Feedback>(feedback::COLL).unwrap_or_default();
+            all.sort_by(|a, b| b.0.cmp(&a.0));
+            let rows: Vec<Feedback> = all.into_iter().map(|(_, f)| f).collect();
+            reply(&mut sock, "200 OK", "application/json", serde_json::to_string(&rows).unwrap_or_default().as_bytes()).await
         }
         ("/admin/segments/reset", Some(t)) => {
             let name = param(query, "name").map(decode).unwrap_or_default();
@@ -2608,7 +2657,8 @@ fn is_asset(path: &str) -> bool {
 }
 
 fn route_label(path: &str) -> &'static str {
-    const ROUTES: [&str; 38] = [
+    const ROUTES: [&str; 39] = [
+        "/feedback",
         "/friend",
         "/friend/ask",
         "/friend/accept",

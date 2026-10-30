@@ -52,9 +52,10 @@ impl Server {
         s
     }
 
-    /// Status, body, headers; 0 when the server is not there.
+    /// Status, body, headers; 0 when the server is not there. A body is a form, or JSON when it starts like one.
     fn call(&self, req: ureq::Request, body: Option<&str>) -> (u16, String, Vec<(String, String)>) {
         let r = match body {
+            Some(b) if b.starts_with('{') => req.set("Content-Type", "application/json").send_string(b),
             Some(b) => req.set("Content-Type", "application/x-www-form-urlencoded").send_string(b),
             None => req.call(),
         };
@@ -185,6 +186,7 @@ fn cloud_accounts_links_settings_friends_and_quotas() {
     assert_eq!((me["mode"].as_str(), me["account"].is_null()), (Some("cloud"), true));
     assert_eq!(alice.get("/courses").0, 401);
     assert_eq!(alice.get("/auth/signup").0, 405); // POST only
+    assert_eq!(alice.get("/feedback").0, 405);
     // What a sign-up refuses, from a client of its own: each try counts against that client's quota.
     let mut bot = Browser::new(&s, "10.0.0.9");
     assert_eq!(bot.post("/auth/signup", "email=a@b.c").0, 400); // no proof of work
@@ -205,6 +207,15 @@ fn cloud_accounts_links_settings_friends_and_quotas() {
     let account = me["account"].as_u64().unwrap();
     assert!(account > 0 && account < 1 << 53);
     assert!(alice.get("/courses").0 == 200);
+
+    // The feedback tab: a rider's word kept with what the page saw; a stranger has none, a rider reads none back.
+    assert_eq!(bot.post("/feedback", r#"{"kind":"bug","text":"x"}"#).0, 401);
+    assert_eq!(alice.post("/feedback", r#"{"kind":"rant","text":"x"}"#), (400, "kind: bug, idea or feedback".into()));
+    assert_eq!(alice.post("/feedback", r#"{"kind":"idea","text":"  "}"#), (400, "say something".into()));
+    let (status, body) = alice.post("/feedback", r##"{"kind":"bug","text":"the trainer drops at km 3","page":{"screen":"#ride","trainer":{"name":"KICKR CORE"}}}"##);
+    assert_eq!(status, 201, "{body}");
+    assert_eq!(alice.get("/admin/feedback").0, 403);
+    assert_eq!(s.audit("feedback"), 1);
 
     // No passwords on a public server.
     assert_eq!(alice.post("/auth/login", "name=alice-dupont&password=longenough").0, 400);
@@ -286,6 +297,15 @@ fn home_accounts_have_passwords_and_the_pc_is_admin() {
     let who = me.json("/whoami");
     assert_eq!((who["mode"].as_str(), who["role"].as_str(), who["account"].is_null()), (Some("local"), Some("admin"), true)); // loopback: the owner
     assert_eq!(me.get("/courses").0, 200); // no account needed at home
+
+    // The owner's word counts without an account, and the owner reads everything back, newest first.
+    assert_eq!(me.post("/feedback", r##"{"kind":"idea","text":"a dark HUD","page":{"screen":"#home"}}"##).0, 201);
+    assert_eq!(me.post("/feedback", r#"{"text":"nice"}"#).0, 201);
+    let all = me.json("/admin/feedback");
+    let rows = all.as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!((rows[0]["kind"].as_str(), rows[0]["text"].as_str(), rows[1]["kind"].as_str(), rows[1]["page"]["screen"].as_str()), (Some("feedback"), Some("nice"), Some("idea"), Some("#home")));
+    assert_eq!((rows[1]["mode"].as_str(), rows[1]["account"].as_u64(), rows[1]["version"].is_string(), rows[1]["at"].as_str().unwrap().ends_with('Z')), (Some("local"), Some(0), true, true));
 
     assert_eq!(me.signup("name=Julien&password=short"), (400, "password: 8 characters at least".into()));
     let (status, body) = me.signup("name=Julien&password=p%C3%A9dale-douce");

@@ -76,6 +76,10 @@ checks are for.
   guess, nothing to leak, and the settings (e-mail, delete) trust the session, which came from the mailbox.
 - **Passwords** (home only): Argon2id hashes, torii's; five wrong passwords from one client lock that name for that client for 15
   minutes (another client cannot lock you out), and sign-ins are limited to 10 an hour per client.
+- **Feedback**: the page's side tab posts a rider's words (`POST /feedback`, 10 an hour per client) with what the page
+  saw (screen, course, ride, trainer name, browser, the last script errors: shown to the rider before sending) and what
+  the server knows (account, address, IP, user agent, version). Kept in the database (`feedback` rows, src/feedback.rs),
+  read back by admins only (`GET /admin/feedback`); nothing leaves the server.
 - **Audit trail**: every account event is one logfmt line on stderr (`audit event=signin via=link account=… ip=…`;
   sign-ups, links sent and used, sign-ins refused and why, sign-outs, name/e-mail/password changes, deletions,
   provisional accounts swept, roles given by the CLI, mails sent or failed; `src/audit.rs`). On a server journald
