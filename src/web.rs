@@ -731,9 +731,33 @@ impl App {
     }
 }
 
+/// Every ride counter series at 0 from the start: one born at its first value (1 ride, 9 km) is never seen rising by
+/// Prometheus, and `increase()` over the day reads 0 (the status report showed a ride as none).
+fn zero_ride_series() {
+    const KINDS: [&str; 8] = ["workout", "zombie", "race", "group", "city", "world", "loop", "climb"];
+    for kind in KINDS {
+        for trust in ["demo", "flagged", "device"] {
+            metrics::add("le_mollet_rides_total", &[("kind", kind), ("trust", trust)], 0.0)
+        }
+        for m in ["le_mollet_ride_seconds_total", "le_mollet_ride_km_total", "le_mollet_ride_kj_total"] {
+            metrics::add(m, &[("kind", kind)], 0.0)
+        }
+    }
+    for kind in ["kom", "sprint"] {
+        metrics::add("le_mollet_segment_efforts_total", &[("kind", kind)], 0.0)
+    }
+    for result in ["ranked", "demo", "flagged", "above rank"] {
+        metrics::add("le_mollet_race_finishes_total", &[("result", result)], 0.0)
+    }
+    for why in rider::FLAGS.iter().copied().chain(["other"]) {
+        metrics::add("le_mollet_fair_flags_total", &[("why", why)], 0.0)
+    }
+}
+
 pub async fn serve(addr: &str, app: Arc<App>) -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     spawn_pacers(&app);
+    zero_ride_series();
     eprintln!("web UI on http://{addr}");
     let slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONNS));
     loop {
@@ -1804,6 +1828,17 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
                 metrics::add("le_mollet_ride_seconds_total", &[("kind", kind)], ride.elapsed as f64);
                 metrics::add("le_mollet_ride_km_total", &[("kind", kind)], ride.ridden as f64 / 1000.0);
                 metrics::add("le_mollet_ride_kj_total", &[("kind", kind)], ride.energy_kj as f64);
+                // One row per ride, what the status report counts from (the counters restart with each deploy).
+                // ponytail: kept for good, a few hundred bytes a ride; prune past a year if the table ever weighs
+                let now = chrono::Utc::now();
+                let row = json!({
+                    "at": now.timestamp(), "kind": kind, "trust": trust, "track": track.as_ref().map_or("", |t| t.id.as_str()),
+                    "secs": ride.elapsed.round(), "km": ride.ridden.round() / 1000.0, "kj": (ride.energy_kj * 10.0).round() / 10.0, "climbed": ride.climbed.round(),
+                    "efforts": ride.efforts, "account": who.account,
+                });
+                if let Err(e) = app.db.put("rides", &format!("{}-{sid}", now.timestamp_millis()), &row) {
+                    eprintln!("rides: {e}")
+                }
                 if check.trust() == Trust::Flagged {
                     for w in check.why() {
                         metrics::inc("le_mollet_fair_flags_total", &[("why", rider::FLAGS.iter().find(|f| **f == w).copied().unwrap_or("other"))])
@@ -2504,6 +2539,7 @@ async fn ride_session(
                 eprintln!("leaderboards: {e}")
             }
             metrics::inc("le_mollet_segment_efforts_total", &[("kind", if w.kind == Kind::Kom { "kom" } else { "sprint" })]);
+            ride.efforts += 1;
             result = Some(SegResult { name: w.name.clone(), kind: w.kind, time, rank });
         }
         // Workout clock = riding time, so it starts with the first pedal stroke.

@@ -64,6 +64,9 @@ pub struct Ride {
     /// Bonus arches passed so far (`distance / POWERUP_EVERY` at the last tick).
     #[serde(skip)]
     pub arch: u32,
+    /// Segment efforts that reached a leaderboard this ride (the `rides` row in the database).
+    #[serde(skip)]
+    pub efforts: u32,
 }
 
 impl Ride {

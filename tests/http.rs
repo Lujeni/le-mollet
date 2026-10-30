@@ -338,3 +338,27 @@ fn home_accounts_have_passwords_and_the_pc_is_admin() {
     assert!(again.json("/whoami")["account"].is_null());
     assert_eq!(s.audit("signin.refused"), 2);
 }
+
+#[test]
+fn a_ride_leaves_a_row_for_the_status_report() {
+    let s = Server::start("local");
+    let mut me = Browser::new(&s, "10.0.0.1");
+    let stream = me.req("GET", "/events?workout=recup&ftp=200&session=42&mass=83").call().unwrap(); // a workout: the flat road, no course needed
+    assert_eq!(me.post("/power?session=42&w=250", "").0, 204);
+    let mut frames = BufReader::new(stream.into_reader()).lines();
+    while !frames.next().unwrap().unwrap().contains("\"distance\":") {} // wait for a frame on the road
+    std::thread::sleep(Duration::from_secs(1));
+    drop(frames); // the page leaves: the server ends the ride on its next frame
+    let db = rusqlite::Connection::open(s.dir.join("t.db")).unwrap();
+    let t = Instant::now();
+    let row: String = loop {
+        if let Ok(r) = db.query_row("select data from docs where coll = 'rides'", [], |r| r.get(0)) {
+            break r;
+        }
+        assert!(t.elapsed() < Duration::from_secs(5), "no ride row:\n{}", s.stderr.lock().unwrap());
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    let r: serde_json::Value = serde_json::from_str(&row).unwrap();
+    assert_eq!((r["kind"].as_str(), r["trust"].as_str(), r["track"].as_str()), (Some("workout"), Some("demo"), Some("")), "{r}");
+    assert!(r["secs"].as_f64().unwrap() >= 1.0 && r["km"].as_f64().unwrap() > 0.0 && r["kj"].as_f64().unwrap() > 0.0 && r["at"].as_u64().unwrap() > 1_700_000_000, "{r}");
+}
