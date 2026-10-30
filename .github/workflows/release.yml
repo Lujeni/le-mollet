@@ -1,7 +1,7 @@
 # A release on every tag v*: one archive per platform (the binary, the courses, the docs), checksums, and the
-# GitHub release. Linux and Windows for now; macOS comes back when someone tests it (two lines in the matrix).
-# GitHub release itself with generated notes. See docs/CONTRIBUTING.md, "Releasing". Run by hand for a tag that
-# exists already (a fix to this file, a runner that failed): gh workflow run release.yml -f tag=v0.3.0
+# GitHub release itself with generated notes. Linux and Windows for now; macOS comes back when someone can test
+# it (two lines in the matrix). See docs/CONTRIBUTING.md, "Releasing". Run by hand for a tag that exists already
+# (a fix to this file, a runner that failed): gh workflow run release.yml -f tag=v0.3.0
 name: Release
 
 on:
