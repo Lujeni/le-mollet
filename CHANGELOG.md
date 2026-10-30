@@ -1,3 +1,10 @@
+## v0.4.2 (2026-10-30)
+
+### Fix
+
+- **status**: one database row per ride, the counters at 0 from the start
+- **feedback**: a sequence number in the id, two posts in one millisecond no longer overwrite each other
+
 ## v0.4.1 (2026-10-30)
 
 ### Fix

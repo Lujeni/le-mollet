@@ -38,7 +38,7 @@ members = ["client"]
 
 # The version commitizen bumps (`cz bump`, see docs/CONTRIBUTING.md "Releasing"); the package inherits it.
 [workspace.package]
-version = "0.4.1"
+version = "0.4.2"
 
 # Bevy is unusable unoptimized: optimize dependencies even in dev builds.
 [profile.dev.package."*"]
