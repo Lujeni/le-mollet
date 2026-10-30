@@ -2,7 +2,7 @@
 name = "le-mollet"
 version.workspace = true
 edition = "2024"
-description = "Open-source indoor cycling engine: smart trainer control over BLE"
+description = "Source-available multiplayer indoor cycling game: smart trainer control over BLE, a Lego world in the browser"
 license = "PolyForm-Noncommercial-1.0.0"
 
 [dependencies]

@@ -14,11 +14,13 @@ with a [hardware report](https://github.com/Lujeni/le-mollet/issues/new?template
   and an e-mail, no password: a sign-in link by mail ([accounts and roles](docs/rbac.md)).
 - **Self-hostable.** Run the whole thing at home, on your own machine or LAN.
 - **Highly modular.** Trainers, courses, terrain and UI are independent pieces you can swap or extend.
-- **One binary.** Download a [release](https://github.com/Lujeni/le-mollet/releases) for Linux, macOS or Windows, run
-  `le-mollet serve`, open the page ([getting started](docs/getting-started.md)).
+- **One binary.** Download a [release](https://github.com/Lujeni/le-mollet/releases) for Linux (x86_64, arm64) or
+  Windows, run `le-mollet serve`, open the page ([getting started](docs/getting-started.md)). macOS builds once
+  someone can test one.
 - **Just a browser.** No heavy client to install: the UI runs in any modern web browser. An optional, experimental
-- **French and English.** The page follows the browser's language; a button in the header switches.
   native 3D client is in the works for more realistic rendering.
+- **French and English.** The page follows the browser's language; a button in the header switches.
+- **Tell us.** A side tab on every screen takes a bug, an idea or an opinion, with what the page saw at that moment.
 
 <p align="center"><img src="docs/screenshots/alpe.jpg" alt="Climbing the last hairpins of Alpe d'Huez, minifig fans cheering"></p>
 
