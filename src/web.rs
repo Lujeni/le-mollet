@@ -110,6 +110,7 @@ const DT: f32 = 0.1;
 const VENDOR: &[(&str, &str, &str, &[u8])] = &[
     ("/vendor/three.module.js", "text/javascript", "170", include_bytes!("../web/vendor/three.module.js")),
     ("/vendor/OrbitControls.js", "text/javascript", "170", include_bytes!("../web/vendor/OrbitControls.js")),
+    ("/vendor/RoomEnvironment.js", "text/javascript", "170", include_bytes!("../web/vendor/RoomEnvironment.js")),
     ("/vendor/logo.png", "image/png", "1", include_bytes!("../web/logo.png")), // docs/logo.png, 320 px
     ("/fonts/fredoka-latin.woff2", "font/woff2", "17", include_bytes!("../web/fonts/fredoka-latin.woff2")),
     ("/fonts/fredoka-latin-ext.woff2", "font/woff2", "17", include_bytes!("../web/fonts/fredoka-latin-ext.woff2")),
