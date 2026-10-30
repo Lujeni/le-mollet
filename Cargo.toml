@@ -11,8 +11,6 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-
 futures = "0.3"
 uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
-# ponytail: vendored libdbus so build works without libdbus-1-dev installed
-dbus = { version = "0.9", features = ["vendored"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # decode the IGN aerial photo for decor (src/decor.rs)
@@ -45,3 +43,7 @@ version = "0.3.0"
 # Bevy is unusable unoptimized: optimize dependencies even in dev builds.
 [profile.dev.package."*"]
 opt-level = 3
+
+# Linux only: btleplug speaks to BlueZ over D-Bus; libdbus vendored so a build needs no libdbus-1-dev.
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = { version = "0.9", features = ["vendored"] }
