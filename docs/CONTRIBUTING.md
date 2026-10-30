@@ -77,9 +77,10 @@ are replaced.
 
 1. `cz bump` ([commitizen](https://commitizen-tools.github.io/commitizen/), config in `.cz.toml`): it reads the commits since
    the last tag, picks the version (feat → minor, fix → patch; major stays 0), bumps `[workspace.package].version`
-   in `Cargo.toml`, updates `CHANGELOG.md`, commits and tags `vX.Y.Z`.
-2. `git push && git push --tags`.
-3. Watch the Actions tab; the release appears under Releases when the five builds are done.
+   in `Cargo.toml`, updates `CHANGELOG.md`, commits and tags `vX.Y.Z`. Only `ci`, `build` or `docs` commits since
+   the last tag? Nothing to bump on its own: `cz bump --increment PATCH`. No `cz` installed: `uvx --from commitizen cz …`.
+2. `git push && git push --tags` (the tag is a light one: `--follow-tags` would leave it behind).
+3. Watch the Actions tab; the release appears under Releases when the builds are done.
 
 Every push and pull request runs `.github/workflows/ci.yml`: `cargo fmt --check` (rustfmt.toml keeps the dense
 style: 200 columns, small things on one line) and `cargo test`, on the server crate. Clippy is advice, run
