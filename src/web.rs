@@ -357,6 +357,8 @@ struct Sensors {
     hr: Option<f32>,
     /// From the browser's own trainer: wins over the server's.
     live: bool,
+    /// When it last reported: a trainer gone quiet reads 0 W (`STALE`), not its last watts for good.
+    at: Option<std::time::Instant>,
 }
 
 pub struct App {
@@ -367,7 +369,7 @@ pub struct App {
     flat: Course,
     pub trainer: Option<Trainer>,
     /// Latest (power, cadence) from the trainer.
-    pub trainer_sample: Mutex<(f32, Option<f32>)>,
+    pub trainer_sample: Mutex<(f32, Option<f32>, std::time::Instant)>,
     difficulty: f32,
     /// What each ride reports: demo slider watts, or its own trainer and heart rate strap.
     sensors: Mutex<HashMap<u64, Sensors>>,
@@ -422,6 +424,8 @@ const MAX_CONNS_PER_IP: u32 = 64;
 /// A request's head must arrive within this; a ride frame must be taken within this, else the client is gone.
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
+/// Sensors silent this long read 0 W: the page reports at least every 3 s, a trainer notifies at 1 Hz or more.
+const STALE: Duration = Duration::from_secs(5);
 /// Roles are reread from the database after this.
 const ROLES_TTL: Duration = Duration::from_secs(5);
 
@@ -489,7 +493,7 @@ impl App {
             workouts: workout::builtin(),
             flat: Course::flat(1_000_000.0),
             trainer,
-            trainer_sample: Mutex::new((0.0, None)),
+            trainer_sample: Mutex::new((0.0, None, std::time::Instant::now())),
             difficulty,
             sensors: Mutex::new(HashMap::new()),
             boards: Mutex::new(Boards::load(&db)?),
@@ -1443,7 +1447,7 @@ async fn handle(mut sock: TcpStream, app: Arc<App>) -> std::io::Result<()> {
             match (session, w) {
                 (Some(s), Some(w)) => {
                     let num = |k: &str, max: f32| param(query, k).and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=max).contains(v));
-                    let sensors = Sensors { w, cadence: num("cad", 250.0), hr: num("hr", 250.0), live: param(query, "src") == Some("bt") };
+                    let sensors = Sensors { w, cadence: num("cad", 250.0), hr: num("hr", 250.0), live: param(query, "src") == Some("bt"), at: Some(std::time::Instant::now()) };
                     app.sensors.lock().unwrap_or_else(|e| e.into_inner()).insert(s, sensors);
                     reply(&mut sock, "204 No Content", "text/plain", b"").await
                 }
@@ -2072,10 +2076,12 @@ async fn beacon(t: Arc<Track>, e: Event) {
     for _ in 0..((unix_now().saturating_sub(e.start)) as f32 / DT) as usize {
         ride.tick(&t.course, DT)
     }
-    let (mut tick, mut n) = (tokio::time::interval(Duration::from_secs_f32(DT)), 0u32);
+    let (mut tick, mut n, mut prev) = (tokio::time::interval(Duration::from_secs_f32(DT)), 0u32, std::time::Instant::now());
     while e.phase(unix_now()) != Phase::Over {
         tick.tick().await;
-        ride.tick(&t.course, DT);
+        let now = std::time::Instant::now();
+        ride.tick(&t.course, (now - prev).as_secs_f32().min(0.5));
+        prev = now;
         n += 1;
         if n % 3 == 0 {
             let mut riders = t.riders.lock().unwrap_or_else(|e| e.into_inner());
@@ -2115,9 +2121,12 @@ async fn peloton_task(t: Arc<Track>, e: Event, app: Arc<App>) {
     let lap = course.looped.then(|| course.length());
     let mut tick = tokio::time::interval(Duration::from_secs_f32(DT));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    let mut n = 0u32;
+    let (mut n, mut prev) = (0u32, std::time::Instant::now());
     loop {
         tick.tick().await;
+        let now = std::time::Instant::now();
+        let dt = (now - prev).as_secs_f32().min(0.5);
+        prev = now;
         let phase = e.phase(unix_now());
         if phase == Phase::Over || (race.all_done() && n > 600) {
             break;
@@ -2131,10 +2140,10 @@ async fn peloton_task(t: Arc<Track>, e: Event, app: Arc<App>) {
                 let human = riders.values().filter(|p| !p.bot && p.event.as_deref() == Some(&e.id)).map(|p| p.ridden).fold(0.0, f32::max);
                 human - views.iter().map(|v| v.ridden).fold(0.0, f32::max)
             };
-            let powers = race.step(&views, human_lead, DT);
+            let powers = race.step(&views, human_lead, dt);
             for (i, r) in rides.iter_mut().enumerate() {
                 r.power = powers[i];
-                r.tick(course, DT);
+                r.tick(course, dt);
                 if r.ridden >= race_m && race.bots[i].finished.is_none() {
                     race.finish(i, t_race);
                     let mut events = app.events.lock().unwrap_or_else(|x| x.into_inner());
@@ -2272,9 +2281,12 @@ async fn pacer(t: Arc<Track>, id: u64, k: usize) {
     ride.distance = if route.is_none() { t.course.length() * k as f32 / 3.0 } else { 0.0 }; // spread out on a course
     // A bot needs no 10 Hz: it ticks at the frame rate it is seen at (a steady power, physics holds at 0.3 s).
     const PACE_DT: f32 = DT * 3.0;
-    let (mut tick, mut n, mut rest) = (tokio::time::interval(Duration::from_secs_f32(PACE_DT)), 0u32, 0.0);
+    let (mut tick, mut n, mut rest, mut prev) = (tokio::time::interval(Duration::from_secs_f32(PACE_DT)), 0u32, 0.0, std::time::Instant::now());
     loop {
         tick.tick().await;
+        let now = std::time::Instant::now();
+        let dt = (now - prev).as_secs_f32().min(1.0);
+        prev = now;
         n += 1;
         if let (Some(c), Some(r)) = (city, route.as_mut()) {
             if r.next == Turn::Straight && rand() < 0.012 {
@@ -2296,7 +2308,7 @@ async fn pacer(t: Arc<Track>, id: u64, k: usize) {
                 (ride, rest) = (Ride::new(83.0), 0.0)
             } // at the top of a climb: back down to the start
         }
-        ride.tick(course, PACE_DT);
+        ride.tick(course, dt);
         {
             let pos = route.as_ref().map(|r| (r.course.latlon_at(ride.distance), r.course.latlon_at(ride.distance + 5.0)));
             let mut riders = t.riders.lock().unwrap_or_else(|e| e.into_inner());
@@ -2358,12 +2370,16 @@ async fn ride_session(
     let mut tick = tokio::time::interval(Duration::from_secs_f32(DT));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay); // behind: no burst of catch-up ticks
     let (mut beacon_spawned, mut tick_work) = (false, 0.0f64);
+    // Simulated time follows the clock, not the tick count: a late tick is a long one, not a lost one.
+    let mut prev = std::time::Instant::now();
     let (mut n, mut sent) = (0u32, None::<f32>);
     // Riders this stream has introduced (name, color...): the next frames carry only what moves.
     let mut seen: HashSet<u64> = HashSet::new();
     loop {
         tick.tick().await;
         let t0 = std::time::Instant::now();
+        let dt = (t0 - prev).as_secs_f32().min(0.5);
+        prev = t0;
         let seek = app.demo_seek.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid).filter(|_| event.is_none()); // no shortcuts in an event
         if let (Some(c), Some(r)) = (city, route.as_mut()) {
             if let Some(t) = app.turns.lock().unwrap_or_else(|e| e.into_inner()).remove(&sid) {
@@ -2373,10 +2389,12 @@ async fn ride_session(
         }
         let course = route.as_ref().map_or(base, |r| &r.course);
         let sensors = app.sensors.lock().unwrap_or_else(|e| e.into_inner()).get(&sid).copied().unwrap_or_default();
+        // Bluetooth dropped or the page gone: 0 W, not the last watts for good (`measured` stays, no demo flag).
+        let sensors = if sensors.at.is_some_and(|t| t.elapsed() > STALE) { Sensors { live: sensors.live, at: sensors.at, ..Default::default() } } else { sensors };
         (ride.power, ride.cadence, ride.hr) = match app.trainer {
             Some(_) if !sensors.live => {
-                let (w, cadence) = *app.trainer_sample.lock().unwrap_or_else(|e| e.into_inner());
-                (w, cadence, sensors.hr)
+                let (w, cadence, at) = *app.trainer_sample.lock().unwrap_or_else(|e| e.into_inner());
+                if at.elapsed() > STALE { (0.0, None, sensors.hr) } else { (w, cadence, sensors.hr) }
             }
             _ => (sensors.w, sensors.cadence, sensors.hr),
         };
@@ -2422,10 +2440,10 @@ async fn ride_session(
         }
         // Every second of power is checked, warm-up in the pen included: the slider or no profile makes a demo ride.
         if !paused && !caught {
-            check.tick(ride.power, ride.cadence, sensors.live || app.trainer.is_some(), DT)
+            check.tick(ride.power, ride.cadence, sensors.live || app.trainer.is_some(), dt)
         }
         if !paused && !caught && !held {
-            ride.tick(course, DT);
+            ride.tick(course, dt);
             if let (Some(e), Some(Phase::Live), None, None) = (&event, phase, finish, unranked)
                 && e.kind == EventKind::Race
                 && ride.ridden >= e.distance(base.length(), base.looped)
@@ -2453,7 +2471,7 @@ async fn ride_session(
             }
             // The horde waits for the first pedal stroke, like the ride clock.
             if let Some(g) = game.as_mut().filter(|_| ride.elapsed > 0.0) {
-                g.tick(ride, DT);
+                g.tick(ride, dt);
             }
         }
         if let (Some(c), Some(r)) = (city, route.as_ref()) {

@@ -1810,6 +1810,21 @@ function h(tag, props = {}, ...kids) {
   e.append(...kids.filter(k => k != null && k !== false));
   return e;
 }
+// The HUD, 3 times a second: the same tree with new figures. Text and attributes are patched in place rather than
+// the nodes replaced, so the browser skips layout when nothing changed; a tree of another shape is swapped whole.
+// Not for trees with listeners (`on*`): the old node keeps its own.
+function morph(parent, ...kids) {
+  kids = kids.filter(k => k != null && k !== false).map(k => k instanceof Node ? k : document.createTextNode(k));
+  const old = [...parent.childNodes];
+  if (old.length !== kids.length || old.some((o, i) => o.nodeName !== kids[i].nodeName)) return parent.replaceChildren(...kids);
+  old.forEach((o, i) => {
+    const n = kids[i];
+    if (o.nodeType === Node.TEXT_NODE) { if (o.nodeValue !== n.nodeValue) o.nodeValue = n.nodeValue; return }
+    for (const a of o.getAttributeNames()) if (!n.hasAttribute(a)) o.removeAttribute(a);
+    for (const a of n.getAttributeNames()) if (o.getAttribute(a) !== n.getAttribute(a)) o.setAttribute(a, n.getAttribute(a));
+    morph(o, ...n.childNodes);
+  });
+}
 
 // One screen at a time. Leaving the ride stops its stream, sound and 3D world.
 const SCREENS = ['#profileNew', '#cinema', '#lobby', '#eventsScreen', '#clubScreen', '#friendsScreen', '#devicesScreen', '#historyScreen', '#profiles', '#home', '#profileEdit', '#garage', '#rideMenu', '#startPick', '#courses', '#free', '#training', '#ride'];
@@ -2672,7 +2687,7 @@ function renderStats() {
   if (ride.mode === 'workout') {
     const w = s.workout ?? { target:0, step_left:ride.workout.steps[0].secs, done:false };
     const total = ride.workout.steps.reduce((a, st) => a + st.secs, 0);
-    $('#stats').replaceChildren(
+    morph($('#stats'), 
       ride.workout.steps[w.step ?? 0]?.from < 0 ? stat('target', 'Cible', ride.workout.id === 'test-ftp' ? 'À fond !' : 'Libre', '') : stat('target', 'Cible', Math.round(w.target), 'W'),
       // the cinema's free ride is one 10 h step: only the time ridden matters
       ride.cinema ? stat('time', 'Temps', mmss(s.elapsed), '') : stat('interval', 'Intervalle', mmss(w.step_left), ''),
@@ -2690,7 +2705,7 @@ function renderStats() {
       : performance.now() < ride.zombie.toastUntil ? ride.zombie.toast
       : s.elapsed === 0 ? 'Pédale, la horde arrive !'
       : `Prochain sprint dans ${Math.max(0, Math.ceil(z.next_sprint - s.elapsed))} s`;
-    $('#stats').replaceChildren(
+    morph($('#stats'), 
       stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
       stat('gap', 'Horde', Math.round(z.gap), `m${z.shield ? ' 🛡' : ''}${z.boost_left > 0 ? ' ⚡' : ''}`),
       stat('wave', `Vague ${z.wave}`, Math.round(z.horde_kmh), 'km/h'),
@@ -2701,7 +2716,7 @@ function renderStats() {
     return;
   }
   const total = ride.course.points.at(-1).d;
-  $('#stats').replaceChildren(
+  morph($('#stats'), 
     stat('speed', 'Vitesse', s.speed_kmh.toFixed(1), 'km/h'),
     stat('grade', 'Pente', s.grade.toFixed(1), '%'),
     ride.mode === 'city'
@@ -5219,7 +5234,7 @@ async function connectTrainer(again) {
   try { // FTMS first: newer trainers, KICKR CORE
     const s = await server.getPrimaryService(BT.FTMS);
     const data = await s.getCharacteristic(BT.BIKE_DATA);
-    data.addEventListener('characteristicvaluechanged', e => { t.samples = (t.samples ?? 0) + 1; probe.frame('ftms', e.target.value); Object.assign(t, parseBikeData(e.target.value)) });
+    data.addEventListener('characteristicvaluechanged', e => { t.samples = (t.samples ?? 0) + 1; probe.frame('ftms', e.target.value); Object.assign(t, parseBikeData(e.target.value)); pushSensors() });
     await data.startNotifications();
     // The Fitness Machine Feature word: what this trainer claims (for a hardware report, docs/hardware.md).
     t.features = await s.getCharacteristic(0x2acc).then(c => c.readValue()).then(v => [...new Uint8Array(v.buffer)].map(b => b.toString(16).padStart(2, '0')).join('')).catch(() => null);
@@ -5232,7 +5247,7 @@ async function connectTrainer(again) {
   } catch {
     const s = await server.getPrimaryService(BT.CPS); // older KICKR: Cycling Power + the Wahoo control point
     const meas = await s.getCharacteristic(BT.CPS_MEAS);
-    meas.addEventListener('characteristicvaluechanged', e => { t.samples = (t.samples ?? 0) + 1; probe.frame('cps', e.target.value); Object.assign(t, parseCps(e.target.value, t)) });
+    meas.addEventListener('characteristicvaluechanged', e => { t.samples = (t.samples ?? 0) + 1; probe.frame('cps', e.target.value); Object.assign(t, parseCps(e.target.value, t)); pushSensors() });
     await meas.startNotifications();
     t.ctrl = await s.getCharacteristic(BT.WAHOO).catch(() => null);
     t.kind = 'wahoo';
@@ -5249,7 +5264,7 @@ async function connectHr(again) {
   const device = again ?? await navigator.bluetooth.requestDevice({ filters:[{ services:[BT.HRS] }] });
   const ch = await (await (await device.gatt.connect()).getPrimaryService(BT.HRS)).getCharacteristic(BT.HR_MEAS);
   const h = { device, name:device.name ?? 'Cardio', bpm:null };
-  ch.addEventListener('characteristicvaluechanged', e => { const v = e.target.value; h.bpm = v.getUint8(0) & 1 ? v.getUint16(1, true) : v.getUint8(1) });
+  ch.addEventListener('characteristicvaluechanged', e => { const v = e.target.value; h.bpm = v.getUint8(0) & 1 ? v.getUint16(1, true) : v.getUint8(1); pushSensors() });
   await ch.startNotifications();
   btKeep(device, connectHr, () => { if (bt.hr?.device === device) bt.hr = null }, h.name);
   bt.hr = h;
@@ -5283,7 +5298,7 @@ function parseCps(v, t) {
   return out;
 }
 const le16 = n => [n & 0xff, (n >> 8) & 0xff];
-const wahooSim = kg => [0x43, ...le16(Math.round(kg * 100)), ...le16(40), ...le16(510)]; // weight, crr 0.004, cw 0.51
+const wahooSim = kg => [0x43, ...le16(Math.round(kg * 100)), ...le16(40), ...le16(200)]; // weight, crr 0.004, cw 0.20 = 0.5 * rho * CdA 0.32 (the game's air, physics.rs)
 
 // Once a second during a ride: the grade or the target watts, only when it changed enough.
 function driveTrainer() {
@@ -5301,7 +5316,7 @@ function driveTrainer() {
 function trainerSet(erg, value) {
   const t = bt.trainer;
   if (!t?.ctrl) return;
-  if (t.kind === 'ftms') btWrite(erg ? [0x05, ...le16(value)] : [0x11, 0, 0, ...le16(Math.round(value * 100) & 0xffff), 40, 51]);
+  if (t.kind === 'ftms') btWrite(erg ? [0x05, ...le16(value)] : [0x11, 0, 0, ...le16(Math.round(value * 100) & 0xffff), 40, 20]);
   else btWrite(erg ? [0x42, ...le16(value)] : [0x46, ...le16(Math.round((Math.max(-1, Math.min(1, value / 100)) + 1) * 32768) & 0xffff)]);
 }
 // ---------- virtual gears: 24 like Zwift's, shifted from a Zwift Ride controller or the keyboard ----------
@@ -5310,7 +5325,7 @@ function trainerSet(erg, value) {
 // more watts. Speed in the game still comes from the watts alone, as in Zwift.
 const GEARS = Array.from({ length:24 }, (_, i) => 0.75 * (5.49 / 0.75) ** (i / 23)); // chainring/cog ratio
 const gears = { i:11, on:false };
-const WHEEL_M = 2.105, CW = 0.51, CRR = 0.004, G = 9.81; // what the trainer is told (wahooSim, FTMS sim command)
+const WHEEL_M = 2.105, CW = 0.20, CRR = 0.004, G = 9.81; // what the trainer is told (wahooSim, FTMS sim command)
 function virtualGrade(road, t, i, kg) {
   if (!gears.on || !t?.kmh || !(t.cadence > 20)) return road; // no shifting, or not pedalling: the road as it is
   const rev = t.cadence / 60, vReal = t.kmh / 3.6, vGear = rev * GEARS[i] * WHEEL_M; // m/s
@@ -5403,7 +5418,7 @@ function renderZones() {
   const gear = showGear ? h('div', { class:'gear' + (performance.now() - (gears.shifted ?? 0) < 400 ? ' shifted' : ''), title:'Braquet virtuel : boutons noirs de la manette, ou + et −' },
     h('small', {}, 'Braquet'), h('b', {}, gears.i + 1, h('small', {}, `/${GEARS.length}`)),
     h('span', { class:'cassette' }, ...GEARS.map((_, i) => h('i', { class:i === gears.i ? 'on' : '', style:`height:${6 + i * 0.6}px` })))) : '';
-  el.replaceChildren(
+  morph(el, 
     h('div', { class:'watts' }, Math.round(s?.power ?? 0), h('small', {}, 'W')),
     h('div', { class:'zone' }, h('div', { class:'wkg' }, ((s?.power ?? 0) / current.weightKg).toFixed(1), h('small', {}, 'W/kg')),
       h('b', {}, `${zone} · ${name}`), h('small', {}, `${Math.round(pct * 100)} % FTP`)),
@@ -5477,7 +5492,7 @@ function renderBoard() {
     h('span', { class:'km' }, ride.mode === 'city' ? '' : `${(r.o.distance / 1000).toFixed(1)} km`));
   const head = e?.kind === 'race' && e.phase === 'live' ? h('div', { class:'head' }, h('b', {}, e.finish ? `${e.finish[0]}e` : `${e.rank}e`, h('small', {}, ` / ${e.of}`)), h('span', {}, e.name))
     : h('div', { class:'head' }, h('b', {}, rows.length + 1), h('span', {}, rows.length ? 'sur la route autour de toi' : 'seul sur la route'));
-  el.replaceChildren(head, ...ahead.map(row), row(me), ...behind.map(row), (s.others?.length ?? 0) > ahead.length + behind.length ? h('div', { class:'more' }, `+${s.others.length - ahead.length - behind.length} autres autour`) : '');
+  morph(el, head, ...ahead.map(row), row(me), ...behind.map(row), (s.others?.length ?? 0) > ahead.length + behind.length ? h('div', { class:'more' }, `+${s.others.length - ahead.length - behind.length} autres autour`) : '');
 }
 
 // Power of the last ten minutes along the bottom, a bar per sample, coloured by zone.
@@ -5575,8 +5590,9 @@ async function connectPad(again) {
   if (!again) celebrate($('#devPad'), bt.pads.length > 1 ? '🎮 Les deux poignées sont prêtes : à droite ça monte, à gauche ça descend !' : /click/i.test(p.name) ? '🎮 Zwift Click connecté : en haut ça monte, en bas ça descend.' : '🎮 Manette connectée (deux poignées ? clique encore pour l\'autre)');
 }
 
-// Twice a second: what the sensors say goes to the server (the trainer's watts win over the demo slider).
-// Only when a figure changed, and every 3 s regardless: a steady ride is a request every 3 s, not 2 a second.
+// On every trainer or strap notification (no poll between the watts and the server), plus a 1 Hz heartbeat: what the
+// sensors say goes to the server (the trainer's watts win over the demo slider). Only when a figure changed, and
+// every 3 s regardless: a steady ride is a request every 3 s, and the server reads 0 W after 5 s of silence.
 let pushed = { q:'', at:0 };
 function pushSensors() {
   if ($('#ride').hidden || !ride.session || (!bt.trainer && !bt.hr)) return;
@@ -5586,7 +5602,7 @@ function pushSensors() {
   pushed = { q, at:performance.now() };
   fetch(`/power?session=${ride.session}&${q}`).catch(() => {});
 }
-setInterval(pushSensors, 500);
+setInterval(pushSensors, 1000);
 setInterval(driveTrainer, 1000);
 
 // The devices step: connect, see the figures move, then go. Home keeps a status line.
@@ -6413,23 +6429,23 @@ function renderEvent() {
   const head = h('b', {}, `${icon} ${e.name}`);
   if (e.radio && e.radio !== ride.radio) { ride.radio = e.radio; toast(`📻 ${e.radio}`) } // the race radio, in the pen too
   if (e.phase === 'upcoming' || e.phase === 'pen') {
-    return box.replaceChildren(head, h('div', { class:'countdown' }, mmss(Math.max(0, e.starts_in))),
+    return morph(box, head, h('div', { class:'countdown' }, mmss(Math.max(0, e.starts_in))),
       h('small', {}, e.phase === 'pen' ? `Dans le sas · ${e.of} au départ. Tout le monde part ensemble.` : 'Le sas ouvre 10 min avant le départ.'), e.radio ? h('small', { class:'radio' }, `📻 ${e.radio}`) : '');
   }
   if (e.kind === 'group') {
     const g = e.leader_gap;
-    return box.replaceChildren(head,
+    return morph(box, head,
       h('div', { class:'big' }, g == null ? 'Le meneur s\'élance…' : g > 200 ? `Meneur à ${Math.round(g)} m` : g < -25 ? 'Devant le meneur' : g <= 0 ? `En tête · ${e.bunch}` : `Dans le groupe · ${e.bunch}`),
       h('small', {}, g == null ? '' : g > 200 ? 'Accroche-toi : à moins de 200 m, le groupe t\'aspire.' : g < -25 ? 'Attends le groupe : seul devant, pas d\'aspiration.'
         : g <= 0 ? 'À la hauteur du meneur : c\'est toi qui fais le vent.' : 'Bien calé : l\'aspiration du groupe te porte.'));
   }
   if (e.unranked) {
     if (!ride.eventFinish) { ride.eventFinish = true; toast(`🏁 Arrivée hors classement : ${UNRANKED[e.unranked]}`) }
-    return box.replaceChildren(head, h('div', { class:'big' }, '🏁 Hors classement'), h('small', {}, UNRANKED[e.unranked] ?? e.unranked));
+    return morph(box, head, h('div', { class:'big' }, '🏁 Hors classement'), h('small', {}, UNRANKED[e.unranked] ?? e.unranked));
   }
   const lap = e.race_m / Math.max(1, e.laps), done = Math.min(e.done_m, e.race_m);
   if (e.finish && !ride.eventFinish) { ride.eventFinish = e.finish; toast(`🏁 Arrivée ! ${e.finish[0]}e au général, ${e.finish[1]}e de ta catégorie`) }
-  box.replaceChildren(head,
+  morph(box, head,
     e.finish ? h('div', { class:'big' }, `🏁 ${e.finish[0]}e · ${hms(e.finish[2])}`) : h('div', { class:'big' }, `${e.rank}e / ${e.of}`),
     h('small', {}, e.finish ? `${e.finish[1]}e de ta catégorie. Bravo !` : `${e.laps > 1 ? `Tour ${Math.min(e.laps, Math.floor(done / lap) + 1)}/${e.laps} · ` : ''}encore ${((e.race_m - done) / 1000).toFixed(2)} km`),
     h('div', { class:'bar' }, h('i', { style:`width:${(done / e.race_m * 100).toFixed(1)}%` })),

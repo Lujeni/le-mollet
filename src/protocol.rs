@@ -37,7 +37,8 @@ pub struct SimParams {
 impl Default for SimParams {
     fn default() -> Self {
         // ponytail: generic road-bike defaults, expose in UI once rider profiles exist
-        Self { weight_kg: 85.0, crr: 0.004, cw: 0.51 }
+        // cw = 0.5 * 1.225 kg/m3 * CdA 0.32 m2 (src/physics.rs): the trainer brakes like the game's air does
+        Self { weight_kg: 85.0, crr: 0.004, cw: 0.2 }
     }
 }
 
@@ -231,11 +232,11 @@ mod tests {
     #[test]
     fn commands() {
         assert_eq!(ftms_set_target_power(200), [0x05, 0xC8, 0x00]);
-        assert_eq!(ftms_set_sim(5.0, SimParams::default()), [0x11, 0, 0, 0xF4, 0x01, 40, 51]);
+        assert_eq!(ftms_set_sim(5.0, SimParams::default()), [0x11, 0, 0, 0xF4, 0x01, 40, 20]);
         assert_eq!(wahoo_set_erg(300), [0x42, 0x2C, 0x01]);
         assert_eq!(wahoo_set_grade(0.0), [0x46, 0x00, 0x80]);
         assert_eq!(wahoo_set_grade(-100.0), [0x46, 0x00, 0x00]);
         assert_eq!(wahoo_set_grade(100.0), [0x46, 0xFF, 0xFF]);
-        assert_eq!(wahoo_set_sim(SimParams::default()), [0x43, 0x34, 0x21, 40, 0, 0xFE, 0x01]);
+        assert_eq!(wahoo_set_sim(SimParams::default()), [0x43, 0x34, 0x21, 40, 0, 0xC8, 0x00]);
     }
 }

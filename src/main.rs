@@ -346,7 +346,7 @@ async fn serve(addr: &str, filter: Option<String>, difficulty: f32, courses: &st
         tokio::spawn(async move {
             while let Some(s) = samples.next().await {
                 let mut last = a.trainer_sample.lock().unwrap();
-                *last = (s.power_w.map_or(last.0, |p| p as f32), s.cadence_rpm);
+                *last = (s.power_w.map_or(last.0, |p| p as f32), s.cadence_rpm, std::time::Instant::now());
             }
         });
     }
