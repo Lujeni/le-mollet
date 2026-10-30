@@ -1,3 +1,55 @@
+## v0.3.0 (2026-10-30)
+
+### BREAKING CHANGE
+
+- no longer MIT OR Apache-2.0 from this commit on.
+
+### Feat
+
+- **hardware**: the Zwift Click's buttons, and a guided test that reports every Bluetooth frame
+- **feedback**: a side tab for a bug, an idea or an opinion, kept with what the page saw
+- **mail**: a Reply-To, so a sending-only address can point answers to the contact box
+- **friends**: friendships belong to the account, not to a profile
+- **mail**: the sign-in mail in text and HTML, written for spam filters
+- **audit**: one logfmt line per account event, for journald
+- **auth**: the door is two bricks, an e-mail each, the name out of the e-mail
+- **auth**: no passwords on a public server, and the logo on the sign-in screen
+- **web**: three.js and the fonts ship in the binary, no CDN
+- **web**: the page in English too
+- **auth**: an e-mail per account in cloud mode, and sign-in links by mail
+- **web**: an account brick in the header, with its menu
+- **auth**: sign-up quotas and a proof of work against bots
+- **site**: open beta, hardware feedback, Bluetooth check
+- **account**: settings, a new password, sign out everywhere, delete
+- **friends**: handles, requests, and a friend's profile and rides
+- **free**: loop cards drawn from above, Paris no longer shipped
+- **web**: device reconnect, real gear estimate, country search
+- **license**: PolyForm Noncommercial, commercial use on request
+- **site**: a landing page
+- **courses**: six more cols and two loops
+- **course**: an Overpass mirror through LE_MOLLET_OVERPASS
+- **web**: smoother rides and a cinema mode
+- **events**: a tactical peloton in every race
+- **web**: ride HUD laid out like a game's
+
+### Fix
+
+- **auth**: a sign-up with a known address tells nothing, and sends nothing
+- **web**: the door's inputs take clicks, and keep their own look
+- **web**: the account form's blocks back where they belong
+- **web**: a public server lists only the signed-in account's profiles
+- **web**: sign out from the header, on every screen
+- **web**: load the courses after a cloud sign-in
+- **web**: harden the server and lighten the frames
+
+### Refactor
+
+- **auth**: accounts, sessions and magic links on torii
+
+### Perf
+
+- **terrain**: heights sent as row differences, gzip packs them twice as small
+
 ## v0.2.0 (2026-10-28)
 
 ### Feat
