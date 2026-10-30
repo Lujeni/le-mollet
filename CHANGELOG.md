@@ -1,3 +1,13 @@
+## v0.4.0 (2026-10-30)
+
+### Feat
+
+- **hud**: W/kg and calories in the cockpit, a ride stats panel, achievements unlocked mid-ride
+
+### Fix
+
+- **web**: serve three's RoomEnvironment, which the studio lighting imports
+
 ## v0.3.1 (2026-10-30)
 
 ## v0.3.0 (2026-10-30)
